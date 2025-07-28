@@ -51,6 +51,7 @@ class ServiceBootstrap extends ServiceBase {
     void this.backgroundApi.serviceAccount.migrateHdWalletsBackedUpStatus();
     void this.backgroundApi.serviceHistory.migrateFilterScamHistorySetting();
     void this.backgroundApi.serviceAccount.migrateHardwareLtcXPub();
+    void this.backgroundApi.serviceHardware.removeDeviceHomeScreen();
     void systemTimeUtils.startServerTimeInterval();
   }
 }

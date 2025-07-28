@@ -1,3 +1,4 @@
+import { ISimpleDBAppStatus } from './../../dbs/simple/entity/SimpleDbEntityAppStatus';
 import { EDeviceType } from '@onekeyfe/hd-shared';
 import { Semaphore } from 'async-mutex';
 import { uniq } from 'lodash';
@@ -104,6 +105,7 @@ import type {
   SearchDevice,
   UiEvent,
 } from '@onekeyfe/hd-core';
+import { ELocalDBStoreNames } from '../../dbs/local/localDBStoreNames';
 
 export type IDeviceGetFeaturesOptions = {
   connectId: string | undefined;
@@ -1058,6 +1060,26 @@ class ServiceHardware extends ServiceBase {
   @backgroundMethod()
   async deleteDeviceHomeScreen(homeScreenId: string) {
     await localDb.deleteHardwareHomeScreen({ homeScreenId });
+  }
+
+  @backgroundMethod()
+  async removeDeviceHomeScreen() {
+    const appStatus = await simpleDb.appStatus.getRawData();
+    if (appStatus?.removeDeviceHomeScreenMigrated) {
+      console.log('removeDeviceHomeScreen: already migrated');
+      return;
+    }
+
+    await localDb.clearRecords({
+      name: ELocalDBStoreNames.HardwareHomeScreen,
+    });
+
+    await simpleDb.appStatus.setRawData(
+      (v): ISimpleDBAppStatus => ({
+        ...v,
+        removeDeviceHomeScreenMigrated: true,
+      }),
+    );
   }
 
   @backgroundMethod()

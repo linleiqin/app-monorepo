@@ -170,39 +170,41 @@ export const compressNFT = async (
 };
 
 export async function generateUploadNFTParams({
-  imageUri,
+  screenHex,
+  thumbnailHex,
+  blurScreenHex,
   metadata,
-  deviceType,
 }: {
-  imageUri: string;
+  screenHex: string;
+  thumbnailHex: string;
+  blurScreenHex: string;
   metadata: INFTMetaData;
-  deviceType: IDeviceType;
 }) {
-  const { width, height } = await getImageSize(imageUri);
-  console.log('image size: ', { width, height });
+  // const { width, height } = await getImageSize(imageUri);
+  // console.log('image size: ', { width, height });
 
-  const base64 = await imageUtils.getBase64FromImageUri({ uri: imageUri });
+  // const base64 = await imageUtils.getBase64FromImageUri({ uri: imageUri });
 
-  if (!base64) {
-    throw new OneKeyLocalError(
-      `Failed to get base64 from image uri: ${imageUri}`,
-    );
-  }
+  // if (!base64) {
+  //   throw new OneKeyLocalError(
+  //     `Failed to get base64 from image uri: ${imageUri}`,
+  //   );
+  // }
 
-  const data = await compressNFT(base64, 480, 800, width, height, false);
+  // const data = await compressNFT(base64, 480, 800, width, height, false);
 
-  const zoomWidth = deviceType === EDeviceType.Touch ? 238 : 226;
-  const zoomHeight = deviceType === EDeviceType.Touch ? 238 : 226;
-  const zoomData = await compressNFT(
-    base64,
-    zoomWidth,
-    zoomHeight,
-    width,
-    height,
-    true,
-  );
+  // const zoomWidth = deviceType === EDeviceType.Touch ? 238 : 226;
+  // const zoomHeight = deviceType === EDeviceType.Touch ? 238 : 226;
+  // const zoomData = await compressNFT(
+  //   base64,
+  //   zoomWidth,
+  //   zoomHeight,
+  //   width,
+  //   height,
+  //   true,
+  // );
 
-  if (!data?.arrayBuffer && !zoomData?.arrayBuffer) return;
+  // if (!data?.arrayBuffer && !zoomData?.arrayBuffer) return;
 
   const metaData = { ...metadata } as INFTMetaData;
   let metadataBuf = Buffer.from(JSON.stringify(metaData));
@@ -219,10 +221,9 @@ export async function generateUploadNFTParams({
   const params: DeviceUploadResourceParams = {
     resType: ResourceType.Nft,
     suffix: 'jpg',
-    dataHex: bufferUtils.bytesToHex(data?.arrayBuffer as Uint8Array),
-    thumbnailDataHex: bufferUtils.bytesToHex(
-      zoomData?.arrayBuffer as Uint8Array,
-    ),
+    dataHex: screenHex,
+    thumbnailDataHex: thumbnailHex,
+    blurDataHex: blurScreenHex,
     nftMetaData,
   };
 
