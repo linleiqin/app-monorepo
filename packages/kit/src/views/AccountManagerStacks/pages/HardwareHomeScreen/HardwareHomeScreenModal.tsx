@@ -513,7 +513,7 @@ function WallpaperCustomCategorySection({
       UploadedHomeScreenCache.removeCache(device.id, item.id);
       await runGetDeviceHomeScreens();
     },
-    [onItemSelected, runGetDeviceHomeScreens, selectedItem],
+    [onItemSelected, runGetDeviceHomeScreens, selectedItem, device.id],
   );
 
   return (

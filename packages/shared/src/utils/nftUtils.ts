@@ -180,32 +180,6 @@ export async function generateUploadNFTParams({
   blurScreenHex: string;
   metadata: INFTMetaData;
 }) {
-  // const { width, height } = await getImageSize(imageUri);
-  // console.log('image size: ', { width, height });
-
-  // const base64 = await imageUtils.getBase64FromImageUri({ uri: imageUri });
-
-  // if (!base64) {
-  //   throw new OneKeyLocalError(
-  //     `Failed to get base64 from image uri: ${imageUri}`,
-  //   );
-  // }
-
-  // const data = await compressNFT(base64, 480, 800, width, height, false);
-
-  // const zoomWidth = deviceType === EDeviceType.Touch ? 238 : 226;
-  // const zoomHeight = deviceType === EDeviceType.Touch ? 238 : 226;
-  // const zoomData = await compressNFT(
-  //   base64,
-  //   zoomWidth,
-  //   zoomHeight,
-  //   width,
-  //   height,
-  //   true,
-  // );
-
-  // if (!data?.arrayBuffer && !zoomData?.arrayBuffer) return;
-
   const metaData = { ...metadata } as INFTMetaData;
   let metadataBuf = Buffer.from(JSON.stringify(metaData));
   if (metadataBuf.length > 1024 * 2) {
