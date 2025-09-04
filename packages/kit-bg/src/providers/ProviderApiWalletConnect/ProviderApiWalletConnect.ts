@@ -1,7 +1,7 @@
 import { getSdkError } from '@walletconnect/utils';
 
 import { backgroundMethod } from '@onekeyhq/shared/src/background/backgroundDecorators';
-import { IMPL_ALGO, IMPL_EVM } from '@onekeyhq/shared/src/engine/engineConsts';
+import { IMPL_ALGO, IMPL_EVM, IMPL_COSMOS } from '@onekeyhq/shared/src/engine/engineConsts';
 import { OneKeyLocalError } from '@onekeyhq/shared/src/errors';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import { appLocale } from '@onekeyhq/shared/src/locale/appLocale';
@@ -19,6 +19,7 @@ import walletConnectStorage from '../../services/ServiceWalletConnect/walletConn
 
 import { WalletConnectRequestProxyAlgo } from './WalletConnectRequestProxyAlgo';
 import { WalletConnectRequestProxyEth } from './WalletConnectRequestProxyEth';
+import { WalletConnectRequestProxyCosmos } from './WalletConnectRequestProxyCosmos';
 
 import type {
   IWalletConnectRequestOptions,
@@ -43,6 +44,9 @@ class ProviderApiWalletConnect {
       client: this,
     }),
     [IMPL_ALGO]: new WalletConnectRequestProxyAlgo({
+      client: this,
+    }),
+    [IMPL_COSMOS]: new WalletConnectRequestProxyCosmos({
       client: this,
     }),
   };

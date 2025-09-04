@@ -647,6 +647,12 @@ class ProviderApiCosmos extends ProviderApiBase {
       feeCurrencies: [],
     };
   }
+
+  // Wallet connect
+  @providerApiMethod()
+  public async cosmos_getAccounts(request: IJsBridgeMessagePayload, params: any) {
+    return Promise.resolve(new Error('Not implemented'));
+  }
 }
 
 export default ProviderApiCosmos;
