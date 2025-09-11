@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports
 import { useAtom } from 'jotai';
 import { atomWithStorage } from 'jotai/utils';
 import { StyleSheet } from 'react-native';
