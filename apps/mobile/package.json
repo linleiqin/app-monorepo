@@ -18,6 +18,9 @@
     "android:clean": "./android/gradlew clean -p ./android",
     "android:dependencies": "./android/gradlew dependencies -p ./android",
     "native-bundle:analyze": "react-native-bundle-visualizer",
+    "bundle:production": "./build-production-bundle.sh",
+    "bundle:simple": "./build-bundle-simple.sh",
+    "bundle:ios": "NODE_ENV=production EXPO_PUBLIC_ENVIRONMENT=production npx expo export:embed --platform ios --bundle-output dist/bundle/main.jsbundle --assets-dest dist/bundle --reset-cache",
     "eas-build-post-install": "echo $KEY_SECRET | base64 -d > ../../node_modules/@onekeyfe/react-native-lite-card/keys/keys.secret",
     "_folderslint": "yarn folderslint"
   },
