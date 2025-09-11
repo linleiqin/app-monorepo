@@ -27,7 +27,7 @@ export function PerpTradingButton({
   isSubmitting,
   isNoEnoughMargin,
 }: {
-  userWebData2: WsWebData2 | undefined;
+  userWebData2: WsWebData2 | null | undefined;
   loading: boolean;
   canTrade: boolean;
   checkAndApproveWallet: () => void;

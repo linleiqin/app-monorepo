@@ -74,6 +74,7 @@ export default class ServiceHyperliquidSubscription extends ServiceBase {
     this._emitConnectionStatus();
     await this._executeSubscriptionChanges(diff, newState);
 
+    // TODO Add delay here to simulate the scenario where the interface returns slower than the time to switch accounts
     this._currentState = newState;
   }
 

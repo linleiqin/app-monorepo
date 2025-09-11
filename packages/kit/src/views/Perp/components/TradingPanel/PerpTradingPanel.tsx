@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo } from 'react';
 
-import { Button, SizableText, Spinner, YStack } from '@onekeyhq/components';
+import { SizableText, YStack } from '@onekeyhq/components';
 import {
   useHyperliquidActions,
   useTradingFormAtom,
@@ -23,7 +23,7 @@ function PerpTradingPanel() {
   const { canTrade, loading, currentUser, checkAndApproveWallet } =
     useHyperliquidTrading();
   const [perpsAccountLoading] = usePerpsAccountLoadingAtom();
-  const { userWebData2, accountSummary } = useHyperliquidAccount();
+  const hlAccount = useHyperliquidAccount();
   const tokenInfo = useCurrentTokenData();
   const [formData] = useTradingFormAtom();
   const [isSubmitting] = useTradingLoadingAtom();
@@ -45,15 +45,15 @@ function PerpTradingPanel() {
     if (formData.type === 'limit') {
       return (
         (+formData.price * +formData.size) / leverage >
-        +(accountSummary?.withdrawable || 0)
+        +(hlAccount?.accountSummary?.withdrawable || 0)
       );
     }
     return +formData.size > maxTradeSz;
   }, [
+    hlAccount?.accountSummary?.withdrawable,
     formData.size,
     maxTradeSz,
     formData.type,
-    accountSummary?.withdrawable,
     formData.price,
     leverage,
   ]);
@@ -103,10 +103,16 @@ function PerpTradingPanel() {
 
   return (
     <YStack gap="$4" p="$4">
+      {platformEnv.isDev ? (
+        <SizableText>S:{hlAccount.selectedAccount.evmAddress}</SizableText>
+      ) : null}
+      {platformEnv.isDev ? (
+        <SizableText>W:{hlAccount.currentUser}</SizableText>
+      ) : null}
       <PerpTradingForm isSubmitting={isSubmitting} />
 
       <PerpTradingButton
-        userWebData2={userWebData2}
+        userWebData2={hlAccount?.userWebData2}
         loading={universalLoading}
         canTrade={canTrade}
         checkAndApproveWallet={checkAndApproveWallet}

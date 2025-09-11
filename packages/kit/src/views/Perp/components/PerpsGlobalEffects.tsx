@@ -1,80 +1,45 @@
 import { useEffect, useRef } from 'react';
 
-import { getNetworkIdsMap } from '@onekeyhq/shared/src/config/networkIds';
-import type { INetworkAccount } from '@onekeyhq/shared/types/account';
-import type { IHex } from '@onekeyhq/shared/types/hyperliquid/sdk';
+import { noop } from 'lodash';
 
-import backgroundApiProxy from '../../../background/instance/backgroundApiProxy';
 import { GlobalJotaiReady } from '../../../components/GlobalJotaiReady';
-import { usePromiseResult } from '../../../hooks/usePromiseResult';
 import { useActiveAccount } from '../../../states/jotai/contexts/accountSelector';
 import { useHyperliquidActions } from '../../../states/jotai/contexts/hyperliquid';
-import { usePerpsAccountLoadingAtom } from '../../../states/jotai/contexts/hyperliquid/atoms';
+import { usePerpsCurrentAccountAtom } from '../../../states/jotai/contexts/hyperliquid/atoms';
+import { useHyperliquidSession } from '../hooks';
 
 export function PerpsGlobalEffectsView() {
+  useHyperliquidSession();
+
   const { activeAccount } = useActiveAccount({ num: 0 });
-  const [, setPerpsAccountLoading] = usePerpsAccountLoadingAtom();
+  const [currentPerpsAccount] = usePerpsCurrentAccountAtom();
   const actions = useHyperliquidActions();
-  const hidePerpsAccountLoadingTimer = useRef<
-    ReturnType<typeof setTimeout> | undefined
-  >(undefined);
-  const { result: ethAccountData } = usePromiseResult<
-    INetworkAccount | null | undefined
-  >(async () => {
-    try {
-      clearTimeout(hidePerpsAccountLoadingTimer.current);
-      setPerpsAccountLoading(true);
-      const indexedAccountId = activeAccount?.indexedAccount?.id;
-      const accountId = activeAccount?.account?.id;
-      const deriveType = activeAccount?.deriveType;
-
-      if (!indexedAccountId && !accountId) return null;
-
-      const ethNetworkId = getNetworkIdsMap().arbitrum;
-
-      const account = await backgroundApiProxy.serviceAccount.getNetworkAccount(
-        {
-          indexedAccountId,
-          accountId: indexedAccountId ? undefined : accountId,
-          networkId: ethNetworkId,
-          deriveType: deriveType || 'default',
-        },
-      );
-
-      return account;
-    } catch (error) {
-      console.error(error);
-      return null;
-    } finally {
-      hidePerpsAccountLoadingTimer.current = setTimeout(() => {
-        setPerpsAccountLoading(false);
-      }, 200);
-    }
+  const isFirstMountRef = useRef(true);
+  useEffect(() => {
+    void actions.current.loadPerpsCurrentAccount({
+      indexedAccountId: activeAccount?.indexedAccount?.id || null,
+      accountId: activeAccount?.account?.id || null,
+      deriveType: activeAccount?.deriveType ?? 'default',
+    });
   }, [
+    actions,
     activeAccount?.account?.id,
     activeAccount?.deriveType,
     activeAccount?.indexedAccount?.id,
-    setPerpsAccountLoading,
   ]);
-  const userAddress = ethAccountData?.address ?? null;
-  const userAccountId = ethAccountData?.id ?? null;
+
   useEffect(() => {
-    console.log('usePerpUseChainAccount -> activeAccountId: ', {
-      userAddress,
-      userAccountId,
-    });
-    if (
-      typeof userAddress === 'string' &&
-      userAddress.startsWith('0x') &&
-      userAccountId
-    ) {
-      void actions.current.setCurrentUser(userAddress as IHex);
-      void actions.current.setCurrentAccount(userAccountId);
+    noop(currentPerpsAccount?.evmAddress);
+
+    if (isFirstMountRef.current) {
+      isFirstMountRef.current = false;
+      if (currentPerpsAccount?.evmAddress) {
+        void actions.current.updateSubscriptions();
+      }
     } else {
-      void actions.current.setCurrentUser(null);
-      void actions.current.setCurrentAccount(null);
+      void actions.current.updateSubscriptions();
     }
-  }, [userAddress, actions, userAccountId]);
+  }, [actions, currentPerpsAccount?.evmAddress]);
 
   return null;
 }

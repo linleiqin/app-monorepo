@@ -35,6 +35,7 @@ import { usePerpUseChainAccount } from './usePerpUseChainAccount';
 export function useHyperliquidEventBusListener() {
   const actions = useHyperliquidActions();
 
+  // TODO move to GlobalEffects
   useEffect(() => {
     const handleDataUpdate = (payload: unknown) => {
       const eventPayload = payload as {
@@ -195,8 +196,8 @@ export function useHyperliquidAccount() {
 }
 
 export function useHyperliquidTrading() {
-  const { currentUser, hasUserData } = useHyperliquidAccount();
-  const { userAddress } = usePerpUseChainAccount();
+  const { currentUser, selectedAccount, hasUserData } = useHyperliquidAccount();
+  // const currentUser = userAddress;
   const { activeAccount } = useActiveAccount({ num: 0 });
   const currentAccount = activeAccount?.account?.id;
   const [loading, setLoading] = useState(false);

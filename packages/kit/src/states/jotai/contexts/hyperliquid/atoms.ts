@@ -15,7 +15,7 @@ const {
   contextAtomComputed,
   contextAtomMethod,
 } = createJotaiContext();
-export { ProviderJotaiContextHyperliquid, contextAtomMethod };
+export { contextAtomMethod, ProviderJotaiContextHyperliquid };
 
 export const { atom: allMidsAtom, use: useAllMidsAtom } =
   contextAtom<HL.IWsAllMids | null>(null);
@@ -42,11 +42,37 @@ export const { atom: connectionStateAtom, use: useConnectionStateAtom } =
 export const { atom: currentTokenAtom, use: useCurrentTokenAtom } =
   contextAtom<string>('ETH');
 
-export const { atom: currentUserAtom, use: useCurrentUserAtom } =
-  contextAtom<HL.IHex | null>(null);
+// TODO rename to PerpsSelectedAccount
+export type IPerpsCurrentAccount = {
+  accountId: string | null;
+  indexedAccountId: string | null;
+  evmAddress: HL.IHex | null;
+  //
+  agentWalletEnabled: boolean;
+  referralCodeEnabled: boolean;
+  builderFeeEnabled: boolean;
+  accountActivated: boolean;
+};
+export const perpsCurrentAccountEmpty: IPerpsCurrentAccount = {
+  accountId: null,
+  indexedAccountId: null,
+  evmAddress: null,
+  //
+  agentWalletEnabled: false,
+  referralCodeEnabled: false,
+  builderFeeEnabled: false,
+  accountActivated: false,
+};
 
-export const { atom: currentAccountAtom, use: useCurrentAccountAtom } =
-  contextAtom<string | null>(null);
+export const {
+  atom: perpsCurrentAccountAtom,
+  use: usePerpsCurrentAccountAtom,
+} = contextAtom<IPerpsCurrentAccount>(perpsCurrentAccountEmpty);
+
+export const {
+  atom: perpsAccountLoadingAtom,
+  use: usePerpsAccountLoadingAtom,
+} = contextAtom<boolean>(false);
 
 export const { atom: subscriptionActiveAtom, use: useSubscriptionActiveAtom } =
   contextAtom<boolean>(false);
@@ -114,7 +140,7 @@ export const {
   use: useRequiredSubscriptionsAtom,
 } = contextAtomComputed((get): string[] => {
   const currentToken = get(currentTokenAtom());
-  const currentUser = get(currentUserAtom());
+  const currentUser = get(perpsCurrentAccountAtom());
   const subscriptions: string[] = ['allMids'];
 
   if (currentToken) {
@@ -122,13 +148,15 @@ export const {
     subscriptions.push(`l2Book:${currentToken}`);
   }
 
-  if (currentUser) {
-    subscriptions.push(`webData2:${currentUser}`);
-    subscriptions.push(`userEvents:${currentUser}`);
-    subscriptions.push(`userNotifications:${currentUser}`);
+  if (currentUser && currentUser.evmAddress) {
+    subscriptions.push(`webData2:${currentUser.evmAddress}`);
+    subscriptions.push(`userEvents:${currentUser.evmAddress}`);
+    subscriptions.push(`userNotifications:${currentUser.evmAddress}`);
 
     if (currentToken) {
-      subscriptions.push(`activeAssetData:${currentUser}:${currentToken}`);
+      subscriptions.push(
+        `activeAssetData:${currentUser.evmAddress}:${currentToken}`,
+      );
     }
   }
 
@@ -166,11 +194,6 @@ export const { atom: tradingFormAtom, use: useTradingFormAtom } =
 
 export const { atom: tradingLoadingAtom, use: useTradingLoadingAtom } =
   contextAtom<boolean>(false);
-
-export const {
-  atom: perpsAccountLoadingAtom,
-  use: usePerpsAccountLoadingAtom,
-} = contextAtom<boolean>(false);
 
 export const { atom: currentTokenPriceAtom, use: useCurrentTokenPriceAtom } =
   contextAtomComputed((get) => {
@@ -281,14 +304,44 @@ export const { atom: tradingPanelDataAtom, use: useTradingPanelDataAtom } =
   });
 
 export const { atom: accountPanelDataAtom, use: useAccountPanelDataAtom } =
-  contextAtomComputed((get) => {
+  contextAtomComputed<{
+    selectedAccount: IPerpsCurrentAccount; // selected account by AccountSelector
+    currentUser: HL.IHex | null; // current user address in webData2 from websocket message
+    isLoggedIn: boolean;
+    // TODO separate low frequency data and high frequency data
+    accountSummary: {
+      accountValue: string | undefined;
+      totalMarginUsed: string | undefined;
+      totalNtlPos: string | undefined;
+      totalRawUsd: string | undefined;
+      withdrawable: string | undefined;
+    };
+    positions: HL.IAssetPosition[];
+    orders: HL.IFrontendOrder[];
+    activeAssetData: HL.IActiveAssetData | null;
+    hasUserData: boolean;
+    userWebData2: HL.IWsWebData2 | null;
+  }>((get) => {
     const webData2 = get(webData2Atom());
     const activeAssetData = get(activeAssetDataAtom());
     const positions = get(positionListAtom());
     const orders = get(openOrdersListAtom());
+    const selectedAccount = get(perpsCurrentAccountAtom());
 
-    if (!webData2) {
+    const currentUser =
+      (webData2?.user === ZERO_ADDRESS ? null : webData2?.user) || null;
+
+    if (
+      !webData2 ||
+      !currentUser ||
+      !selectedAccount?.evmAddress ||
+      (selectedAccount?.evmAddress &&
+        currentUser &&
+        currentUser?.toLowerCase() !==
+          selectedAccount?.evmAddress?.toLowerCase())
+    ) {
       return {
+        selectedAccount,
         isLoggedIn: false,
         currentUser: null,
         accountSummary: {
@@ -302,10 +355,10 @@ export const { atom: accountPanelDataAtom, use: useAccountPanelDataAtom } =
         orders: [],
         activeAssetData: null,
         hasUserData: false,
+        userWebData2: null,
       };
     }
 
-    const currentUser = webData2.user === ZERO_ADDRESS ? null : webData2.user;
     const isLoggedIn = !!currentUser;
     const hasUserData = isLoggedIn && !!webData2;
 
@@ -323,6 +376,7 @@ export const { atom: accountPanelDataAtom, use: useAccountPanelDataAtom } =
     }, 0);
 
     return {
+      selectedAccount,
       isLoggedIn,
       currentUser,
       accountSummary,

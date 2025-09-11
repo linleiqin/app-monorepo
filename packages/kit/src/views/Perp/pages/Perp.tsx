@@ -22,8 +22,6 @@ function PerpLayout() {
 }
 
 function PerpContent() {
-  useHyperliquidSession();
-
   return (
     <Page>
       <TabPageHeader

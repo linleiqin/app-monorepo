@@ -2,6 +2,8 @@ import { useRef } from 'react';
 
 import backgroundApiProxy from '@onekeyhq/kit/src/background/instance/backgroundApiProxy';
 import { ContextJotaiActionsBase } from '@onekeyhq/kit/src/states/jotai/utils/ContextJotaiActionsBase';
+import type { IAccountDeriveTypes } from '@onekeyhq/kit-bg/src/vaults/types';
+import { presetNetworksMap } from '@onekeyhq/shared/src/config/presetNetworks';
 import { memoFn } from '@onekeyhq/shared/src/utils/cacheUtils';
 import type * as HL from '@onekeyhq/shared/types/hyperliquid/sdk';
 
@@ -11,19 +13,75 @@ import {
   allMidsAtom,
   connectionStateAtom,
   contextAtomMethod,
-  currentAccountAtom,
   currentTokenAtom,
-  currentUserAtom,
   l2BookAtom,
+  perpsAccountLoadingAtom,
+  perpsCurrentAccountAtom,
+  perpsCurrentAccountEmpty,
   subscriptionActiveAtom,
   tradingFormAtom,
   tradingLoadingAtom,
   webData2Atom,
 } from './atoms';
 
-import type { ITradingFormData } from './atoms';
+import type { IPerpsCurrentAccount, ITradingFormData } from './atoms';
+
+let hidePerpsAccountLoadingTimer: ReturnType<typeof setTimeout> | undefined;
 
 class ContextJotaiActionsHyperliquid extends ContextJotaiActionsBase {
+  loadPerpsCurrentAccount = contextAtomMethod(
+    async (
+      _,
+      set,
+      data: {
+        indexedAccountId: string | null;
+        accountId: string | null;
+        deriveType: IAccountDeriveTypes;
+      },
+    ): Promise<IPerpsCurrentAccount> => {
+      const { indexedAccountId, accountId, deriveType } = data;
+
+      const perpsCurrentAccount: IPerpsCurrentAccount = {
+        indexedAccountId: indexedAccountId || null,
+        accountId: null,
+        evmAddress: null,
+        //
+        agentWalletEnabled: false,
+        referralCodeEnabled: false,
+        builderFeeEnabled: false,
+        accountActivated: false,
+      };
+
+      try {
+        clearTimeout(hidePerpsAccountLoadingTimer);
+        set(perpsAccountLoadingAtom(), true);
+
+        if (indexedAccountId || accountId) {
+          const ethNetworkId = presetNetworksMap.arbitrum.id;
+          const account =
+            await backgroundApiProxy.serviceAccount.getNetworkAccount({
+              indexedAccountId: indexedAccountId ?? undefined,
+              accountId: indexedAccountId ? undefined : accountId ?? undefined,
+              networkId: ethNetworkId,
+              deriveType: deriveType || 'default',
+            });
+          perpsCurrentAccount.accountId = account.id || null;
+          perpsCurrentAccount.evmAddress = (account.address as HL.IHex) || null;
+        }
+      } catch (error) {
+        console.error(error);
+      } finally {
+        clearTimeout(hidePerpsAccountLoadingTimer);
+        hidePerpsAccountLoadingTimer = setTimeout(() => {
+          set(perpsAccountLoadingAtom(), false);
+        }, 200);
+      }
+
+      set(perpsCurrentAccountAtom(), perpsCurrentAccount);
+      return perpsCurrentAccount;
+    },
+  );
+
   updateAllMids = contextAtomMethod((_, set, data: HL.IWsAllMids) => {
     set(allMidsAtom(), data);
   });
@@ -79,28 +137,10 @@ class ContextJotaiActionsHyperliquid extends ContextJotaiActionsBase {
     await this.updateSubscriptions.call(set);
   });
 
-  setCurrentUser = contextAtomMethod(async (get, set, user: HL.IHex | null) => {
-    const currentUser = get(currentUserAtom());
-    if (currentUser === user) return;
-
-    set(currentUserAtom(), user);
-
-    if (user !== currentUser) {
-      set(webData2Atom(), null);
-      set(activeAssetDataAtom(), null);
-    }
-    await this.updateSubscriptions.call(set);
-  });
-
-  setCurrentAccount = contextAtomMethod(
-    async (get, set, accountId: string | null) => {
-      set(currentAccountAtom(), accountId);
-    },
-  );
-
   updateSubscriptions = contextAtomMethod(async (get, set) => {
     const currentToken = get(currentTokenAtom());
-    const currentUser = get(currentUserAtom());
+    const currentAccount = get(perpsCurrentAccountAtom());
+    const currentUser = currentAccount?.evmAddress;
     const isActive = get(subscriptionActiveAtom());
 
     if (!isActive) {
@@ -186,6 +226,18 @@ class ContextJotaiActionsHyperliquid extends ContextJotaiActionsBase {
     }
   });
 
+  // setCurrentUser = contextAtomMethod(async (get, set, user: HL.IHex | null) => {
+  //   const currentUser = get(currentUserAtom());
+  //   if (currentUser === user) return;
+  //   set(currentUserAtom(), user);
+  //   if (user !== currentUser) {
+  //     set(webData2Atom(), null);
+  //     set(activeAssetDataAtom(), null);
+  //   }
+  //   await this.updateSubscriptions.call(set);
+  // });
+
+  // TODO why
   setupTradingSession = contextAtomMethod(
     async (
       get,
@@ -193,7 +245,12 @@ class ContextJotaiActionsHyperliquid extends ContextJotaiActionsBase {
       payload: { userAddress: HL.IHex; userAccountId: string },
     ) => {
       try {
-        await this.setCurrentUser.call(set, payload.userAddress);
+        // await this.setCurrentUser.call(set, payload.userAddress);
+        //   if (user !== currentUser) {
+        //     set(webData2Atom(), null);
+        //     set(activeAssetDataAtom(), null);
+        //   }
+        //   await this.updateSubscriptions.call(set);
 
         await backgroundApiProxy.serviceHyperliquidExchange.setup({
           userAddress: payload.userAddress,
@@ -244,7 +301,7 @@ class ContextJotaiActionsHyperliquid extends ContextJotaiActionsBase {
   );
 
   clearUserData = contextAtomMethod((get, set) => {
-    set(currentUserAtom(), null);
+    set(perpsCurrentAccountAtom(), perpsCurrentAccountEmpty);
     set(webData2Atom(), null);
     set(activeAssetDataAtom(), null);
   });
@@ -256,7 +313,7 @@ class ContextJotaiActionsHyperliquid extends ContextJotaiActionsBase {
     set(activeAssetDataAtom(), null);
     set(l2BookAtom(), null);
     set(currentTokenAtom(), 'ETH');
-    set(currentUserAtom(), null);
+    set(perpsCurrentAccountAtom(), perpsCurrentAccountEmpty);
     set(subscriptionActiveAtom(), false);
     set(connectionStateAtom(), {
       isConnected: false,
@@ -457,8 +514,6 @@ export function useHyperliquidActions() {
   const updateConnectionState = actions.updateConnectionState.use();
 
   const setCurrentToken = actions.setCurrentToken.use();
-  const setCurrentUser = actions.setCurrentUser.use();
-  const setCurrentAccount = actions.setCurrentAccount.use();
   const updateSubscriptions = actions.updateSubscriptions.use();
   const startSubscriptions = actions.startSubscriptions.use();
   const stopSubscriptions = actions.stopSubscriptions.use();
@@ -479,6 +534,7 @@ export function useHyperliquidActions() {
   const marketOrderOpen = actions.marketOrderOpen.use();
   const updateLeverage = actions.updateLeverage.use();
   const marketOrderClose = actions.marketOrderClose.use();
+  const loadPerpsCurrentAccount = actions.loadPerpsCurrentAccount.use();
 
   return useRef({
     updateAllMids,
@@ -488,8 +544,6 @@ export function useHyperliquidActions() {
     updateL2Book,
     updateConnectionState,
     setCurrentToken,
-    setCurrentUser,
-    setCurrentAccount,
     updateSubscriptions,
     startSubscriptions,
     stopSubscriptions,
@@ -508,5 +562,6 @@ export function useHyperliquidActions() {
     marketOrderOpen,
     updateLeverage,
     marketOrderClose,
+    loadPerpsCurrentAccount,
   });
 }
