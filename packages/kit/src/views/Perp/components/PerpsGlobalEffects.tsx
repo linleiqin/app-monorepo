@@ -166,10 +166,7 @@ function useHyperliquidSession() {
   };
 }
 
-function PerpsGlobalEffectsView() {
-  useHyperliquidEventBusListener();
-  useHyperliquidSession();
-
+function useHyperliquidAccountLoader() {
   const { activeAccount } = useActiveAccount({ num: 0 });
   const [currentPerpsAccount] = usePerpsCurrentAccountAtom();
   const actions = useHyperliquidActions();
@@ -199,7 +196,12 @@ function PerpsGlobalEffectsView() {
       void actions.current.updateSubscriptions();
     }
   }, [actions, currentPerpsAccount?.evmAddress]);
+}
 
+function PerpsGlobalEffectsView() {
+  useHyperliquidEventBusListener();
+  useHyperliquidSession();
+  useHyperliquidAccountLoader();
   return null;
 }
 
