@@ -1,14 +1,11 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import {
-  useCurrentTokenAtom,
-  useHyperliquidActions,
-} from '@onekeyhq/kit/src/states/jotai/contexts/hyperliquid';
-import { getValidPriceDecimals } from '@onekeyhq/shared/src/utils/perpsUtils';
+import { useHyperliquidActions } from '@onekeyhq/kit/src/states/jotai/contexts/hyperliquid';
+import timerUtils from '@onekeyhq/shared/src/utils/timerUtils';
+import type { IPerpsUniverse } from '@onekeyhq/shared/types/hyperliquid';
 
 import backgroundApiProxy from '../../../background/instance/backgroundApiProxy';
-
-import { useTokenList } from './usePerpMarketData';
+import { usePromiseResult } from '../../../hooks/usePromiseResult';
 
 export interface ITokenItem {
   coin: string;
@@ -38,72 +35,57 @@ export interface IPerpTokenSelectorReturn {
   isLoading: boolean;
 }
 
+let lastRefreshTradingMetaTime = 0;
+
 export function usePerpTokenSelector() {
-  const [currentToken] = useCurrentTokenAtom();
   const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const actions = useHyperliquidActions();
 
-  const { data: tokenList } = useTokenList();
+  const allAssetsRef = useRef<IPerpsUniverse[] | undefined>(undefined);
 
-  const enhancedTokens = useMemo(() => {
-    return tokenList.map((token) => {
-      const priceDecimals = getValidPriceDecimals(token.szDecimals);
-      return {
-        ...token,
-        change24h: (
-          parseFloat(token.markPrice) - parseFloat(token.prevDayPrice)
-        ).toFixed(priceDecimals),
-        change24hPercent:
-          ((parseFloat(token.markPrice) - parseFloat(token.prevDayPrice)) /
-            parseFloat(token.prevDayPrice)) *
-          100,
-      };
+  const refreshAllAssets = useCallback(async () => {
+    const { universeItems } =
+      await backgroundApiProxy.serviceHyperliquid.getTradingUniverse();
+    allAssetsRef.current = universeItems || [];
+    actions.current.updateAllAssetsFiltered({
+      allAssets: allAssetsRef.current,
+      query: searchQuery,
     });
-  }, [tokenList]);
+  }, [actions, searchQuery]);
 
-  const filteredTokens = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return enhancedTokens;
+  useEffect(() => {
+    void refreshAllAssets();
+    const now = Date.now();
+    if (
+      now - lastRefreshTradingMetaTime >
+      timerUtils.getTimeDurationMs({
+        minute: 5,
+      })
+    ) {
+      lastRefreshTradingMetaTime = now;
+      void backgroundApiProxy.serviceHyperliquid.refreshTradingMeta();
     }
+    return () => {};
+  }, [actions, refreshAllAssets]);
 
-    const query = searchQuery.toLowerCase();
-    return enhancedTokens.filter((token) =>
-      token.name?.toLowerCase().includes(query),
-    );
-  }, [enhancedTokens, searchQuery]);
-
-  const selectToken = useCallback(
-    async (symbol: string) => {
-      if (symbol === currentToken) return;
-
-      setIsLoading(true);
-      try {
-        await backgroundApiProxy.serviceHyperliquid.changeSelectedSymbol({
-          coin: symbol,
-        });
-        await actions.current.setCurrentToken(symbol);
-      } catch (error) {
-        console.error('[PerpTokenSelector] Failed to select token:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [currentToken, actions],
-  );
+  useEffect(() => {
+    return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      actions.current.updateAllAssetsFiltered({
+        allAssets: [],
+        query: '',
+      });
+    };
+  }, [actions]);
 
   const clearSearch = useCallback(() => {
     setSearchQuery('');
   }, []);
 
   return {
-    tokens: enhancedTokens,
-    currentToken,
     searchQuery,
-    filteredTokens,
     setSearchQuery,
-    selectToken,
     clearSearch,
-    isLoading,
+    refreshAllAssets,
   };
 }

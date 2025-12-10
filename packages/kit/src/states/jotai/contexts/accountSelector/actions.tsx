@@ -1,11 +1,10 @@
 import { useRef } from 'react';
 
 import { Semaphore } from 'async-mutex';
-import { cloneDeep, isEqual, isUndefined, omitBy } from 'lodash';
+import { cloneDeep, isEmpty, isEqual, isUndefined, omitBy } from 'lodash';
 
 import type { IDialogInstance } from '@onekeyhq/components';
 import { Dialog, Toast } from '@onekeyhq/components';
-import { tonMnemonicToKeyPair } from '@onekeyhq/core/src/secret';
 import backgroundApiProxy from '@onekeyhq/kit/src/background/instance/backgroundApiProxy';
 import { CommonDeviceLoading } from '@onekeyhq/kit/src/components/Hardware/Hardware';
 import type useAppNavigation from '@onekeyhq/kit/src/hooks/useAppNavigation';
@@ -24,6 +23,7 @@ import type {
   IAccountSelectorSelectedAccount,
   IAccountSelectorSelectedAccountsMap,
 } from '@onekeyhq/kit-bg/src/dbs/simple/entity/SimpleDbEntityAccountSelector';
+import { devSettingsPersistAtom } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import type { IJotaiSetter } from '@onekeyhq/kit-bg/src/states/jotai/types';
 import type { IAccountDeriveTypes } from '@onekeyhq/kit-bg/src/vaults/types';
 import { getNetworkIdsMap } from '@onekeyhq/shared/src/config/networkIds';
@@ -58,6 +58,7 @@ import accountUtils from '@onekeyhq/shared/src/utils/accountUtils';
 import bufferUtils from '@onekeyhq/shared/src/utils/bufferUtils';
 import { memoFn } from '@onekeyhq/shared/src/utils/cacheUtils';
 import networkUtils from '@onekeyhq/shared/src/utils/networkUtils';
+import rnUtils from '@onekeyhq/shared/src/utils/rnUtils';
 import timerUtils from '@onekeyhq/shared/src/utils/timerUtils';
 import {
   EAccountSelectorAutoSelectTriggerBy,
@@ -338,11 +339,32 @@ class AccountSelectorActions extends ContextJotaiActionsBase {
         );
 
         if (
+          platformEnv.isWebDappMode
+          // sceneInfo?.sceneName &&
+          // ![EAccountSelectorSceneName.swap].includes(sceneInfo?.sceneName)
+        ) {
+          const oldIsNotAllNetwork =
+            oldSelectedAccount.networkId &&
+            oldSelectedAccount.networkId !== getNetworkIdsMap().onekeyall;
+          const newIsNotAllNetwork =
+            newSelectedAccount.networkId &&
+            newSelectedAccount.networkId !== getNetworkIdsMap().onekeyall;
+          if (newIsNotAllNetwork || oldIsNotAllNetwork) {
+            newSelectedAccount.networkId = getNetworkIdsMap().onekeyall;
+            newSelectedAccount.deriveType = 'default';
+          }
+        }
+
+        if (
           isEqual(
             omitBy(oldSelectedAccount, isUndefined),
             omitBy(newSelectedAccount, isUndefined),
           )
         ) {
+          return;
+        }
+
+        if (isEmpty(newSelectedAccount)) {
           return;
         }
 
@@ -1167,6 +1189,9 @@ class AccountSelectorActions extends ContextJotaiActionsBase {
       const { mnemonic: realMnemonic } = await serviceAccount.validateMnemonic(
         mnemonic,
       );
+      const { tonMnemonicToKeyPair } = await import(
+        '@onekeyhq/core/src/secret/ton-mnemonic'
+      );
       const keyPair = await tonMnemonicToKeyPair(realMnemonic.split(' '));
       const secretKeyUint8Array = platformEnv.isNative
         ? new Uint8Array(Object.values(keyPair.secretKey))
@@ -1456,6 +1481,10 @@ class AccountSelectorActions extends ContextJotaiActionsBase {
           },
         );
 
+      defaultLogger.accountSelector.listData.simpleDbSelectedAccountsMap({
+        selectedAccountsMap: selectedAccountsMapInDB,
+      });
+
       // fix discover account from dappConnection
       if (sceneUrl && sceneName === EAccountSelectorSceneName.discover) {
         const connectionMap =
@@ -1464,6 +1493,11 @@ class AccountSelectorActions extends ContextJotaiActionsBase {
               sceneUrl,
             },
           );
+        defaultLogger.accountSelector.listData.simpleDbDappConnectionSelectedAccountsMap(
+          {
+            connectionMap,
+          },
+        );
         if (connectionMap) {
           const map: IAccountSelectorSelectedAccountsMap = {};
           Object.entries(connectionMap).forEach(([num, v]) => {
@@ -1478,6 +1512,11 @@ class AccountSelectorActions extends ContextJotaiActionsBase {
             map[Number(num)] = omitBy(map[Number(num)], isUndefined) as any;
           });
           selectedAccountsMapInDB = map;
+          defaultLogger.accountSelector.listData.initFromStorageDiscoverySelectedAccountsMapMerged(
+            {
+              selectedAccountsMap: selectedAccountsMapInDB,
+            },
+          );
         }
       }
 
@@ -1504,6 +1543,11 @@ class AccountSelectorActions extends ContextJotaiActionsBase {
               sceneUrl,
             },
           );
+        defaultLogger.accountSelector.listData.fixDeriveTypesForInitAccountSelectorMapResult(
+          {
+            selectedAccountsMap: selectedAccountsMapInDB,
+          },
+        );
       }
 
       const selectedAccountsMap = get(selectedAccountsAtom());
@@ -1513,7 +1557,15 @@ class AccountSelectorActions extends ContextJotaiActionsBase {
       ) {
         this.setSelectedAccountsAtom(
           set,
-          (v) => selectedAccountsMapInDB || v,
+          (v) => {
+            const r = selectedAccountsMapInDB || v;
+            defaultLogger.accountSelector.listData.initFromStorageSelectedAccountsMapResult(
+              {
+                selectedAccountsMap: r,
+              },
+            );
+            return r;
+          },
           'initFromStorage',
         );
       }

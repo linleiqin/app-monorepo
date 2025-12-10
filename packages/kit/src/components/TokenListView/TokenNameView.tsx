@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 
 import { useIntl } from 'react-intl';
 
@@ -11,9 +11,13 @@ import {
   XStack,
 } from '@onekeyhq/components';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
+import { checkIsOnlyOneTokenHasBalance } from '@onekeyhq/shared/src/utils/tokenUtils';
 
 import { useAccountData } from '../../hooks/useAccountData';
-import { useAggregateTokensListMapAtom } from '../../states/jotai/contexts/tokenList';
+import {
+  useAggregateTokensListMapAtom,
+  useAllTokenListMapAtom,
+} from '../../states/jotai/contexts/tokenList';
 
 import { useTokenListViewContext } from './TokenListViewContext';
 
@@ -22,7 +26,6 @@ type IProps = {
   name: string;
   isNative?: boolean;
   isAggregateToken?: boolean;
-  isSameSymbolWithAggregateToken?: boolean;
   isAllNetworks?: boolean;
   withNetwork?: boolean;
   networkId: string | undefined;
@@ -37,7 +40,6 @@ function TokenNameView(props: IProps) {
     name,
     isNative,
     isAggregateToken,
-    isSameSymbolWithAggregateToken,
     isAllNetworks,
     withNetwork,
     networkId,
@@ -51,24 +53,42 @@ function TokenNameView(props: IProps) {
   const { network } = useAccountData({ networkId });
   const [aggregateTokensListMap] = useAggregateTokensListMapAtom();
   const { allAggregateTokenMap } = useTokenListViewContext();
-  const allAggregateTokenList = allAggregateTokenMap?.[$key]?.tokens ?? [];
-  const aggregateTokenList = aggregateTokensListMap[$key]?.tokens ?? [];
+  const [allTokenListMap] = useAllTokenListMapAtom();
+  const allAggregateTokenList = useMemo(
+    () => allAggregateTokenMap?.[$key]?.tokens ?? [],
+    [allAggregateTokenMap, $key],
+  );
+  const aggregateTokenList = useMemo(
+    () => aggregateTokensListMap[$key]?.tokens ?? [],
+    [aggregateTokensListMap, $key],
+  );
   const firstAggregateToken = aggregateTokenList?.[0];
   const { network: firstAggregateTokenNetwork } = useAccountData({
     networkId: firstAggregateToken?.networkId,
   });
 
+  const { tokenHasBalance, tokenHasBalanceCount } = useMemo(() => {
+    return checkIsOnlyOneTokenHasBalance({
+      tokenMap: allTokenListMap,
+      aggregateTokenList,
+      allAggregateTokenList,
+    });
+  }, [aggregateTokenList, allTokenListMap, allAggregateTokenList]);
+
+  const { network: tokenHasBalanceNetwork } = useAccountData({
+    networkId: tokenHasBalance?.networkId,
+  });
+
   return (
     <XStack alignItems="center" gap="$1" {...rest}>
       <SizableText minWidth={0} numberOfLines={1} {...textProps}>
-        {isNative && !isAggregateToken && showNetworkName
-          ? network?.name
-          : name}
+        {name}
       </SizableText>
       {isAllNetworks &&
       withAggregateBadge &&
       isAggregateToken &&
-      (aggregateTokenList?.length > 1 || allAggregateTokenList?.length > 1) ? (
+      (aggregateTokenList?.length > 1 || allAggregateTokenList?.length > 1) &&
+      !tokenHasBalance ? (
         <Badge flexShrink={1}>
           <Badge.Text numberOfLines={1}>
             {intl.formatMessage({ id: ETranslations.global__multichain })}
@@ -76,14 +96,17 @@ function TokenNameView(props: IProps) {
         </Badge>
       ) : null}
       {withNetwork &&
-      (network ||
+      ((network && !network.isAggregateNetwork && !isAggregateToken) ||
         (firstAggregateTokenNetwork &&
           aggregateTokenList?.length === 1 &&
-          allAggregateTokenList.length === 0)) &&
-      !isNative ? (
+          allAggregateTokenList.length === 0) ||
+        (tokenHasBalance && tokenHasBalanceCount === 1)) ? (
         <Badge flexShrink={1}>
           <Badge.Text numberOfLines={1}>
-            {network?.name || firstAggregateTokenNetwork?.name}
+            {network?.isAggregateNetwork
+              ? tokenHasBalanceNetwork?.name ?? firstAggregateTokenNetwork?.name
+              : (network?.name || tokenHasBalanceNetwork?.name) ??
+                firstAggregateTokenNetwork?.name}
           </Badge.Text>
         </Badge>
       ) : null}
@@ -100,25 +123,6 @@ function TokenNameView(props: IProps) {
               size="$5"
             />
           }
-        />
-      ) : null}
-      {isAllNetworks &&
-      !isAggregateToken &&
-      !showNetworkName &&
-      isSameSymbolWithAggregateToken ? (
-        <Tooltip
-          placement="top"
-          renderTrigger={
-            <Icon
-              flexShrink={0}
-              name="InfoCircleOutline"
-              color="$iconCritical"
-              size="$4"
-            />
-          }
-          renderContent={intl.formatMessage({
-            id: ETranslations.identical_name_asset_alert,
-          })}
         />
       ) : null}
     </XStack>

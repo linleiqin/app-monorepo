@@ -2,7 +2,12 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
-import { BrowserWindow, app, dialog } from 'electron';
+import {
+  BrowserWindow,
+  app,
+  dialog,
+  autoUpdater as nativeUpdater,
+} from 'electron';
 import isDev from 'electron-is-dev';
 import logger from 'electron-log/main';
 import { CancellationToken, autoUpdater } from 'electron-updater';
@@ -10,11 +15,15 @@ import { readCleartextMessage, readKey } from 'openpgp';
 
 import { ipcMessageKeys } from '@onekeyhq/desktop/app/config';
 import { PUBLIC_KEY } from '@onekeyhq/desktop/app/constant/gpg';
-import { ETranslations, i18nText } from '@onekeyhq/desktop/app/i18n';
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports
+import { ElectronTranslations, i18nText } from '@onekeyhq/desktop/app/i18n';
 import * as store from '@onekeyhq/desktop/app/libs/store';
-import { setUpdateBuildNumber } from '@onekeyhq/desktop/app/libs/store';
 import { b2t, toHumanReadable } from '@onekeyhq/desktop/app/libs/utils';
 import type { IInstallUpdateParams } from '@onekeyhq/desktop/app/preload';
+import {
+  clearWindowProgressBar,
+  updateWindowProgressBar,
+} from '@onekeyhq/desktop/app/windowProgressBar';
 import { buildServiceEndpoint } from '@onekeyhq/shared/src/config/appConfig';
 import { OneKeyLocalError } from '@onekeyhq/shared/src/errors';
 import type { IUpdateDownloadedEvent } from '@onekeyhq/shared/src/modules3rdParty/auto-update/type';
@@ -22,8 +31,6 @@ import { EServiceEndpointEnum } from '@onekeyhq/shared/types/endpoint';
 
 import type { IDesktopApi } from './base/types';
 import type { UpdateCheckResult } from 'electron-updater';
-
-const isMas = !!process.mas;
 
 function isNetworkError(errorObject: Error) {
   return (
@@ -56,11 +63,11 @@ async function clearUpdateCache() {
   }
 }
 
-function buildFeedUrl(useTestFeedUrl: boolean) {
+function buildFeedUrl(useTestFeedUrl: boolean, latestVersion: string) {
   return `${buildServiceEndpoint({
     serviceName: EServiceEndpointEnum.Utility,
     env: useTestFeedUrl ? 'test' : 'prod',
-  })}/utility/v1/app-update/electron-feed-url`;
+  })}/utility/v1/app-update/electron-feed-url?version=${latestVersion}`;
 }
 
 export interface ILatestVersion {
@@ -77,11 +84,18 @@ export interface IUpdateProgressUpdate {
   transferred: number;
 }
 
-if (isMas) {
-  autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = false;
-  autoUpdater.logger = logger;
-}
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = false;
+autoUpdater.disableDifferentialDownload = true;
+autoUpdater.logger = logger;
+
+const isMac = process.platform === 'darwin';
+const isMas = process.mas;
+const isSnapStore = process.platform === 'linux' && process.env.SNAP;
+const isWindowsMsStore =
+  process.platform === 'win32' && process.env.DESK_CHANNEL === 'ms-store';
+
+const isStoreVersion = isMas || isSnapStore || isWindowsMsStore;
 
 class DesktopApiAppUpdate {
   desktopApi: IDesktopApi;
@@ -102,9 +116,10 @@ class DesktopApiAppUpdate {
     this.latestVersion = {} as ILatestVersion;
     this.isDownloading = false;
     this.downloadedEvent = {} as IUpdateDownloadedEvent;
-    if (!isMas) {
-      this.initAppAutoUpdateEvents();
-      this.initBundleAutoUpdateEvents();
+    if (!isStoreVersion) {
+      void app.whenReady().then(() => {
+        this.initAppAutoUpdateEvents();
+      });
     }
     if (isDev) {
       Object.defineProperty(app, 'isPackaged', {
@@ -189,6 +204,7 @@ class DesktopApiAppUpdate {
         ? 'Network exception, please check your internet connection.'
         : err.message;
 
+      this.isDownloading = false;
       if (mainWindow.isDestroyed()) {
         void dialog
           .showMessageBox({
@@ -207,6 +223,7 @@ class DesktopApiAppUpdate {
         mainWindow.webContents.send(ipcMessageKeys.UPDATE_ERROR, {
           message,
         });
+        clearWindowProgressBar(this.getMainWindow());
       }
     });
 
@@ -227,6 +244,7 @@ class DesktopApiAppUpdate {
           transferred: progressObj.transferred,
         },
       );
+      updateWindowProgressBar(this.getMainWindow(), progressObj.percent);
     });
 
     autoUpdater.on(
@@ -251,11 +269,21 @@ class DesktopApiAppUpdate {
             downloadUrl,
           },
         );
+        setTimeout(() => {
+          this.isDownloading = false;
+          clearWindowProgressBar(this.getMainWindow());
+        }, 2500);
       },
     );
   }
 
-  initBundleAutoUpdateEvents(): void {}
+  async isDownloadingPackage(): Promise<boolean> {
+    return this.isDownloading;
+  }
+
+  async checkDownloadedFileExists(downloadedFile: string): Promise<boolean> {
+    return fs.existsSync(downloadedFile);
+  }
 
   async clearUpdateCache(): Promise<void> {
     if (this.updateCancellationToken) {
@@ -286,9 +314,16 @@ class DesktopApiAppUpdate {
 
   async checkForUpdates(
     isManual = false,
+    requestHeaders = {},
+    latestVersion: string,
   ): Promise<UpdateCheckResult['updateInfo'] | null> {
     if (isManual) {
       this.isManualCheck = true;
+    }
+
+    logger.info('auto-updater', 'latestVersion is ', latestVersion);
+    if (!latestVersion) {
+      return null;
     }
     logger.info(
       'auto-updater',
@@ -297,12 +332,18 @@ class DesktopApiAppUpdate {
 
     const updateSettings = store.getUpdateSettings();
 
-    const feedUrl = buildFeedUrl(updateSettings.useTestFeedUrl);
-    autoUpdater.setFeedURL(feedUrl);
+    const feedUrl = buildFeedUrl(updateSettings.useTestFeedUrl, latestVersion);
+    autoUpdater.setFeedURL({
+      url: feedUrl,
+      requestHeaders,
+      provider: 'generic',
+    });
+    autoUpdater.requestHeaders = requestHeaders;
+    logger.info('auto-updater', 'request headers: ', requestHeaders);
     logger.info('current feed url: ', feedUrl);
     try {
       const result = await autoUpdater.checkForUpdates();
-      console.log('checkForUpdates result: =>>>> ', result);
+      logger.info('auto-updater', 'checkForUpdates result: =>>>> ', result);
       if (result) {
         return result.updateInfo;
       }
@@ -322,6 +363,13 @@ class DesktopApiAppUpdate {
     if (this.isDownloading) {
       return;
     }
+    clearWindowProgressBar(this.getMainWindow());
+    store.setUpdateBuildNumber('');
+    logger.info(
+      'auto-updater',
+      'Update build number: ',
+      store.getUpdateBuildNumber(),
+    );
     this.isDownloading = true;
     const mainWindow = this.getMainWindow();
     if (!mainWindow) {
@@ -336,21 +384,21 @@ class DesktopApiAppUpdate {
     if (this.updateCancellationToken) {
       this.updateCancellationToken.cancel();
     }
-    store.clearUpdateBuildNumber();
     await clearUpdateCache();
     this.updateCancellationToken = new CancellationToken();
 
     try {
+      logger.info('auto-updater', 'Download update');
       await autoUpdater.downloadUpdate(this.updateCancellationToken);
+      logger.info('auto-updater', 'Download update success');
     } catch (e) {
+      this.isDownloading = false;
       logger.info('auto-updater', 'Update cancelled', e);
       // CancellationError
       // node_modules/electron-updater/node_modules/builder-util-runtime/out/CancellationToken.js 104L
       if ((e as Error).message !== 'cancelled') {
         throw e;
       }
-    } finally {
-      this.isDownloading = false;
     }
   }
 
@@ -391,8 +439,9 @@ class DesktopApiAppUpdate {
         logger.error('auto-updater', 'Failed to fetch ASC file', error);
         throw error;
       }
+      return true;
     }
-    return true;
+    return false;
   }
 
   async downloadASC(params: IInstallUpdateParams): Promise<boolean> {
@@ -430,7 +479,7 @@ class DesktopApiAppUpdate {
         return sha256;
       }
       throw new OneKeyLocalError(
-        ETranslations.update_signature_verification_failed_alert_text,
+        ElectronTranslations.update_signature_verification_failed_alert_text,
       );
     } catch (error) {
       logger.error(
@@ -447,8 +496,8 @@ class DesktopApiAppUpdate {
         lowerCaseMessage.includes('ascii armor integrity check failed');
       throw new OneKeyLocalError(
         isInValid
-          ? ETranslations.update_signature_verification_failed_alert_text
-          : ETranslations.update_installation_package_possibly_compromised,
+          ? ElectronTranslations.update_signature_verification_failed_alert_text
+          : ElectronTranslations.update_installation_package_possibly_compromised,
       );
     }
   }
@@ -492,10 +541,9 @@ class DesktopApiAppUpdate {
     } catch (error) {
       logger.info('auto-updater', 'verifyFile error', error);
       throw new OneKeyLocalError(
-        ETranslations.update_installation_package_possibly_compromised,
+        ElectronTranslations.update_installation_package_possibly_compromised,
       );
     }
-
     return true;
   }
 
@@ -515,21 +563,35 @@ class DesktopApiAppUpdate {
       .showMessageBox({
         type: 'question',
         buttons: [
-          i18nText(ETranslations.update_install_and_restart),
-          i18nText(ETranslations.global_later),
+          i18nText(ElectronTranslations.update_install_and_restart),
+          i18nText(ElectronTranslations.global_later),
         ],
         defaultId: 0,
-        message: i18nText(ETranslations.update_new_update_downloaded),
+        message: i18nText(ElectronTranslations.update_new_update_downloaded),
       })
       .then((selection) => {
         if (selection.response === 0) {
-          setUpdateBuildNumber(buildNumber);
-          logger.info('auto-update', 'button[0] was clicked');
-          app.removeAllListeners('window-all-closed');
-          this.getMainWindow()?.removeAllListeners('close');
-          for (const window of BrowserWindow.getAllWindows()) {
-            window.close();
-            window.destroy();
+          store.setUpdateBuildNumber(buildNumber);
+          logger.info('auto-update', 'button[0] was clicked', buildNumber);
+          // https://github.com/electron-userland/electron-builder/issues/8997#issuecomment-2969507357
+          /**
+           * On macOS 15+ auto-update / relaunch issues:
+           * - https://github.com/electron-userland/electron-builder/issues/8795
+           * - https://github.com/electron-userland/electron-builder/issues/8997
+           */
+          if (isMac) {
+            app.removeAllListeners('before-quit');
+            app.removeAllListeners('window-all-closed');
+            BrowserWindow.getAllWindows().forEach((win) => {
+              if (win.isDestroyed()) {
+                return;
+              }
+              win.removeAllListeners('close');
+              win.close();
+            });
+            nativeUpdater.once('before-quit-for-update', () => {
+              app.exit();
+            });
           }
           autoUpdater.quitAndInstall(false);
         }
@@ -575,7 +637,9 @@ class DesktopApiAppUpdate {
   }
 
   async getPreviousUpdateBuildNumber(): Promise<string> {
-    return store.getUpdateBuildNumber() || '';
+    const previousBuildNumber = store.getUpdateBuildNumber() || '';
+    logger.info('auto-updater', 'Update build number: ', previousBuildNumber);
+    return previousBuildNumber;
   }
 }
 

@@ -3,14 +3,11 @@ import { memo, useCallback, useMemo, useState } from 'react';
 import * as React from 'react';
 
 import { Header } from '@react-navigation/elements';
-import {
-  useFocusEffect,
-  useIsFocused,
-  useNavigation,
-} from '@react-navigation/native';
-import { useMedia, useTheme } from 'tamagui';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useDebouncedCallback } from 'use-debounce';
 
+import { useMedia } from '@onekeyhq/components/src/hooks/useStyle';
+import { useTheme } from '@onekeyhq/components/src/shared/tamagui';
 import platformEnv from '@onekeyhq/shared/src/platformEnv';
 
 import { useIsModalPage } from '../../../hocs';
@@ -46,7 +43,7 @@ const DesktopDragZoneBoxView = platformEnv.isDesktop
   ? ({ disabled, children }: IDesktopDragZoneBoxProps) => {
       const isModalPage = useIsModalPage();
 
-      const [isFocus, setIsFocus] = useState(true);
+      const [isFocus, setIsFocus] = useState(false);
 
       // eslint-disable-next-line @typescript-eslint/unbound-method
       const { getState } = useNavigation();
@@ -91,6 +88,7 @@ function HeaderView({
   navigation,
   isModelScreen = false,
   isRootScreen = false,
+  isOnboardingScreen = false,
 }: IStackHeaderProps & IOnekeyStackHeaderProps) {
   const {
     headerLeft,
@@ -132,6 +130,7 @@ function HeaderView({
           onPress={onBackCallback}
           isRootScreen={isRootScreen}
           isModelScreen={isModelScreen}
+          isOnboardingScreen={isOnboardingScreen}
           renderLeft={headerLeft}
           {...props}
         />
@@ -141,7 +140,14 @@ function HeaderView({
         <XStack className="app-region-no-drag">{headerBackButton}</XStack>
       ) : null;
     },
-    [topStack, onBackCallback, isRootScreen, isModelScreen, headerLeft],
+    [
+      topStack,
+      onBackCallback,
+      isRootScreen,
+      isModelScreen,
+      isOnboardingScreen,
+      headerLeft,
+    ],
   );
 
   const { gtMd } = useMedia();
@@ -167,6 +173,7 @@ function HeaderView({
       <Stack
         alignItems="center"
         bg={headerTransparent ? 'transparent' : '$bgApp'}
+        pt={isOnboardingScreen ? '$10' : undefined}
         style={
           headerTransparent && !platformEnv.isNativeAndroid
             ? { position: 'absolute', right: 0, left: 0 }
@@ -185,7 +192,7 @@ function HeaderView({
       >
         <Stack
           alignSelf="stretch"
-          px="$5"
+          px={isOnboardingScreen ? '$16' : '$5'}
           $gtMd={
             platformEnv.isNativeAndroid
               ? undefined
@@ -199,7 +206,9 @@ function HeaderView({
             title={getHeaderTitle(options, route.name)}
             headerTintColor={theme.text.val}
             headerLeft={headerLeftView as any}
-            headerRightContainerStyle={headerRightContainerStyle}
+            headerRightContainerStyle={
+              isOnboardingScreen ? { flexGrow: 0 } : headerRightContainerStyle
+            }
             headerRight={
               typeof headerRight === 'function'
                 ? ({ tintColor }) => {
@@ -223,6 +232,9 @@ function HeaderView({
             headerTitleContainerStyle={{
               marginHorizontal: 0,
               ...(headerTitleContainerStyle as any),
+              ...(isOnboardingScreen
+                ? { flex: 1, alignItems: 'center' }
+                : undefined),
             }}
             headerTransparent
             headerBackground={headerBackground}

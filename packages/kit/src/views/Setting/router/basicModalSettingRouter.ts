@@ -81,6 +81,20 @@ const CryptoGallery = LazyLoadPage(
     ),
 );
 
+const CloudBackupGallery = LazyLoadPage(
+  () =>
+    import(
+      '@onekeyhq/kit/src/views/Developer/pages/Gallery/Components/stories/CloudBackupGallery'
+    ),
+);
+
+const AuthGallery = LazyLoadPage(
+  () =>
+    import(
+      '@onekeyhq/kit/src/views/Developer/pages/Gallery/Components/stories/AuthGallery'
+    ),
+);
+
 const ExportCustomNetworkConfig = LazyLoadPage(
   () =>
     import('@onekeyhq/kit/src/views/Setting/pages/ExportCustomNetworkConfig'),
@@ -110,6 +124,13 @@ const CustomTransactionModal = LazyLoadPage(
 
 const PerpUserConfigModal = LazyLoadPage(
   () => import('@onekeyhq/kit/src/views/Setting/pages/PerpUserConfig'),
+);
+
+const DevAppUpdateModalSettingModal = LazyLoadPage(
+  () =>
+    import(
+      '@onekeyhq/kit/src/views/Setting/pages/DevAppUpdateModalSettingModal'
+    ),
 );
 
 export const BasicModalSettingStack: IModalFlowNavigatorConfig<
@@ -158,6 +179,10 @@ export const BasicModalSettingStack: IModalFlowNavigatorConfig<
     component: FirmwareUpdateDevSettings,
   },
   {
+    name: EModalSettingRoutes.SettingDevAppUpdateModal,
+    component: DevAppUpdateModalSettingModal,
+  },
+  {
     name: EModalSettingRoutes.SettingDevV4MigrationModal,
     component: V4MigrationDevSettings,
   },
@@ -176,6 +201,14 @@ export const BasicModalSettingStack: IModalFlowNavigatorConfig<
   {
     name: EModalSettingRoutes.SettingDevCryptoGalleryModal,
     component: CryptoGallery,
+  },
+  {
+    name: EModalSettingRoutes.SettingDevCloudBackupGalleryModal,
+    component: CloudBackupGallery,
+  },
+  {
+    name: EModalSettingRoutes.SettingDevAuthGalleryModal,
+    component: AuthGallery,
   },
   {
     name: EModalSettingRoutes.SettingExportCustomNetworkConfig,

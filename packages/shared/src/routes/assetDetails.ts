@@ -1,7 +1,3 @@
-import type {
-  IAccountDeriveInfo,
-  IAccountDeriveTypes,
-} from '@onekeyhq/kit-bg/src/vaults/types';
 import type { IAccountHistoryTx } from '@onekeyhq/shared/types/history';
 import type { IAccountToken, ITokenFiat } from '@onekeyhq/shared/types/token';
 
@@ -24,9 +20,10 @@ export type IModalAssetDetailsParamList = {
     riskyTokens?: string[];
     isAllNetworks?: boolean;
     indexedAccountId: string;
-    tokens: IAccountToken[];
-    isAggregateToken?: boolean;
+    tokenInfo: IAccountToken;
+    aggregateTokens?: IAccountToken[];
     tokenMap?: Record<string, ITokenFiat>;
+    accountAddress?: string;
   };
   [EModalAssetDetailRoutes.MarketDetail]: {
     token: string;

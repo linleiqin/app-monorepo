@@ -1,7 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { throttle } from 'lodash';
-import { useDebouncedCallback } from 'use-debounce';
 
 import type { IDBExternalAccount } from '@onekeyhq/kit-bg/src/dbs/local/types';
 import type { IAccountSelectorSelectedAccount } from '@onekeyhq/kit-bg/src/dbs/simple/entity/SimpleDbEntityAccountSelector';
@@ -134,6 +133,11 @@ function AccountSelectorEffectsCmp({ num }: { num: number }) {
           if (!isReady) {
             return;
           }
+          const isInTransferImportOrBackupRestoreFlow: boolean =
+            await backgroundApiProxy.servicePrimeTransfer.isInTransferImportOrBackupRestoreFlow();
+          if (isInTransferImportOrBackupRestoreFlow) {
+            return;
+          }
           const activeAccount = await actions.current.reloadActiveAccountInfo({
             num,
             selectedAccount: selectedAccountRef.current,
@@ -155,6 +159,10 @@ function AccountSelectorEffectsCmp({ num }: { num: number }) {
   );
 
   const autoSaveToStorage = useCallback(async () => {
+    // do not save before initFromStorage() completes
+    if (!isReady) {
+      return;
+    }
     // do not save initial value to storage
     if (!isSelectedAccountDefaultValue) {
       // check initFromStorage() at AccountSelectorStorageInit
@@ -172,6 +180,7 @@ function AccountSelectorEffectsCmp({ num }: { num: number }) {
     }
   }, [
     actions,
+    isReady,
     isSelectedAccountDefaultValue,
     num,
     sceneName,

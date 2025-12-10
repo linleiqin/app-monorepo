@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { useFocusEffect } from '@react-navigation/native';
+import { useIsFocused } from '@react-navigation/native';
 import { useIntl } from 'react-intl';
 
 import {
@@ -9,9 +9,11 @@ import {
   IconButton,
   Page,
   Tooltip,
+  XStack,
   useShortcuts,
 } from '@onekeyhq/components';
 import { DelayedRender } from '@onekeyhq/components/src/hocs/DelayedRender';
+import { TabletHomeContainer } from '@onekeyhq/kit/src/components/TabletHomeContainer';
 import {
   HYPER_LIQUID_ORIGIN,
   HYPER_LIQUID_WEBVIEW_TRADE_URL,
@@ -33,8 +35,10 @@ import { MultipleClickStack } from '../../../components/MultipleClickStack';
 import { TabPageHeader } from '../../../components/TabPageHeader';
 import { WebViewWithFeatures } from '../../../components/WebView/WebViewWithFeatures';
 import { useShortcutsRouteStatus } from '../../../hooks/useListenTabFocusState';
+import { usePerpFeatureGuard } from '../../../hooks/usePerpFeatureGuard';
 import { usePromiseResult } from '../../../hooks/usePromiseResult';
 import { SingleAccountAndNetworkSelectorTrigger } from '../../Discovery/components/HeaderRightToolBar';
+import { ExtPerp, shouldOpenExpandExtPerp } from '../../Perp/pages/ExtPerp';
 
 import type {
   IElectronWebView,
@@ -75,18 +79,6 @@ function usePerpPageShortcuts({
   );
 
   useShortcuts(undefined, handleShortcuts);
-}
-
-function WebviewPerpTradeViewExt() {
-  useEffect(() => {
-    if (platformEnv.isExtension) {
-      void backgroundApiProxy.serviceWebviewPerp.openExtPerpTab();
-      setTimeout(() => {
-        window.close();
-      }, 300);
-    }
-  }, []);
-  return null;
 }
 
 function WebviewPerpTradeView() {
@@ -222,26 +214,30 @@ function WebviewPerpTradeView() {
             },
           }}
         >
-          <SingleAccountAndNetworkSelectorTrigger
-            origin={origin}
-            num={accountInfo.num}
-            account={accountInfo}
-            afterChangeAccount={afterChangeAccount}
-          />
+          <XStack gap="$6">
+            <SingleAccountAndNetworkSelectorTrigger
+              origin={origin}
+              num={accountInfo.num}
+              account={accountInfo}
+              afterChangeAccount={afterChangeAccount}
+            />
 
-          <Tooltip
-            renderTrigger={
-              <IconButton
-                icon="BrokenLinkOutline"
-                onPress={() => {
-                  void backgroundApiProxy.serviceWebviewPerp.disconnectFromDapp();
-                }}
-              />
-            }
-            renderContent={intl.formatMessage({
-              id: ETranslations.explore_disconnect,
-            })}
-          />
+            <Tooltip
+              renderTrigger={
+                <IconButton
+                  icon="BrokenLinkOutline"
+                  size={platformEnv.isNative ? 'small' : undefined}
+                  variant={platformEnv.isNative ? 'tertiary' : undefined}
+                  onPress={() => {
+                    void backgroundApiProxy.serviceWebviewPerp.disconnectFromDapp();
+                  }}
+                />
+              }
+              renderContent={intl.formatMessage({
+                id: ETranslations.explore_disconnect,
+              })}
+            />
+          </XStack>
         </AccountSelectorProviderMirror>
       </>
     );
@@ -301,25 +297,45 @@ function WebviewPerpTradeView() {
   );
 }
 
+function PageWebviewPerpTradeView() {
+  const isFocused = useIsFocused();
+  const [isMounted, setIsMounted] = useState(false);
+  const isMountedRef = useRef(false);
+  useEffect(() => {
+    if (isMountedRef.current) {
+      return;
+    }
+    if (isFocused) {
+      isMountedRef.current = true;
+      setIsMounted(true);
+    }
+  }, [isFocused]);
+  if (!isMounted) {
+    return null;
+  }
+  return shouldOpenExpandExtPerp ? <ExtPerp /> : <WebviewPerpTradeView />;
+}
+
 const PageWebviewPerpTrade = () => {
   useDebugComponentRemountLog({ name: 'PageWebviewPerpTrade' });
-  useFocusEffect(() => {
-    void backgroundApiProxy.serviceWebviewPerp.updateBuilderFeeConfigByServer();
-  });
+  const canRenderPerp = usePerpFeatureGuard();
+
+  if (!canRenderPerp) {
+    return null;
+  }
+
   return (
-    <AccountSelectorProviderMirror
-      config={{
-        sceneName: EAccountSelectorSceneName.home,
-        sceneUrl: '',
-      }}
-      enabledNum={[0]}
-    >
-      {platformEnv.isExtension ? (
-        <WebviewPerpTradeViewExt />
-      ) : (
-        <WebviewPerpTradeView />
-      )}
-    </AccountSelectorProviderMirror>
+    <TabletHomeContainer>
+      <AccountSelectorProviderMirror
+        config={{
+          sceneName: EAccountSelectorSceneName.home,
+          sceneUrl: '',
+        }}
+        enabledNum={[0]}
+      >
+        <PageWebviewPerpTradeView />
+      </AccountSelectorProviderMirror>
+    </TabletHomeContainer>
   );
 };
 

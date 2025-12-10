@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRoute } from '@react-navigation/core';
 import { useIntl } from 'react-intl';
 import { Linking, StyleSheet } from 'react-native';
+import { getColors } from 'react-native-image-colors';
+import { useThrottledCallback } from 'use-debounce';
 
 import {
   Badge,
@@ -10,6 +12,7 @@ import {
   Dialog,
   Empty,
   IconButton,
+  Image,
   Page,
   QRCode,
   SizableText,
@@ -21,6 +24,7 @@ import {
 import {
   EHardwareUiStateAction,
   useHardwareUiStateAtom,
+  useSettingsPersistAtom,
 } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import type {
   IAccountDeriveInfo,
@@ -32,20 +36,29 @@ import {
 } from '@onekeyhq/shared/src/eventBus/appEventBus';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import { defaultLogger } from '@onekeyhq/shared/src/logger/logger';
-import type {
-  EModalReceiveRoutes,
-  IModalReceiveParamList,
-} from '@onekeyhq/shared/src/routes';
+import type { IModalReceiveParamList } from '@onekeyhq/shared/src/routes';
+import { EModalReceiveRoutes } from '@onekeyhq/shared/src/routes';
 import accountUtils from '@onekeyhq/shared/src/utils/accountUtils';
 import { useDebugComponentRemountLog } from '@onekeyhq/shared/src/utils/debug/debugUtils';
+import networkUtils from '@onekeyhq/shared/src/utils/networkUtils';
+import timerUtils from '@onekeyhq/shared/src/utils/timerUtils';
 import type { INetworkAccount } from '@onekeyhq/shared/types/account';
 import { EConfirmOnDeviceType } from '@onekeyhq/shared/types/device';
 
 import backgroundApiProxy from '../../../background/instance/backgroundApiProxy';
 import AddressTypeSelector from '../../../components/AddressTypeSelector/AddressTypeSelector';
+import {
+  FormatHyperlinkText,
+  HyperlinkText,
+} from '../../../components/HyperlinkText';
+import { NetworkAvatar } from '../../../components/NetworkAvatar';
+import { Token } from '../../../components/Token';
 import { useAccountData } from '../../../hooks/useAccountData';
+import useAppNavigation from '../../../hooks/useAppNavigation';
 import { useCopyAddressWithDeriveType } from '../../../hooks/useCopyAccountAddress';
 import { useHelpLink } from '../../../hooks/useHelpLink';
+import { usePromiseResult } from '../../../hooks/usePromiseResult';
+import { useWalletBanner } from '../../../hooks/useWalletBanner';
 import { EAddressState } from '../types';
 
 import type { RouteProp } from '@react-navigation/core';
@@ -56,6 +69,7 @@ function ReceiveToken() {
   });
   const media = useMedia();
   const intl = useIntl();
+  const navigation = useAppNavigation();
   const route =
     useRoute<
       RouteProp<IModalReceiveParamList, EModalReceiveRoutes.ReceiveToken>
@@ -69,6 +83,8 @@ function ReceiveToken() {
     token,
     onDeriveTypeChange,
     disableSelector,
+    btcUsedAddress,
+    btcUsedAddressPath,
   } = route.params;
 
   const { account, network, wallet, vaultSettings, deriveType, deriveInfo } =
@@ -77,6 +93,20 @@ function ReceiveToken() {
       networkId,
       walletId,
     });
+
+  const { result: nativeToken } = usePromiseResult(async () => {
+    return backgroundApiProxy.serviceToken.getNativeToken({
+      accountId,
+      networkId,
+    });
+  }, [accountId, networkId]);
+
+  const { handleBannerOnPress } = useWalletBanner({
+    account,
+    network,
+    wallet,
+    indexedAccountId,
+  });
 
   const [currentDeriveType, setCurrentDeriveType] = useState<
     IAccountDeriveTypes | undefined
@@ -90,17 +120,39 @@ function ReceiveToken() {
     INetworkAccount | undefined
   >(account);
 
+  const isBtcUsedAddressVerifyMode = btcUsedAddress && btcUsedAddressPath;
+
+  const displayAddress = isBtcUsedAddressVerifyMode
+    ? btcUsedAddress
+    : currentAccount?.address ?? '';
+  const verificationPath = isBtcUsedAddressVerifyMode
+    ? btcUsedAddressPath
+    : currentAccount?.addressDetail?.receiveAddressPath;
+
   const { bottom } = useSafeAreaInsets();
 
   const [addressState, setAddressState] = useState<EAddressState>(
     EAddressState.Unverified,
   );
 
+  const [networkLogoColor, setNetworkLogoColor] = useState<string | null>(null);
+
   const [hardwareUiState] = useHardwareUiStateAtom();
 
   const copyAddressWithDeriveType = useCopyAddressWithDeriveType();
 
   const requestsUrl = useHelpLink({ path: 'requests/new' });
+
+  const { result: banner } = usePromiseResult(async () => {
+    const banners =
+      await backgroundApiProxy.serviceWalletBanner.fetchWalletBanner({
+        accountId,
+      });
+    return banners.find(
+      (_banner) =>
+        _banner.position === 'receive' && _banner.networkId === networkId,
+    );
+  }, [accountId, networkId]);
 
   const isHardwareWallet =
     accountUtils.isQrWallet({
@@ -147,31 +199,85 @@ function ReceiveToken() {
     return false;
   }, [addressState, isHardwareWallet]);
 
+  useEffect(() => {
+    const url = network?.logoURI;
+
+    if (!url) return;
+
+    getColors(url, {
+      key: url,
+    })
+      .then((colors) => {
+        if (colors.platform === 'android' || colors.platform === 'web') {
+          setNetworkLogoColor(colors.vibrant);
+        }
+        if (colors.platform === 'ios') {
+          setNetworkLogoColor(colors.primary);
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to get colors from network logo:', error);
+      });
+  }, [network?.logoURI]);
+
+  const throttledSyncBTCFreshAddress = useThrottledCallback(
+    (params: { networkId: string; accountId: string }) => {
+      void backgroundApiProxy.serviceFreshAddress.syncBTCFreshAddressByAccountId(
+        params,
+      );
+    },
+    timerUtils.getTimeDurationMs({ seconds: 1 }),
+    { leading: true, trailing: true },
+  );
+
+  useEffect(() => {
+    if (networkUtils.isBTCNetwork(networkId) && currentAccount?.id) {
+      throttledSyncBTCFreshAddress({
+        networkId,
+        accountId: currentAccount.id,
+      });
+    }
+  }, [currentAccount?.id, networkId, throttledSyncBTCFreshAddress]);
+
   const handleCopyAddress = useCallback(() => {
+    if (!displayAddress) return;
     if (vaultSettings?.mergeDeriveAssetsEnabled && currentDeriveInfo) {
       copyAddressWithDeriveType({
-        address: currentAccount?.address ?? '',
+        address: displayAddress,
         deriveInfo: currentDeriveInfo,
-        networkName: network?.shortname,
+        networkName: network?.name,
       });
     } else {
       copyAddressWithDeriveType({
-        address: currentAccount?.address ?? '',
-        networkName: network?.shortname,
+        address: displayAddress,
+        networkName: network?.name,
       });
     }
   }, [
     copyAddressWithDeriveType,
-    currentAccount?.address,
     currentDeriveInfo,
-    network?.shortname,
+    displayAddress,
+    network?.name,
     vaultSettings?.mergeDeriveAssetsEnabled,
   ]);
+
+  const [{ enableBTCFreshAddress }] = useSettingsPersistAtom();
+  const isEnableBTCFreshAddressSetting = useMemo(() => {
+    return accountUtils.isEnabledBtcFreshAddress({
+      enableBTCFreshAddress,
+      networkId,
+      walletId,
+    });
+  }, [networkId, enableBTCFreshAddress, walletId]);
 
   const handleVerifyOnDevicePress = useCallback(async () => {
     setAddressState(EAddressState.Verifying);
     try {
       if (!currentDeriveType) return;
+      if (!displayAddress) {
+        setAddressState(EAddressState.Unverified);
+        return;
+      }
 
       const addresses =
         await backgroundApiProxy.serviceAccount.verifyHWAccountAddresses({
@@ -180,11 +286,11 @@ function ReceiveToken() {
           indexedAccountId: currentAccount?.indexedAccountId,
           deriveType: currentDeriveType,
           confirmOnDevice: EConfirmOnDeviceType.EveryItem,
+          customReceiveAddressPath: verificationPath,
         });
 
       const isSameAddress =
-        addresses?.[0]?.toLowerCase() ===
-        currentAccount?.address?.toLowerCase();
+        addresses?.[0]?.toLowerCase() === displayAddress.toLowerCase();
 
       defaultLogger.transaction.receive.showReceived({
         walletType: wallet?.type,
@@ -229,12 +335,13 @@ function ReceiveToken() {
       throw e;
     }
   }, [
-    currentAccount?.address,
     currentAccount?.indexedAccountId,
     currentDeriveType,
+    displayAddress,
     intl,
     networkId,
     requestsUrl,
+    verificationPath,
     wallet?.type,
     walletId,
   ]);
@@ -253,42 +360,58 @@ function ReceiveToken() {
     };
   }, []);
 
-  useEffect(() => {
-    const fetchAccount = async () => {
-      if (!accountId && networkId && indexedAccountId) {
-        const defaultDeriveType =
-          await backgroundApiProxy.serviceNetwork.getGlobalDeriveTypeOfNetwork({
-            networkId,
-          });
+  const fetchAccount = useCallback(async () => {
+    if (!accountId && networkId && indexedAccountId) {
+      const defaultDeriveType =
+        await backgroundApiProxy.serviceNetwork.getGlobalDeriveTypeOfNetwork({
+          networkId,
+        });
 
-        const { accounts } =
-          await backgroundApiProxy.serviceAccount.getAccountsByIndexedAccounts({
-            indexedAccountIds: [indexedAccountId],
-            networkId,
-            deriveType: defaultDeriveType,
-          });
+      const { accounts } =
+        await backgroundApiProxy.serviceAccount.getAccountsByIndexedAccounts({
+          indexedAccountIds: [indexedAccountId],
+          networkId,
+          deriveType: defaultDeriveType,
+        });
 
-        if (accounts?.[0]) {
-          const deriveResp =
-            await backgroundApiProxy.serviceNetwork.getDeriveTypeByTemplate({
-              networkId,
-              template: accounts[0].template,
-              accountId: accounts[0].id,
-            });
-          setCurrentDeriveInfo(deriveResp.deriveInfo);
-          setCurrentDeriveType(deriveResp.deriveType);
-          setCurrentAccount(accounts[0]);
-        }
+      if (accounts?.[0]) {
+        const deriveResp =
+          await backgroundApiProxy.serviceNetwork.getDeriveTypeByTemplate({
+            networkId,
+            template: accounts[0].template,
+            accountId: accounts[0].id,
+          });
+        setCurrentDeriveInfo(deriveResp.deriveInfo);
+        setCurrentDeriveType(deriveResp.deriveType);
+        setCurrentAccount(accounts[0]);
       }
-    };
+    }
+  }, [accountId, indexedAccountId, networkId]);
+
+  useEffect(() => {
     void fetchAccount();
-  }, [
-    accountId,
-    currentDeriveType,
-    indexedAccountId,
-    networkId,
-    onDeriveTypeChange,
-  ]);
+  }, [fetchAccount, currentDeriveType, onDeriveTypeChange]);
+
+  const throttledRefreshOnEvent = useThrottledCallback(
+    () => {
+      void fetchAccount();
+    },
+    timerUtils.getTimeDurationMs({ seconds: 1 }),
+    { leading: true, trailing: true },
+  );
+
+  useEffect(() => {
+    if (!networkUtils.isBTCNetwork(networkId)) {
+      return;
+    }
+    const handler = () => {
+      throttledRefreshOnEvent();
+    };
+    appEventBus.on(EAppEventBusNames.BtcFreshAddressUpdated, handler);
+    return () => {
+      appEventBus.off(EAppEventBusNames.BtcFreshAddressUpdated, handler);
+    };
+  }, [networkId, throttledRefreshOnEvent]);
 
   useEffect(() => {
     if (!isHardwareWallet) {
@@ -312,6 +435,12 @@ function ReceiveToken() {
       setCurrentAccount(account);
     }
   }, [account, deriveInfo, deriveType]);
+
+  useEffect(() => {
+    if (btcUsedAddress || btcUsedAddressPath) {
+      setAddressState(EAddressState.Unverified);
+    }
+  }, [btcUsedAddress, btcUsedAddressPath]);
 
   const renderCopyAddressButton = useCallback(() => {
     if (
@@ -401,13 +530,13 @@ function ReceiveToken() {
 
   const renderAddress = useCallback(() => {
     if (!currentAccount || !network || !wallet) return null;
+    if (!displayAddress) return null;
 
     let addressContent = '';
 
     if (shouldShowAddress) {
       addressContent =
-        currentAccount.address.match(/.{1,4}/g)?.join(' ') ||
-        currentAccount.address;
+        displayAddress.match(/.{1,4}/g)?.join(' ') || displayAddress;
     } else {
       addressContent = Array.from({ length: 11 })
         .map(() => '****')
@@ -444,7 +573,14 @@ function ReceiveToken() {
         <SizableText fontFamily="$monoMedium">{addressContent}</SizableText>
       </XStack>
     );
-  }, [currentAccount, network, wallet, shouldShowAddress, handleCopyAddress]);
+  }, [
+    currentAccount,
+    displayAddress,
+    network,
+    wallet,
+    shouldShowAddress,
+    handleCopyAddress,
+  ]);
 
   const renderReceiveFooter = useCallback(() => {
     if (!currentAccount || !network || !wallet) return null;
@@ -513,7 +649,7 @@ function ReceiveToken() {
           </XStack>
         </YStack>
         {renderVerifyAddressButton()}
-        {shouldShowAddress ? (
+        {shouldShowAddress && !isEnableBTCFreshAddressSetting ? (
           <SizableText size="$bodyMd" color="$textSubdued">
             {intl.formatMessage(
               {
@@ -524,6 +660,29 @@ function ReceiveToken() {
               },
             )}
           </SizableText>
+        ) : null}
+        {shouldShowAddress &&
+        isEnableBTCFreshAddressSetting &&
+        !isBtcUsedAddressVerifyMode ? (
+          <HyperlinkText
+            flexShrink={1}
+            color="$textSubdued"
+            size="$bodyMd"
+            translationId={ETranslations.wallet_receive_note_fresh_address}
+            autoHandleResult={false}
+            onAction={() => {
+              console.log('HyperlinkText onAction');
+              navigation.push(EModalReceiveRoutes.BtcAddresses, {
+                networkId,
+                accountId: currentAccount?.id,
+                deriveInfo: currentDeriveInfo,
+                walletId,
+              });
+            }}
+            boldTextProps={{
+              size: '$bodyMd',
+            }}
+          />
         ) : null}
       </YStack>
     );
@@ -541,104 +700,175 @@ function ReceiveToken() {
     renderCopyAddressButton,
     renderVerifyAddressButton,
     shouldShowAddress,
+    isEnableBTCFreshAddressSetting,
     disableSelector,
     token?.symbol,
     vaultSettings?.mergeDeriveAssetsEnabled,
     wallet,
     walletId,
+    navigation,
+    isBtcUsedAddressVerifyMode,
   ]);
 
   const renderReceiveQrCode = useCallback(() => {
     if (!currentAccount || !network || !wallet) return null;
+    if (!displayAddress) return null;
 
     return (
-      <YStack
-        width={264}
-        height={264}
-        p="$5"
-        mb="$6"
-        alignItems="center"
-        justifyContent="center"
-        bg="white"
-        borderRadius="$3"
-        borderCurve="continuous"
-        $platform-native={{
-          borderWidth: StyleSheet.hairlineWidth,
-          borderColor: '$borderSubdued',
-        }}
-        $platform-web={{
-          boxShadow:
-            '0 8px 12px -4px rgba(0, 0, 0, 0.08), 0 0 2px 0 rgba(0, 0, 0, 0.10), 0 1px 2px 0 rgba(0, 0, 0, 0.10)',
-        }}
-        elevation={0.5}
-        {...(!shouldShowQRCode && {
-          onPress: handleVerifyOnDevicePress,
-          userSelect: 'none',
-          bg: '$bg',
-          hoverStyle: {
-            bg: '$bgHover',
-          },
-          pressStyle: {
-            bg: '$bgActive',
-          },
-          focusable: true,
-          focusVisibleStyle: {
-            outlineWidth: 2,
-            outlineColor: '$focusRing',
-            outlineOffset: 2,
-            outlineStyle: 'solid',
-          },
-        })}
-      >
-        {shouldShowQRCode ? (
-          <QRCode
-            value={currentAccount.address}
-            size={224}
-            logo={
-              network.isCustomNetwork
-                ? undefined
-                : { uri: token?.logoURI || network.logoURI }
-            }
-            logoSize={network.isCustomNetwork ? undefined : 45}
-          />
-        ) : null}
+      <YStack flex={1} justifyContent="center" alignItems="center">
+        <YStack
+          width={264}
+          height={264}
+          p="$5"
+          alignItems="center"
+          justifyContent="center"
+          bg="white"
+          borderRadius="$3"
+          borderCurve="continuous"
+          $platform-native={{
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: '$borderSubdued',
+          }}
+          $platform-web={{
+            boxShadow:
+              '0 8px 12px -4px rgba(0, 0, 0, 0.08), 0 0 2px 0 rgba(0, 0, 0, 0.10), 0 1px 2px 0 rgba(0, 0, 0, 0.10)',
+          }}
+          elevation={0.5}
+          {...(!shouldShowQRCode && {
+            onPress: handleVerifyOnDevicePress,
+            userSelect: 'none',
+            bg: '$bg',
+            hoverStyle: {
+              bg: '$bgHover',
+            },
+            pressStyle: {
+              bg: '$bgActive',
+            },
+            focusable: true,
+            focusVisibleStyle: {
+              outlineWidth: 2,
+              outlineColor: '$focusRing',
+              outlineOffset: 2,
+              outlineStyle: 'solid',
+            },
+          })}
+        >
+          {shouldShowQRCode ? (
+            <YStack>
+              <QRCode value={displayAddress} size={224} />
+              {network.isCustomNetwork ? null : (
+                <YStack
+                  position="absolute"
+                  left="50%"
+                  top="50%"
+                  transform={[{ translateX: '-50%' }, { translateY: '-50%' }]}
+                  borderWidth={4}
+                  borderColor="white"
+                  borderRadius="$full"
+                  bg="white"
+                >
+                  <Token
+                    size="lg"
+                    tokenImageUri={token?.logoURI ?? nativeToken?.logoURI}
+                    networkImageUri={network.logoURI}
+                    networkId={networkId}
+                  />
+                </YStack>
+              )}
+            </YStack>
+          ) : null}
 
-        {!shouldShowQRCode ? (
-          <Empty
-            p="0"
-            icon="QrCodeOutline"
-            description={intl.formatMessage({
-              id: ETranslations.address_verify_address_instruction,
-            })}
-            iconProps={{
-              size: '$8',
-              mb: '$5',
-            }}
-            descriptionProps={{
-              size: '$bodyLgMedium',
-              color: '$text',
-            }}
-          />
-        ) : null}
+          {!shouldShowQRCode ? (
+            <Empty
+              p="0"
+              icon="QrCodeOutline"
+              description={intl.formatMessage({
+                id: ETranslations.address_verify_address_instruction,
+              })}
+              iconProps={{
+                size: '$8',
+                mb: '$5',
+              }}
+              descriptionProps={{
+                size: '$bodyLgMedium',
+                color: '$text',
+              }}
+            />
+          ) : null}
+        </YStack>
       </YStack>
     );
   }, [
     currentAccount,
+    displayAddress,
     network,
     wallet,
-    intl,
-    token?.logoURI,
     shouldShowQRCode,
     handleVerifyOnDevicePress,
+    token?.logoURI,
+    networkId,
+    intl,
+    nativeToken?.logoURI,
   ]);
 
+  const isPressable = useMemo(() => {
+    return !!(banner?.href || banner?.mode);
+  }, [banner?.href, banner?.mode]);
   return (
     <Page safeAreaEnabled={false}>
       <Page.Header
         title={intl.formatMessage({ id: ETranslations.global_receive })}
       />
-      <Page.Body flex={1} justifyContent="center" alignItems="center">
+      <Page.Body flex={1} pb="$5" px="$5">
         {renderReceiveQrCode()}
+        <YStack gap="$2">
+          {banner && shouldShowQRCode && !isBtcUsedAddressVerifyMode ? (
+            <XStack
+              py="$2.5"
+              px="$3"
+              gap="$3"
+              borderWidth={StyleSheet.hairlineWidth}
+              borderColor={
+                networkLogoColor ? `${networkLogoColor}2A` : '$borderSubdued'
+              }
+              bg={networkLogoColor ? `${networkLogoColor}0D` : '$bgSubdued'}
+              borderRadius="$2"
+              borderCurve="continuous"
+              userSelect="none"
+              {...(isPressable
+                ? {
+                    focusable: true,
+                    focusVisibleStyle: {
+                      outlineColor: '$focusRing',
+                      outlineWidth: 2,
+                      outlineStyle: 'solid',
+                      outlineOffset: 0,
+                    },
+                    hoverStyle: {
+                      bg: networkLogoColor
+                        ? `${networkLogoColor}1A`
+                        : '$bgHover',
+                    },
+                    pressStyle: {
+                      bg: networkLogoColor
+                        ? `${networkLogoColor}2A`
+                        : '$bgActive',
+                    },
+                    onPress: () => handleBannerOnPress(banner),
+                  }
+                : undefined)}
+            >
+              <Image
+                size="$5"
+                source={{ uri: banner.src }}
+                fallback={<NetworkAvatar size="$5" networkId={networkId} />}
+              />
+              <FormatHyperlinkText size="$bodyMd" flex={1}>
+                {banner.title}
+              </FormatHyperlinkText>
+            </XStack>
+          ) : null}
+        </YStack>
       </Page.Body>
       <Page.Footer>{renderReceiveFooter()}</Page.Footer>
     </Page>

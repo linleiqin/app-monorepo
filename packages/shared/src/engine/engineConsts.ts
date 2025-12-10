@@ -194,7 +194,7 @@ export const HISTORY_CONSTS = {
   DISPLAY_TX_LIMIT: 50,
   REFRESH_DROPPED_TX_IN: 5 * 60 * 1000,
   SET_IS_FINAL_EXPIRED_IN: 24 * 60 * 60 * 1000,
-  PENDING_QUEUE_MAX_LENGTH: 10,
+  PENDING_QUEUE_MAX_LENGTH: 100,
 };
 
 export enum EAppSocketEvents {
@@ -206,18 +206,6 @@ export const getEnabledAccountDynamicNetworkIds = (): string[] => [
   getNetworkIdsMap().polygon,
   getNetworkIdsMap().arbitrum,
   getNetworkIdsMap().optimism,
-];
-
-// TODO move to networkUtils
-export const getEnabledNFTNetworkIds = (): string[] => [
-  getNetworkIdsMap().onekeyall,
-  getNetworkIdsMap().eth,
-  getNetworkIdsMap().optimism,
-  getNetworkIdsMap().bsc,
-  getNetworkIdsMap().polygon,
-  getNetworkIdsMap().arbitrum,
-  getNetworkIdsMap().avalanche,
-  getNetworkIdsMap().sol,
 ];
 
 function getSupportedImpls() {

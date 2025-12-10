@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-shadow */
 import { useCallback } from 'react';
 
-import { isEmpty } from 'lodash';
+import { isEmpty, noop } from 'lodash';
 import { useIntl } from 'react-intl';
 
 import type {
@@ -59,6 +59,25 @@ type IBuildUnsignedTxParams = {
   disableMev?: boolean;
 };
 
+export type INavigationToMessageConfirmParams = {
+  unsignedMessage: IUnsignedMessage;
+  accountId: string;
+  networkId: string;
+  walletInternalSign?: boolean;
+  sameModal?: boolean;
+  swapInfo?: ISwapTxInfo;
+  sourceInfo?: IDappSourceInfo;
+  onSuccess?: (result: string) => void;
+  onFail?: (error: Error) => void;
+  onCancel?: () => void;
+  skipBackupCheck?: boolean;
+};
+
+export type INavigationToMessageConfirmAsyncParams = Omit<
+  INavigationToMessageConfirmParams,
+  'onSuccess' | 'onFail' | 'onCancel'
+>;
+
 function useSignatureConfirm(params: IParams) {
   const { accountId, networkId } = params;
 
@@ -72,7 +91,7 @@ function useSignatureConfirm(params: IParams) {
         onSuccess,
         onFail,
         onCancel,
-        transferPayload,
+        transferPayload: transferPayloadBase,
         signOnly,
         useFeeInTx,
         feeInfoEditable,
@@ -82,6 +101,7 @@ function useSignatureConfirm(params: IParams) {
         transfersInfo,
         ...rest
       } = params;
+      let transferPayload = transferPayloadBase;
       try {
         const unsignedTxs = [];
         // for batch approve&swap
@@ -133,6 +153,24 @@ function useSignatureConfirm(params: IParams) {
         const target = params.isInternalSwap
           ? EModalSignatureConfirmRoutes.TxConfirmFromSwap
           : EModalSignatureConfirmRoutes.TxConfirm;
+
+        try {
+          const preActionsBeforeConfirmResult =
+            await backgroundApiProxy.serviceSignatureConfirm.preActionsBeforeConfirm(
+              {
+                accountId,
+                networkId,
+                unsignedTxs,
+              },
+            );
+
+          transferPayload = {
+            ...transferPayload,
+            ...preActionsBeforeConfirmResult,
+          } as ITransferPayload;
+        } catch (error) {
+          noop();
+        }
 
         if (sameModal) {
           navigation.push(target, {
@@ -260,19 +298,7 @@ function useSignatureConfirm(params: IParams) {
   );
 
   const navigationToMessageConfirm = useCallback(
-    (params: {
-      unsignedMessage: IUnsignedMessage;
-      accountId: string;
-      networkId: string;
-      walletInternalSign?: boolean;
-      sameModal?: boolean;
-      swapInfo?: ISwapTxInfo;
-      sourceInfo?: IDappSourceInfo;
-      skipBackupCheck?: boolean;
-      onSuccess?: (result: string) => void;
-      onFail?: (error: Error) => void;
-      onCancel?: () => void;
-    }) => {
+    (params: INavigationToMessageConfirmParams) => {
       const {
         unsignedMessage,
         accountId,
@@ -323,16 +349,7 @@ function useSignatureConfirm(params: IParams) {
 
   // Promise-based version of navigationToMessageConfirm
   const navigationToMessageConfirmAsync = useCallback(
-    async (params: {
-      unsignedMessage: IUnsignedMessage;
-      accountId: string;
-      networkId: string;
-      walletInternalSign?: boolean;
-      sameModal?: boolean;
-      swapInfo?: ISwapTxInfo;
-      sourceInfo?: IDappSourceInfo;
-      skipBackupCheck?: boolean;
-    }): Promise<string> => {
+    async (params: INavigationToMessageConfirmAsyncParams): Promise<string> => {
       return new Promise((resolve, reject) => {
         navigationToMessageConfirm({
           ...params,

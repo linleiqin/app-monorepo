@@ -1,9 +1,11 @@
 export * from './useBackHandler';
 export * from './useClipboard';
 export * from './useColor';
+export * from './useDeepCompareEffect';
 export * from './useDeferredPromise';
 export * from './useForm';
 export * from './useKeyboard';
+export * from './useKeyboardController';
 export * from './useLayout';
 export * from './useModalNavigatorContext';
 export * from './useNetInfo';
@@ -14,3 +16,5 @@ export * from './useShortcuts';
 export * from './useStyle';
 export * from './useUpdateEffect';
 export * from './useVisibilityChange';
+export * from './useTabletMode';
+export * from './useIsTablet';

@@ -1,4 +1,5 @@
 import type { IAdaAmount } from '@onekeyhq/core/src/chains/ada/types';
+import type { IXrpMemoField } from '@onekeyhq/core/src/chains/xrp/types';
 import type {
   EAddressEncodings,
   ECoreApiExportedSecretKeyType,
@@ -36,6 +37,7 @@ import type {
 } from '@onekeyhq/shared/types/history';
 import type { ILNURLPaymentInfo } from '@onekeyhq/shared/types/lightning';
 import type { ENFTType } from '@onekeyhq/shared/types/nft';
+import type { EUtxoSelectionStrategy } from '@onekeyhq/shared/types/send';
 import type { IStakingInfo } from '@onekeyhq/shared/types/staking';
 import type {
   ESwapTabSwitchType,
@@ -78,6 +80,8 @@ export enum EVaultKeyringTypes {
   watching = 'watching',
   external = 'external',
 }
+
+export { EUtxoSelectionStrategy } from '@onekeyhq/shared/types/send';
 
 // AccountNameInfo
 export type IAccountDeriveInfoItems = {
@@ -177,6 +181,7 @@ export type IVaultSettings = {
   replaceTxEnabled: boolean;
   cancelTxEnabled?: boolean;
   speedUpCancelEnabled?: boolean;
+  coinControlEnabled?: boolean;
   // Get the interval time for polling the fee API, in seconds
   estimatedFeePollingInterval: number;
 
@@ -334,6 +339,9 @@ export type IPrepareImportedAccountsParams = {
   template?: string; // TODO use deriveInfo
   deriveInfo?: IAccountDeriveInfo;
 };
+export type IPrepareHDOrHWAccountChainExtraParams = {
+  receiveAddressPath?: string;
+};
 export type IPrepareHdAccountsParamsBase = {
   indexes: Array<number>;
   names?: Array<string>; // custom names
@@ -360,6 +368,7 @@ export type IPrepareHdAccountsOptions = {
 export type IPrepareHardwareAccountsParams = IPrepareHdAccountsParamsBase & {
   deviceParams: IDeviceSharedCallParams;
   hwAllNetworkPrepareAccountsResponse?: IHwAllNetworkPrepareAccountsResponse;
+  chainExtraParams?: IPrepareHDOrHWAccountChainExtraParams;
 };
 export type IPrepareAccountsParams =
   | IPrepareWatchingAccountsParams
@@ -407,6 +416,7 @@ type IHwAllNetworkPrepareAccountsItemErrorPayload = {
   errorCode: string | number; // TODO use code instead
   connectId: string;
   deviceId: string;
+  params?: any;
 };
 
 type IHwAllNetworkPrepareAccountsItemCommon = {
@@ -440,6 +450,8 @@ export type IHwAllNetworkPrepareAccountsItem =
 
       derivedPath?: string; // alph
     };
+
+    useTweak?: boolean; // kaspa
   };
 
 export type IHwAllNetworkPrepareAccountsResponse =
@@ -498,6 +510,12 @@ export type ITransferInfo = {
   note?: string; // Algo chain note
 
   hexData?: string; // evm tx hex data
+
+  xrpMemoFields?: IXrpMemoField[]; // https://xrpl.org/docs/references/protocol/transactions/common-fields#memos-field
+
+  // BTC Coin Control
+  selectedUtxoKeys?: string[]; // Format: "txid:vout" for manually selected UTXOs
+  utxoSelectionStrategy?: EUtxoSelectionStrategy; // Strategy for UTXO selection
 };
 
 export type IApproveInfo = {
@@ -520,6 +538,11 @@ export type ITransferPayload = {
   note?: string;
   tokenInfo?: IToken;
   isCustomHexData?: boolean;
+  isTronResourceAutoClaimed?: boolean;
+  txOriginalFee?: {
+    totalNative: string;
+    totalFiat: string;
+  };
 };
 
 export type IWrappedInfo = {
@@ -537,6 +560,7 @@ export type IUtxoInfo = {
   confirmations: number;
   address: string;
   path: string;
+  blockTime?: number;
   // Use for Cardano UTXO info
   txIndex?: number;
   amount?: IAdaAmount[];
@@ -570,6 +594,7 @@ export interface IBuildDecodedTxParams {
   transferPayload?: ITransferPayload;
   saveToLocalHistory?: boolean;
   isToContract?: boolean;
+  sourceInfo?: IDappSourceInfo;
 }
 export interface IBuildUnsignedTxParams {
   unsignedTx?: IUnsignedTxPro;
@@ -655,6 +680,7 @@ export interface ISignMessageParams {
   messages: IUnsignedMessage[];
   password: string;
   deviceParams: IDeviceSharedCallParams | undefined;
+  chainExtraParams?: IPrepareHDOrHWAccountChainExtraParams;
 
   // addressEncoding other derive address
   addressEncoding?: EAddressEncodings;

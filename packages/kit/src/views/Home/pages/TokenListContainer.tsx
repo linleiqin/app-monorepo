@@ -13,7 +13,6 @@ import {
   useTabIsRefreshingFocused,
 } from '@onekeyhq/components';
 import backgroundApiProxy from '@onekeyhq/kit/src/background/instance/backgroundApiProxy';
-import { useFiatCrypto } from '@onekeyhq/kit/src/views/FiatCrypto/hooks';
 import type { IDBAccount } from '@onekeyhq/kit-bg/src/dbs/local/types';
 import type { ISimpleDBAggregateToken } from '@onekeyhq/kit-bg/src/dbs/simple/entity/SimpleDbEntityAggregateToken';
 import type { ICustomTokenDBStruct } from '@onekeyhq/kit-bg/src/dbs/simple/entity/SimpleDbEntityCustomTokens';
@@ -21,7 +20,6 @@ import type { ISimpleDBLocalTokens } from '@onekeyhq/kit-bg/src/dbs/simple/entit
 import type { IRiskTokenManagementDBStruct } from '@onekeyhq/kit-bg/src/dbs/simple/entity/SimpleDbEntityRiskTokenManagement';
 import type { IAllNetworkAccountInfo } from '@onekeyhq/kit-bg/src/services/ServiceAllNetwork/ServiceAllNetwork';
 import { getNetworkIdsMap } from '@onekeyhq/shared/src/config/networkIds';
-import { WALLET_TYPE_WATCHING } from '@onekeyhq/shared/src/consts/dbConsts';
 import {
   POLLING_DEBOUNCE_INTERVAL,
   POLLING_INTERVAL_FOR_HISTORY,
@@ -36,7 +34,6 @@ import {
   EModalAssetDetailRoutes,
   EModalReceiveRoutes,
   EModalRoutes,
-  EModalSendRoutes,
   EModalSignatureConfirmRoutes,
   ERootRoutes,
 } from '@onekeyhq/shared/src/routes';
@@ -45,15 +42,17 @@ import perfUtils, {
   EPerformanceTimerLogNames,
 } from '@onekeyhq/shared/src/utils/debug/perfUtils';
 import {
+  buildAggregateTokenListData,
+  buildLocalAggregateTokenMapKey,
   getEmptyTokenData,
   getMergedDeriveTokenData,
+  getMergedTokenData,
   mergeAggregateTokenListMap,
   mergeAggregateTokenMap,
   mergeDeriveTokenList,
   mergeDeriveTokenListMap,
   sortTokensByFiatValue,
   sortTokensByOrder,
-  sortTokensCommon,
 } from '@onekeyhq/shared/src/utils/tokenUtils';
 import { EHomeTab } from '@onekeyhq/shared/types';
 import type {
@@ -69,7 +68,6 @@ import { useAllNetworkRequests } from '../../../hooks/useAllNetwork';
 import useAppNavigation from '../../../hooks/useAppNavigation';
 import { useManageToken } from '../../../hooks/useManageToken';
 import { usePromiseResult } from '../../../hooks/usePromiseResult';
-import { useReceiveToken } from '../../../hooks/useReceiveToken';
 import {
   useAccountOverviewActions,
   useAllNetworksStateStateAtom,
@@ -158,18 +156,6 @@ function TokenListContainer({
   const aggregateTokenRawData = useRef<ISimpleDBAggregateToken | undefined>(
     undefined,
   );
-
-  const { handleFiatCrypto, isSupported } = useFiatCrypto({
-    accountId: account?.id ?? '',
-    networkId: network?.id ?? '',
-    fiatCryptoType: 'buy',
-  });
-  const { handleOnReceive } = useReceiveToken({
-    accountId: account?.id ?? '',
-    networkId: network?.id ?? '',
-    walletId: wallet?.id ?? '',
-    indexedAccountId: indexedAccount?.id ?? '',
-  });
 
   const { handleOnManageToken, manageTokenEnabled } = useManageToken({
     accountId: account?.id ?? '',
@@ -492,6 +478,13 @@ function TokenListContainer({
     },
   );
 
+  const { result: allAggregateTokenInfo } = usePromiseResult(
+    async () => backgroundApiProxy.serviceToken.getAllAggregateTokenInfo(),
+    [],
+  );
+
+  const { allAggregateTokenMap } = allAggregateTokenInfo ?? {};
+
   const isAllNetworkManualRefresh = useRef(false);
 
   const updateAllNetworkData = useThrottledCallback(() => {
@@ -546,7 +539,6 @@ function TokenListContainer({
         flag: 'home-token-list',
         isAllNetworks: true,
         isManualRefresh: isAllNetworkManualRefresh.current,
-        mergeTokens: true,
         allNetworksAccountId: account?.id,
         allNetworksNetworkId: network?.id,
         saveToLocal: true,
@@ -554,15 +546,108 @@ function TokenListContainer({
         blockedTokensRawData: riskTokenManagementRawData.current.blockedTokens,
         unblockedTokensRawData:
           riskTokenManagementRawData.current.unblockedTokens,
-        aggregateTokenConfigMapRawData:
-          aggregateTokenRawData.current?.aggregateTokenConfigMap,
-        aggregateTokenSymbolMapRawData:
-          aggregateTokenRawData.current?.aggregateTokenSymbolMap,
       });
+
+      const aggregateTokenConfigMapRawData =
+        aggregateTokenRawData.current?.aggregateTokenConfigMap;
+
+      let aggregateTokenListMap: Record<
+        string,
+        {
+          commonToken: IAccountToken;
+          tokens: IAccountToken[];
+        }
+      > = {};
+      let aggregateTokenMap: Record<string, ITokenFiat> = {};
+
+      const [tokenNetwork, tokenVaultSettings] = await Promise.all([
+        backgroundApiProxy.serviceNetwork.getNetwork({
+          networkId,
+        }),
+        backgroundApiProxy.serviceNetwork.getVaultSettings({
+          networkId,
+        }),
+      ]);
+
+      if (aggregateTokenConfigMapRawData) {
+        r.tokens.data = r.tokens.data
+          .map((token) => {
+            const data = buildAggregateTokenListData({
+              networkId,
+              accountId,
+              token,
+              tokenMap: r.tokens.map,
+              aggregateTokenListMap,
+              aggregateTokenMap,
+              aggregateTokenConfigMapRawData,
+              networkName: tokenNetwork?.name ?? '',
+            });
+
+            if (data.isAggregateToken) {
+              aggregateTokenListMap = data.aggregateTokenListMap;
+              aggregateTokenMap = data.aggregateTokenMap;
+              return null;
+            }
+
+            return token;
+          })
+          .filter(Boolean);
+
+        r.smallBalanceTokens.data = r.smallBalanceTokens.data
+          .map((token) => {
+            const data = buildAggregateTokenListData({
+              networkId,
+              accountId,
+              token,
+              tokenMap: r.smallBalanceTokens.map,
+              aggregateTokenListMap,
+              aggregateTokenMap,
+              aggregateTokenConfigMapRawData,
+              networkName: tokenNetwork?.name ?? '',
+            });
+
+            if (data.isAggregateToken) {
+              aggregateTokenListMap = data.aggregateTokenListMap;
+              aggregateTokenMap = data.aggregateTokenMap;
+              return null;
+            }
+
+            return token;
+          })
+          .filter(Boolean);
+
+        const aggregateTokenList = Object.values(aggregateTokenListMap).map(
+          (item) => item.commonToken,
+        );
+
+        r.tokens.data = [...r.tokens.data, ...aggregateTokenList];
+        r.aggregateTokenListMap = aggregateTokenListMap;
+        r.aggregateTokenMap = aggregateTokenMap;
+      }
+
+      const { tokens, riskTokens, smallBalanceTokens } = r;
+
+      const { allTokens } = getMergedTokenData({
+        tokens,
+        riskTokens,
+        smallBalanceTokens,
+      });
+
+      if (allTokens) {
+        allTokens.data = allTokens.data.map((token) => ({
+          ...token,
+          accountId,
+          networkId,
+          networkName: tokenNetwork?.name,
+          mergeAssets: tokenVaultSettings.mergeDeriveAssetsEnabled,
+        }));
+      }
+      r.allTokens = allTokens;
 
       if (!allNetworkDataInit && r.isSameAllNetworksAccountData) {
         let accountWorth = new BigNumber(0);
         let createAtNetworkWorth = new BigNumber(0);
+
         accountWorth = accountWorth
           .plus(r.tokens.fiatValue ?? '0')
           .plus(r.smallBalanceTokens.fiatValue ?? '0');
@@ -804,7 +889,7 @@ function TokenListContainer({
       perfTokenListView.markEnd('allNetworkRequestsStarted_getRawData');
 
       if (!a?.aggregateTokenConfigMap) {
-        await backgroundApiProxy.serviceToken.syncAggregateTokenConfigMap();
+        await backgroundApiProxy.serviceSetting.syncWalletConfig();
         a = await backgroundApiProxy.simpleDb.aggregateToken.getRawData();
       }
 
@@ -902,24 +987,38 @@ function TokenListContainer({
     }) => {
       perfTokenListView.markStart('handleAllNetworkCacheData');
 
+      aggregateTokenRawData.current =
+        (await backgroundApiProxy.simpleDb.aggregateToken.getRawData()) ??
+        undefined;
+
+      const key = buildLocalAggregateTokenMapKey({
+        networkId,
+        accountId,
+      });
+
       const localAggregateTokenMap =
-        await backgroundApiProxy.serviceToken.getLocalAggregateTokenMap({
-          accountId,
-          networkId,
-        });
-
+        aggregateTokenRawData.current?.aggregateTokenMap?.[key] ?? {};
       const localAggregateTokenListMap =
-        await backgroundApiProxy.serviceToken.getLocalAggregateTokenListMap({
-          accountId,
-          networkId,
-        });
+        aggregateTokenRawData.current?.aggregateTokenListMap?.[key] ?? {};
+      const aggregateTokenConfigMap =
+        aggregateTokenRawData.current?.aggregateTokenConfigMap ?? {};
 
-      const tokenList: IAccountToken[] = [];
+      let tokenList: IAccountToken[] = [];
       const riskyTokenList: IAccountToken[] = [];
       let tokenListMap: {
         [key: string]: ITokenFiat;
       } = {};
       let tokenListValue: Record<string, string> = {};
+      let aggregateTokenListMap: Record<
+        string,
+        {
+          commonToken: IAccountToken;
+          tokens: IAccountToken[];
+        }
+      > = {};
+      let aggregateTokenMap: {
+        [key: string]: ITokenFiat;
+      } = {};
       data.forEach((item) => {
         tokenList.push(...item.tokenList, ...item.smallBalanceTokenList);
         riskyTokenList.push(...item.riskyTokenList);
@@ -935,6 +1034,37 @@ function TokenListContainer({
           })]: item.tokenListValue,
         };
       });
+
+      if (aggregateTokenConfigMap) {
+        tokenList = tokenList
+          .map((token) => {
+            const aggregateTokenData = buildAggregateTokenListData({
+              networkId: token.networkId ?? '',
+              accountId: token.accountId ?? '',
+              token,
+              tokenMap: tokenListMap,
+              aggregateTokenListMap,
+              aggregateTokenMap,
+              aggregateTokenConfigMapRawData: aggregateTokenConfigMap,
+              networkName: '',
+            });
+
+            if (aggregateTokenData.isAggregateToken) {
+              aggregateTokenListMap = aggregateTokenData.aggregateTokenListMap;
+              aggregateTokenMap = aggregateTokenData.aggregateTokenMap;
+              return null;
+            }
+
+            return token;
+          })
+          .filter(Boolean);
+
+        const aggregateTokenList = Object.values(aggregateTokenListMap).map(
+          (item) => item.commonToken,
+        );
+
+        tokenList = [...tokenList, ...aggregateTokenList];
+      }
 
       refreshAggregateTokensMap({
         tokens: localAggregateTokenMap,
@@ -1340,7 +1470,7 @@ function TokenListContainer({
       });
       refreshAllTokenList({
         keys: `${tokenList.keys}_${smallBalanceTokenList.keys}_${riskyTokenList.keys}`,
-        tokens: [...tokenList.tokens, ...riskyTokenList.riskyTokens],
+        tokens: [...mergedTokens, ...riskyTokenList.riskyTokens],
         accountId: account?.id,
         networkId: network?.id,
       });
@@ -1371,16 +1501,6 @@ function TokenListContainer({
   ]);
 
   useEffect(() => {
-    void updateAllNetworksTokenList();
-  }, [updateAllNetworksTokenList]);
-
-  useEffect(() => {
-    if (isHeaderRefreshing) {
-      void run();
-    }
-  }, [isHeaderRefreshing, run]);
-
-  useEffect(() => {
     const initTokenListData = async ({
       accountId,
       networkId,
@@ -1408,6 +1528,7 @@ function TokenListContainer({
           initialized: false,
           isRefreshing: true,
         });
+        handleClearAllNetworkData();
         return;
       }
 
@@ -1623,57 +1744,47 @@ function TokenListContainer({
     wallet?.id,
   ]);
 
+  useEffect(() => {
+    void updateAllNetworksTokenList();
+  }, [updateAllNetworksTokenList]);
+
+  useEffect(() => {
+    if (isHeaderRefreshing) {
+      void run();
+    }
+  }, [isHeaderRefreshing, run]);
+
   const handleOnPressToken = useCallback(
     (token: IAccountToken) => {
       if (!network || !wallet || !deriveInfo || !deriveType) return;
 
-      let sortedTokens = [token];
-
-      if (token.isAggregateToken) {
-        const tokens = aggregateTokenListMapAtom[token.$key]?.tokens;
-
-        sortedTokens = sortTokensCommon({
-          tokens,
-          tokenListMap: tokenListMapAtom,
-        });
-      }
-
-      if (sortedTokens.length === 0) {
-        return;
-      }
-
       navigation.pushModal(EModalRoutes.MainModal, {
         screen: EModalAssetDetailRoutes.TokenDetails,
         params: {
-          accountId: sortedTokens[0]?.accountId ?? account?.id ?? '',
-          networkId: sortedTokens[0]?.networkId ?? network.id,
+          accountId: token.accountId ?? account?.id ?? '',
+          networkId: token.networkId ?? network.id,
+          accountAddress: account?.address ?? '',
           walletId: wallet.id,
           isAllNetworks: network.isAllNetworks,
           indexedAccountId: indexedAccount?.id ?? '',
-          tokens: sortedTokens,
-          isAggregateToken: token.isAggregateToken,
+          tokenInfo: token,
+          aggregateTokens: aggregateTokenListMapAtom[token.$key]?.tokens ?? [],
           tokenMap: tokenListMapAtom,
         },
       });
     },
     [
-      account,
+      account?.address,
+      account?.id,
+      aggregateTokenListMapAtom,
       deriveInfo,
       deriveType,
       indexedAccount?.id,
       navigation,
       network,
-      wallet,
-      aggregateTokenListMapAtom,
       tokenListMapAtom,
+      wallet,
     ],
-  );
-
-  const isBuyAndReceiveEnabled = useMemo(
-    () =>
-      !vaultSettings?.disabledSendAction &&
-      wallet?.type !== WALLET_TYPE_WATCHING,
-    [vaultSettings?.disabledSendAction, wallet?.type],
   );
 
   const handleRefreshAllNetworkData = useCallback(() => {
@@ -1819,14 +1930,13 @@ function TokenListContainer({
       inTabList
       hideValue
       withSwapAction
-      hideZeroBalanceTokens
+      accountId={account?.id ?? ''}
+      networkId={network?.id ?? ''}
+      indexedAccountId={indexedAccount?.id ?? ''}
+      allAggregateTokenMap={allAggregateTokenMap}
+      showNetworkIcon={!!network?.isAllNetworks}
+      hideZeroBalanceTokens={!!network?.isAllNetworks}
       onRefresh={onHomePageRefresh}
-      withBuyAndReceive={isBuyAndReceiveEnabled}
-      isBuyTokenSupported={isSupported}
-      onBuyToken={handleFiatCrypto}
-      onReceiveToken={() =>
-        handleOnReceive({ withAllAggregateTokens: network?.isAllNetworks })
-      }
       manageTokenEnabled={manageTokenEnabled}
       onManageToken={handleOnManageToken}
       onPressToken={handleOnPressToken}

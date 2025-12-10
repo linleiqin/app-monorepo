@@ -1,8 +1,10 @@
 import { useCallback } from 'react';
 
-import { styled } from '@tamagui/core';
-import { createStyledContext, withStaticProperties } from 'tamagui';
-
+import {
+  createStyledContext,
+  styled,
+  withStaticProperties,
+} from '@onekeyhq/components/src/shared/tamagui';
 import platformEnv from '@onekeyhq/shared/src/platformEnv';
 
 import { Icon, Image, SizableText, XStack } from '../../primitives';
@@ -38,6 +40,9 @@ const BreadcrumbItem = styled(XStack, {
   alignItems: 'center',
   cursor: 'pointer',
   userSelect: 'none',
+  borderRadius: '$2',
+  px: '$2',
+  py: '$1',
   pressStyle: {
     bg: '$bgHover',
   },

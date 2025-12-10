@@ -1,13 +1,9 @@
 import type { ILocaleSymbol } from '@onekeyhq/shared/src/locale';
+import { ETranslations } from '@onekeyhq/shared/src/locale';
 import platformEnv from '@onekeyhq/shared/src/platformEnv';
 import { generateUUID } from '@onekeyhq/shared/src/utils/miscUtils';
 import { EHardwareTransportType, EOnekeyDomain } from '@onekeyhq/shared/types';
 import { EAlignPrimaryAccountMode } from '@onekeyhq/shared/types/dappConnection';
-import {
-  EPerpUserType,
-  type IPerpCommonConfig,
-  type IPerpUserConfig,
-} from '@onekeyhq/shared/types/hyperliquid/types';
 import { swapSlippageAutoValue } from '@onekeyhq/shared/types/swap/SwapProvider.constants';
 import { ESwapSlippageSegmentKey } from '@onekeyhq/shared/types/swap/types';
 
@@ -29,6 +25,7 @@ function getDefaultHardwareTransportType(): EHardwareTransportType {
 
 export type ISettingsPersistAtom = {
   theme: 'light' | 'dark' | 'system';
+  selectedBrowserTab: ETranslations;
   lastLocale: ILocaleSymbol;
   locale: ILocaleSymbol;
   version: string;
@@ -66,14 +63,13 @@ export type ISettingsPersistAtom = {
   hiddenWalletImmediately: boolean;
   showAddHiddenInWalletSidebar?: boolean;
   enableDesktopBluetooth?: boolean;
-
-  perpConfigCommon: IPerpCommonConfig;
-  perpUserConfig: IPerpUserConfig;
+  enableBTCFreshAddress?: boolean;
 };
 
 export const settingsAtomInitialValue: ISettingsPersistAtom = {
   theme: 'system',
   lastLocale: 'system',
+  selectedBrowserTab: ETranslations.global_browser,
   locale: 'system',
   version: process.env.VERSION ?? '1.0.0',
   buildNumber: process.env.BUILD_NUMBER ?? '2022010100',
@@ -103,10 +99,7 @@ export const settingsAtomInitialValue: ISettingsPersistAtom = {
   hiddenWalletImmediately: true,
   showAddHiddenInWalletSidebar: true,
   enableDesktopBluetooth: true,
-  perpConfigCommon: {},
-  perpUserConfig: {
-    currentUserType: EPerpUserType.PERP_NATIVE,
-  },
+  enableBTCFreshAddress: true,
 };
 export const { target: settingsPersistAtom, use: useSettingsPersistAtom } =
   globalAtom<ISettingsPersistAtom>({
@@ -176,5 +169,17 @@ export const {
     preventDisableTronRental: false,
   },
 });
+
+export type IAppSideBarStatusAtom = {
+  isCollapsed: boolean;
+};
+export const { target: appSideBarStatusAtom, use: useAppSideBarStatusAtom } =
+  globalAtom<IAppSideBarStatusAtom>({
+    name: EAtomNames.appSideBarStatusAtom,
+    persist: true,
+    initialValue: {
+      isCollapsed: true,
+    },
+  });
 
 // extract high frequency refresh data to another atom

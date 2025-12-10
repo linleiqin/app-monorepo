@@ -17,14 +17,47 @@ const MobilePerpMarketPage = LazyLoadPage(
   () => import('../pages/MobilePerpMarket'),
 );
 
+const MobileTokenSelectorPage = LazyLoadPage(
+  () => import('../components/TokenSelector/MoblieTokenSelector'),
+);
+
+const MobileSetTpslModal = LazyLoadPage(
+  () => import('../components/OrderInfoPanel/SetTpslModal'),
+);
+
+const MobileDepositWithdrawModal = LazyLoadPage(
+  () => import('../components/TradingPanel/modals/DepositWithdrawModal'),
+);
+
+const PerpsInviteeRewardModal = LazyLoadPage(
+  () => import('../components/InviteeReward/InviteeRewardModal'),
+);
+
 export const perpRouters: ITabSubNavigatorConfig<any, any>[] = [
   {
+    rewrite: '/',
     name: ETabRoutes.Perp,
     component: PagePerp,
   },
   {
     name: EModalPerpRoutes.MobilePerpMarket,
     component: MobilePerpMarketPage,
+  },
+  {
+    name: EModalPerpRoutes.MobileTokenSelector,
+    component: MobileTokenSelectorPage,
+  },
+  {
+    name: EModalPerpRoutes.MobileSetTpsl,
+    component: MobileSetTpslModal,
+  },
+  {
+    name: EModalPerpRoutes.MobileDepositWithdrawModal,
+    component: MobileDepositWithdrawModal,
+  },
+  {
+    name: EModalPerpRoutes.PerpsInviteeRewardModal,
+    component: PerpsInviteeRewardModal,
   },
 ];
 
@@ -39,5 +72,22 @@ export const ModalPerpStack: IModalFlowNavigatorConfig<
   {
     name: EModalPerpRoutes.MobilePerpMarket,
     component: MobilePerpMarketPage,
+  },
+  {
+    name: EModalPerpRoutes.MobileTokenSelector,
+    component: MobileTokenSelectorPage,
+    options: {},
+  },
+  {
+    name: EModalPerpRoutes.MobileSetTpsl,
+    component: MobileSetTpslModal,
+  },
+  {
+    name: EModalPerpRoutes.MobileDepositWithdrawModal,
+    component: MobileDepositWithdrawModal,
+  },
+  {
+    name: EModalPerpRoutes.PerpsInviteeRewardModal,
+    component: PerpsInviteeRewardModal,
   },
 ];

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { useRoute } from '@react-navigation/core';
 import { useIntl } from 'react-intl';
@@ -12,6 +12,7 @@ import {
   YStack,
 } from '@onekeyhq/components';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
+import { defaultLogger } from '@onekeyhq/shared/src/logger/logger';
 import type { IModalApprovalManagementParamList } from '@onekeyhq/shared/src/routes/approvalManagement';
 import { EModalApprovalManagementRoutes } from '@onekeyhq/shared/src/routes/approvalManagement';
 import approvalUtils from '@onekeyhq/shared/src/utils/approvalUtils';
@@ -39,8 +40,15 @@ function RevokeSuggestion() {
         EModalApprovalManagementRoutes.RevokeSuggestion
       >
     >();
-  const { accountId, networkId, approvals, tokenMap, contractMap, autoShow } =
-    route.params;
+  const {
+    accountId,
+    networkId,
+    indexedAccountId,
+    approvals,
+    tokenMap,
+    contractMap,
+    autoShow,
+  } = route.params;
   const {
     updateApprovalList,
     updateTokenMap,
@@ -56,6 +64,9 @@ function RevokeSuggestion() {
     useBulkRevoke();
 
   const [{ selectedTokens }] = useSelectedTokensAtom();
+
+  const navToRevokeRef = useRef(false);
+
   const { riskyNumber, inactiveNumber } = useMemo(() => {
     let risky = 0;
     let inactive = 0;
@@ -63,7 +74,10 @@ function RevokeSuggestion() {
       if (item.isRiskContract) risky += 1;
       if (item.isInactiveApproval) inactive += 1;
     });
-    return { riskyNumber: risky, inactiveNumber: inactive };
+    return {
+      riskyNumber: risky,
+      inactiveNumber: inactive,
+    };
   }, [approvals]);
   const { isSelectAllTokens, selectedCount } = useMemo(() => {
     return approvalUtils.checkIsSelectAllTokens({
@@ -71,6 +85,13 @@ function RevokeSuggestion() {
       selectedTokens,
     });
   }, [approvals, selectedTokens]);
+
+  useEffect(() => {
+    defaultLogger.approval.revokeSuggestion.revokeSuggestionShow({
+      inactiveCount: inactiveNumber,
+      riskyCount: riskyNumber,
+    });
+  }, [inactiveNumber, riskyNumber]);
 
   useEffect(() => {
     // select all tokens by default
@@ -189,12 +210,14 @@ function RevokeSuggestion() {
         onPress={handleApprovalItemOnPress}
         accountId={accountId}
         networkId={networkId}
+        indexedAccountId={indexedAccountId}
       />
     );
   }, [
     accountId,
     handleApprovalItemOnPress,
     networkId,
+    indexedAccountId,
     riskyNumber,
     inactiveNumber,
   ]);
@@ -211,41 +234,30 @@ function RevokeSuggestion() {
   }, [approvals, isSelectAllTokens, updateSelectedTokens]);
 
   const handleOnConfirm = useCallback(() => {
+    navToRevokeRef.current = true;
+    defaultLogger.approval.revokeSuggestion.revokeSuggestionClick({
+      type: 'revoke',
+      inactiveCount: inactiveNumber,
+      riskyCount: riskyNumber,
+      selectedTokenCount: selectedCount,
+    });
     void navigationToBulkRevokeProcess({
       selectedTokens,
       tokenMap,
       contractMap,
     });
-  }, [navigationToBulkRevokeProcess, selectedTokens, tokenMap, contractMap]);
+  }, [
+    navigationToBulkRevokeProcess,
+    selectedTokens,
+    tokenMap,
+    contractMap,
+    inactiveNumber,
+    riskyNumber,
+    selectedCount,
+  ]);
   const handleOnCancel = useCallback(async () => {
-    if (autoShow) {
-      const tasks: Promise<unknown>[] = [];
-      if (riskyNumber > 0) {
-        tasks.push(
-          backgroundApiProxy.serviceApproval.updateRiskApprovalsRevokeSuggestionConfig(
-            {
-              networkId,
-              accountId,
-            },
-          ),
-        );
-      }
-      if (inactiveNumber > 0) {
-        tasks.push(
-          backgroundApiProxy.serviceApproval.updateInactiveApprovalsAlertConfig(
-            {
-              networkId,
-              accountId,
-            },
-          ),
-        );
-      }
-      if (tasks.length) {
-        await Promise.all(tasks);
-      }
-    }
     navigation.popStack();
-  }, [autoShow, navigation, networkId, accountId, riskyNumber, inactiveNumber]);
+  }, [navigation]);
 
   const renderBulkRevokeActions = () => {
     return (
@@ -266,8 +278,43 @@ function RevokeSuggestion() {
     );
   };
 
+  const handleOnClose = useCallback(async () => {
+    if (autoShow && !navToRevokeRef.current) {
+      defaultLogger.approval.revokeSuggestion.revokeSuggestionClick({
+        type: 'skip',
+        inactiveCount: inactiveNumber,
+        riskyCount: riskyNumber,
+      });
+
+      const tasks: Promise<unknown>[] = [];
+      if (riskyNumber > 0) {
+        tasks.push(
+          backgroundApiProxy.serviceApproval.updateRiskApprovalsRevokeSuggestionConfig(
+            {
+              indexedAccountId,
+              accountId,
+            },
+          ),
+        );
+      }
+      if (inactiveNumber > 0) {
+        tasks.push(
+          backgroundApiProxy.serviceApproval.updateInactiveApprovalsRevokeSuggestionConfig(
+            {
+              indexedAccountId,
+              accountId,
+            },
+          ),
+        );
+      }
+      if (tasks.length) {
+        await Promise.all(tasks);
+      }
+    }
+  }, [autoShow, indexedAccountId, accountId, riskyNumber, inactiveNumber]);
+
   return (
-    <Page scrollEnabled>
+    <Page scrollEnabled onClose={handleOnClose}>
       <Page.Header
         title={intl.formatMessage({
           id: ETranslations.wallet_revoke_suggestion,

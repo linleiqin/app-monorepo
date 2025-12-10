@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AuthenticationType } from 'expo-local-authentication';
 import { useIntl } from 'react-intl';
@@ -6,10 +6,7 @@ import { useIntl } from 'react-intl';
 import { SizableText, Spinner, Stack } from '@onekeyhq/components';
 import backgroundApiProxy from '@onekeyhq/kit/src/background/instance/backgroundApiProxy';
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports
-import {
-  biologyAuthNativeError,
-  biologyAuthUtils,
-} from '@onekeyhq/kit-bg/src/services/ServicePassword/biologyAuthUtils';
+import { biologyAuthUtils } from '@onekeyhq/kit-bg/src/services/ServicePassword/biologyAuthUtils';
 import { useSettingsPersistAtom } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import {
   usePasswordAtom,
@@ -17,6 +14,7 @@ import {
   usePasswordModeAtom,
   usePasswordPersistAtom,
 } from '@onekeyhq/kit-bg/src/states/jotai/atoms/password';
+import { biologyAuthNativeError } from '@onekeyhq/shared/src/biologyAuth/error';
 import { OneKeyLocalError } from '@onekeyhq/shared/src/errors';
 import { dismissKeyboard } from '@onekeyhq/shared/src/keyboard';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
@@ -101,11 +99,16 @@ const PasswordVerifyContainer = ({
     }
   }, [isEnable, isBiologyAuthSwitchOn]);
 
+  const passwordVerifyStatusRef = useRef(passwordVerifyStatus);
   useEffect(() => {
-    setPasswordAtom((v) => ({
-      ...v,
-      passwordVerifyStatus: { value: EPasswordVerifyStatus.DEFAULT },
-    }));
+    if (
+      passwordVerifyStatusRef.current.value === EPasswordVerifyStatus.VERIFYING
+    ) {
+      setPasswordAtom((v) => ({
+        ...v,
+        passwordVerifyStatus: { value: EPasswordVerifyStatus.DEFAULT },
+      }));
+    }
   }, [setPasswordAtom]);
 
   useEffect(
@@ -423,18 +426,8 @@ const PasswordVerifyContainer = ({
     })();
   }, []);
 
-  const loadingView = useMemo(() => {
-    return passwordEncryptorInitError ? (
-      <SizableText size="$bodyMd" color="$textCritical" textAlign="center">
-        {passwordEncryptorInitError}
-      </SizableText>
-    ) : (
-      <Spinner />
-    );
-  }, [passwordEncryptorInitError]);
-
   return (
-    <Stack onLayout={onLayout}>
+    <Stack>
       <PasswordVerify
         passwordMode={passwordMode}
         alertText={alertText}

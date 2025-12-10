@@ -1,4 +1,3 @@
-import crypto from 'crypto';
 import fs from 'fs';
 import http from 'http';
 import https from 'https';
@@ -8,13 +7,26 @@ import AdmZip from 'adm-zip';
 import { app } from 'electron';
 import logger from 'electron-log/main';
 
+import {
+  calculateSHA256,
+  getBundleDirName,
+  getBundleExtractDir,
+  testExtractedSha256FromVerifyAscFile,
+  verifyMetadataFileSha256,
+  verifySha256,
+} from '@onekeyhq/desktop/app/bundle';
 import { ipcMessageKeys } from '@onekeyhq/desktop/app/config';
 import * as store from '@onekeyhq/desktop/app/libs/store';
+import {
+  clearWindowProgressBar,
+  updateWindowProgressBar,
+} from '@onekeyhq/desktop/app/windowProgressBar';
 import { OneKeyLocalError } from '@onekeyhq/shared/src/errors';
 import type {
   IDownloadPackageParams,
   IUpdateDownloadedEvent,
 } from '@onekeyhq/shared/src/modules3rdParty/auto-update/type';
+import type { IDesktopStoreUpdateBundleData } from '@onekeyhq/shared/types/desktop';
 
 import type { IDesktopApi } from './base/types';
 import type { BrowserWindow } from 'electron';
@@ -42,19 +54,10 @@ class DesktopApiAppBundleUpdate {
     return globalThis.$desktopMainAppFunctions?.getSafelyMainWindow?.();
   }
 
-  verifySha256(filePath: string, sha256: string) {
-    const hashSum = crypto.createHash('sha256');
-    const fileBuffer = fs.readFileSync(filePath);
-    hashSum.update(fileBuffer);
-    const fileSha256 = hashSum.digest('hex');
-    logger.info('bundle-download-verifySha256', sha256, fileSha256);
-    return fileSha256 === sha256;
-  }
-
   async verifyAndResolve(filePath: string, sha256: string) {
     return new Promise<boolean>((resolve, reject) => {
       setTimeout(async () => {
-        const verified = this.verifySha256(filePath, sha256);
+        const verified = verifySha256(filePath, sha256);
         if (!verified) {
           reject(new OneKeyLocalError('Downloaded file is not valid'));
         }
@@ -63,7 +66,7 @@ class DesktopApiAppBundleUpdate {
     });
   }
 
-  getDownloadFileName() {
+  getDownloadDir() {
     const tempDir = path.join(
       app.getPath('userData'),
       'onekey-bundle-download',
@@ -71,16 +74,7 @@ class DesktopApiAppBundleUpdate {
     if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true });
     }
-    logger.info('bundle-download-getDownloadFileName', tempDir);
-    return tempDir;
-  }
-
-  getBundleDirName() {
-    const tempDir = path.join(app.getPath('userData'), 'onekey-bundle');
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
-    }
-    logger.info('bundle-download-getBundleDirName', tempDir);
+    logger.info('bundle-download-getDownloadDir', tempDir);
     return tempDir;
   }
 
@@ -94,6 +88,7 @@ class DesktopApiAppBundleUpdate {
     if (this.isDownloading) {
       return;
     }
+    clearWindowProgressBar(this.getMainWindow());
     if (!appVersion || !bundleVersion || !bundleUrl || !fileSize || !sha256) {
       this.isDownloading = false;
       return Promise.reject(new Error('Invalid parameters'));
@@ -101,7 +96,7 @@ class DesktopApiAppBundleUpdate {
     this.isDownloading = true;
     return new Promise<IUpdateDownloadedEvent>((resolve, reject) => {
       setTimeout(async () => {
-        const tempDir = this.getDownloadFileName();
+        const tempDir = this.getDownloadDir();
         logger.info('bundle-download', {
           tempDir,
         });
@@ -224,6 +219,7 @@ class DesktopApiAppBundleUpdate {
                 delta: (chunk as Buffer).length,
               },
             );
+            updateWindowProgressBar(this.getMainWindow(), percent);
           });
 
           response.on('end', async () => {
@@ -249,6 +245,7 @@ class DesktopApiAppBundleUpdate {
             } else {
               reject(new Error('Download incomplete'));
             }
+            clearWindowProgressBar(this.getMainWindow());
           });
 
           response.on('error', (error) => {
@@ -257,6 +254,7 @@ class DesktopApiAppBundleUpdate {
             this.isDownloading = false;
             this.cancelCurrentDownload = () => {};
             reject(error);
+            clearWindowProgressBar(this.getMainWindow());
           });
         });
 
@@ -280,16 +278,30 @@ class DesktopApiAppBundleUpdate {
     });
   }
 
-  getBundleExtractDir({
-    bundleDir,
+  getBundleBuildPath({
     appVersion,
     bundleVersion,
   }: {
-    bundleDir: string;
     appVersion: string;
     bundleVersion: string;
   }) {
-    return path.join(bundleDir, `${appVersion}-${bundleVersion}`);
+    const bundleDir = getBundleDirName();
+    return path.join(bundleDir, `${appVersion}-${bundleVersion}`, 'build');
+  }
+
+  getMetadataFilePath({
+    appVersion,
+    bundleVersion,
+  }: {
+    appVersion: string;
+    bundleVersion: string;
+  }) {
+    const bundleDir = getBundleDirName();
+    return path.join(
+      bundleDir,
+      `${appVersion}-${bundleVersion}`,
+      'metadata.json',
+    );
   }
 
   async verifyBundle(params: IUpdateDownloadedEvent) {
@@ -298,27 +310,18 @@ class DesktopApiAppBundleUpdate {
       sha256,
       latestVersion: appVersion,
       bundleVersion,
+      signature,
     } = params || {};
-    if (!downloadedFile || !sha256 || !appVersion || !bundleVersion) {
+    if (
+      !downloadedFile ||
+      !sha256 ||
+      !appVersion ||
+      !bundleVersion ||
+      !signature
+    ) {
       throw new OneKeyLocalError('Invalid parameters');
     }
-    const bundleDir = this.getBundleDirName();
-    if (this.verifySha256(downloadedFile, sha256)) {
-      // Extract zip file to the same directory
-      const extractDir = this.getBundleExtractDir({
-        bundleDir,
-        appVersion,
-        bundleVersion,
-      });
-
-      try {
-        const zip = new AdmZip(downloadedFile);
-        zip.extractAllTo(extractDir, true);
-      } catch (error) {
-        logger.error('Failed to extract bundle zip file:', error);
-        throw error;
-      }
-    }
+    await verifyMetadataFileSha256({ appVersion, bundleVersion, signature });
   }
 
   /**
@@ -362,40 +365,79 @@ class DesktopApiAppBundleUpdate {
     ) {
       throw new OneKeyLocalError('Invalid parameters');
     }
-    const bundleDir = this.getBundleDirName();
-    const extractDir = this.getBundleExtractDir({
-      bundleDir,
+    const isBundleVerified = verifySha256(downloadedFile, sha256);
+    if (!isBundleVerified) {
+      throw new OneKeyLocalError('Invalid bundle file');
+    }
+    const extractDir = getBundleExtractDir({
       appVersion,
       bundleVersion,
     });
-    const metaDataJsonPath = path.join(extractDir, 'metadata.json');
-    logger.info('bundle-verifyBundleASC', metaDataJsonPath);
-    // await this.verifySha256(metaDataJsonPath, sha256);
+
+    try {
+      const zip = new AdmZip(downloadedFile);
+      zip.extractAllTo(extractDir, true);
+    } catch (error) {
+      logger.error('Failed to extract bundle zip file:', error);
+      throw error;
+    }
+
+    const metadataFilePath = this.getMetadataFilePath({
+      appVersion,
+      bundleVersion,
+    });
+    logger.info('bundle-verifyBundleASC', metadataFilePath);
+    await verifyMetadataFileSha256({ appVersion, bundleVersion, signature });
   }
 
   async installBundle(params: IUpdateDownloadedEvent) {
     const {
-      downloadedFile,
-      sha256,
       latestVersion: appVersion,
       bundleVersion,
       signature,
     } = params || {};
-    if (
-      !downloadedFile ||
-      !sha256 ||
-      !appVersion ||
-      !bundleVersion ||
-      !signature
-    ) {
+    if (!appVersion || !bundleVersion || !signature) {
       throw new OneKeyLocalError('Invalid parameters');
     }
-    store.setFallbackUpdateBundleData(store.getUpdateBundleData());
+    const currentUpdateBundleData = store.getUpdateBundleData();
+
     store.setUpdateBundleData({
       appVersion,
       bundleVersion,
       signature,
     });
+    logger.info('installBundle', {
+      appVersion,
+      bundleVersion,
+      signature,
+    });
+    store.setNativeVersion(app.getVersion());
+    logger.info('installBundle setNativeVersion', {
+      nativeVersion: app.getVersion(),
+    });
+    const fallbackUpdateBundleData = store.getFallbackUpdateBundleData();
+    if (
+      currentUpdateBundleData &&
+      currentUpdateBundleData.appVersion &&
+      currentUpdateBundleData.bundleVersion &&
+      currentUpdateBundleData.signature
+    ) {
+      fallbackUpdateBundleData.push(currentUpdateBundleData);
+    }
+
+    if (fallbackUpdateBundleData.length > 3) {
+      const shiftUpdateBundleData = fallbackUpdateBundleData.shift();
+      if (shiftUpdateBundleData) {
+        const dirName = `${shiftUpdateBundleData.appVersion}-${shiftUpdateBundleData.bundleVersion}`;
+        const bundleDir = getBundleDirName();
+        const bundleDirPath = path.join(bundleDir, dirName);
+        if (fs.existsSync(bundleDirPath)) {
+          fs.rmSync(bundleDirPath, { recursive: true, force: true });
+        }
+      }
+    }
+    logger.info('fallbackUpdateBundleData', fallbackUpdateBundleData);
+    store.setFallbackUpdateBundleData(fallbackUpdateBundleData);
     setTimeout(() => {
       if (!process.mas) {
         app.relaunch();
@@ -408,26 +450,243 @@ class DesktopApiAppBundleUpdate {
     return new Promise<void>((resolve) => {
       setTimeout(() => {
         this.cancelCurrentDownload?.();
-        const downloadDir = this.getDownloadFileName();
+        const downloadDir = this.getDownloadDir();
         fs.rmSync(downloadDir, { recursive: true });
         resolve();
       }, 100);
     });
   }
 
+  async getFallbackUpdateBundleData() {
+    return store.getFallbackUpdateBundleData();
+  }
+
+  async setCurrentUpdateBundleData(
+    updateBundleData: IDesktopStoreUpdateBundleData,
+  ) {
+    store.setUpdateBundleData(updateBundleData);
+    setTimeout(() => {
+      if (!process.mas) {
+        app.relaunch();
+      }
+      app.exit(0);
+    }, 1200);
+  }
+
   async clearBundleExtract() {
-    const bundleDir = this.getBundleDirName();
-    fs.rmSync(bundleDir, { recursive: true });
+    const bundleDir = getBundleDirName();
+    try {
+      fs.rmSync(bundleDir, { recursive: true, force: true });
+    } catch (error) {
+      logger.error('Failed to clear bundle extract:', error);
+    }
   }
 
   async clearBundle() {
     await this.clearDownload();
-    await this.clearBundleExtract();
     return new Promise<void>((resolve) => {
       setTimeout(() => {
         resolve();
       }, 300);
     });
+  }
+
+  async clearAllJSBundleData() {
+    await this.clearDownload();
+    await this.clearBundleExtract();
+    store.clearUpdateBundleData();
+    return new Promise<{ success: boolean; message: string }>((resolve) => {
+      setTimeout(() => {
+        resolve({
+          success: true,
+          message: 'Successfully cleared all JS bundle data',
+        });
+      }, 300);
+    });
+  }
+
+  async testVerification() {
+    return testExtractedSha256FromVerifyAscFile();
+  }
+
+  /**
+   * Test function to delete jsBundle files
+   * @param appVersion - Application version
+   * @param bundleVersion - Bundle version
+   */
+  async testDeleteJsBundle(appVersion: string, bundleVersion: string) {
+    try {
+      const bundleDir = getBundleExtractDir({ appVersion, bundleVersion });
+      const mainIndexHtmlPath = path.join(bundleDir, 'index.html');
+
+      if (fs.existsSync(mainIndexHtmlPath)) {
+        fs.unlinkSync(mainIndexHtmlPath);
+        logger.info(
+          'testDeleteJsBundle',
+          `Deleted jsBundle: ${mainIndexHtmlPath}`,
+        );
+        return {
+          success: true,
+          message: `Deleted jsBundle: ${mainIndexHtmlPath}`,
+        };
+      }
+      logger.info(
+        'testDeleteJsBundle',
+        `jsBundle not found: ${mainIndexHtmlPath}`,
+      );
+      return {
+        success: false,
+        message: `jsBundle not found: ${mainIndexHtmlPath}`,
+      };
+    } catch (error) {
+      logger.error(
+        'testDeleteJsBundle',
+        `Error deleting jsBundle: ${(error as Error).message}`,
+      );
+      throw new OneKeyLocalError(
+        `Failed to delete jsBundle: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * Test function to delete js runtime directory
+   * @param appVersion - Application version
+   * @param bundleVersion - Bundle version
+   */
+  async testDeleteJsRuntimeDir(appVersion: string, bundleVersion: string) {
+    try {
+      const bundleDir = getBundleExtractDir({ appVersion, bundleVersion });
+
+      if (fs.existsSync(bundleDir)) {
+        fs.rmSync(bundleDir, { recursive: true, force: true });
+        logger.info(
+          'testDeleteJsRuntimeDir',
+          `Deleted js runtime directory: ${bundleDir}`,
+        );
+        return {
+          success: true,
+          message: `Deleted js runtime directory: ${bundleDir}`,
+        };
+      }
+      logger.info(
+        'testDeleteJsRuntimeDir',
+        `js runtime directory not found: ${bundleDir}`,
+      );
+      return {
+        success: false,
+        message: `js runtime directory not found: ${bundleDir}`,
+      };
+    } catch (error) {
+      logger.error(
+        'testDeleteJsRuntimeDir',
+        `Error deleting js runtime directory: ${(error as Error).message}`,
+      );
+      throw new OneKeyLocalError(
+        `Failed to delete js runtime directory: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * Test function to delete metadata.json file
+   * @param appVersion - Application version
+   * @param bundleVersion - Bundle version
+   */
+  async testDeleteMetadataJson(appVersion: string, bundleVersion: string) {
+    try {
+      const metadataFilePath = this.getMetadataFilePath({
+        appVersion,
+        bundleVersion,
+      });
+
+      if (fs.existsSync(metadataFilePath)) {
+        fs.unlinkSync(metadataFilePath);
+        logger.info(
+          'testDeleteMetadataJson',
+          `Deleted metadata.json: ${metadataFilePath}`,
+        );
+        return {
+          success: true,
+          message: `Deleted metadata.json: ${metadataFilePath}`,
+        };
+      }
+      logger.info(
+        'testDeleteMetadataJson',
+        `metadata.json not found: ${metadataFilePath}`,
+      );
+      return {
+        success: false,
+        message: `metadata.json not found: ${metadataFilePath}`,
+      };
+    } catch (error) {
+      logger.error(
+        'testDeleteMetadataJson',
+        `Error deleting metadata.json: ${(error as Error).message}`,
+      );
+      throw new OneKeyLocalError(
+        `Failed to delete metadata.json: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * Test function to write empty metadata.json file
+   * @param appVersion - Application version
+   * @param bundleVersion - Bundle version
+   */
+  async testWriteEmptyMetadataJson(appVersion: string, bundleVersion: string) {
+    try {
+      const bundleDir = getBundleExtractDir({ appVersion, bundleVersion });
+      const metadataFilePath = path.join(bundleDir, 'metadata.json');
+
+      // Ensure directory exists
+      if (!fs.existsSync(bundleDir)) {
+        fs.mkdirSync(bundleDir, { recursive: true });
+      }
+
+      // Write empty metadata.json
+      const emptyMetadata = {};
+      fs.writeFileSync(
+        metadataFilePath,
+        JSON.stringify(emptyMetadata, null, 2),
+      );
+
+      logger.info(
+        'testWriteEmptyMetadataJson',
+        `Created empty metadata.json: ${metadataFilePath}`,
+      );
+      return {
+        success: true,
+        message: `Created empty metadata.json: ${metadataFilePath}`,
+      };
+    } catch (error) {
+      logger.error(
+        'testWriteEmptyMetadataJson',
+        `Error writing empty metadata.json: ${(error as Error).message}`,
+      );
+      throw new OneKeyLocalError(
+        `Failed to write empty metadata.json: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  async getNativeAppVersion() {
+    return app.getVersion();
+  }
+
+  async getNativeBuildNumber() {
+    return process.env.BUILD_NUMBER || '';
+  }
+
+  async getJsBundlePath() {
+    return (
+      globalThis.$desktopMainAppFunctions?.getBundleIndexHtmlPath?.() || ''
+    );
+  }
+
+  async getSha256FromFilePath(filePath: string) {
+    return calculateSHA256(filePath);
   }
 }
 

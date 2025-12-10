@@ -22,6 +22,7 @@ import timerUtils from '@onekeyhq/shared/src/utils/timerUtils';
 import type { INetworkAccount } from '@onekeyhq/shared/types/account';
 import type { IApiClientResponse } from '@onekeyhq/shared/types/endpoint';
 import { EServiceEndpointEnum } from '@onekeyhq/shared/types/endpoint';
+import type { IHyperLiquidSignatureRSV } from '@onekeyhq/shared/types/hyperliquid/webview';
 import type {
   ENotificationPushTopicTypes,
   INotificationClickParams,
@@ -268,8 +269,6 @@ export default class ServiceNotification extends ServiceBase {
         params?.remotePushMessageInfo?.extras?.params?.accountId,
       mode: params?.remotePushMessageInfo?.extras?.mode,
       payload: params?.remotePushMessageInfo?.extras?.payload,
-      getEarnAccount: (props) =>
-        this.backgroundApi.serviceStaking.getEarnAccount(props),
     });
 
     void this.removeNotification({
@@ -1223,9 +1222,9 @@ export default class ServiceNotification extends ServiceBase {
       }>
     >('/notification/v1/message/read-all');
 
-    if (result?.data?.data?.updated > 0) {
+    setTimeout(() => {
       void this.clearBadge();
-    }
+    });
     // await timerUtils.wait(5000);
     return result?.data?.data;
   }
@@ -1309,6 +1308,43 @@ export default class ServiceNotification extends ServiceBase {
       '/notification/v1/message/block-tx',
       params,
     );
+  }
+
+  @backgroundMethod()
+  async notifyHyperliquidAccountBind({
+    signerAddress,
+    action,
+    nonce,
+    signature,
+    accountId,
+    accountName,
+  }: {
+    signerAddress: string;
+    action: {
+      type: string;
+      signatureChainId: string;
+      hyperliquidChain: string;
+      agentAddress: string;
+      agentName: string;
+      nonce: number;
+    };
+    nonce: number;
+    signature: IHyperLiquidSignatureRSV;
+    accountId?: string;
+    accountName?: string;
+  }) {
+    if (!signerAddress) {
+      return;
+    }
+    const client = await this.getClient(EServiceEndpointEnum.Notification);
+    await client.post('/notification/v1/hyperliquid-account/bind', {
+      signerAddress,
+      action,
+      nonce,
+      signature,
+      accountId,
+      accountName,
+    });
   }
 
   @backgroundMethod()

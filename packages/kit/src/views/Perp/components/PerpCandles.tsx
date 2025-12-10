@@ -1,19 +1,44 @@
-import { Stack } from '@onekeyhq/components';
+import { DebugRenderTracker, Stack } from '@onekeyhq/components';
 import { TradingViewPerpsV2 } from '@onekeyhq/kit/src/components/TradingView/TradingViewPerpsV2/TradingViewPerpsV2';
-import { usePerpsSelectedAccountAtom } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
-
-import { useCurrentTokenAtom } from '../../../states/jotai/contexts/hyperliquid';
+import {
+  usePerpsActiveAccountAtom,
+  usePerpsActiveAssetAtom,
+  usePerpsCandlesWebviewReloadHookAtom,
+} from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 
 export function PerpCandles() {
-  const [currentToken] = useCurrentTokenAtom();
-  const [currentAccount] = usePerpsSelectedAccountAtom();
+  const [currentToken] = usePerpsActiveAssetAtom();
+  const [currentAccount] = usePerpsActiveAccountAtom();
+  const [{ reloadHook }] = usePerpsCandlesWebviewReloadHookAtom();
 
-  return (
+  console.log('PerpCandles__render', {
+    reloadHook,
+    address: currentAccount?.accountAddress,
+    coin: currentToken.coin,
+  });
+
+  const content = (
     <Stack w="100%" h="100%">
-      <TradingViewPerpsV2
-        userAddress={currentAccount?.accountAddress}
-        symbol={currentToken}
-      />
+      {reloadHook > 0 ? (
+        <TradingViewPerpsV2
+          webviewKey={reloadHook.toString()}
+          userAddress={currentAccount?.accountAddress}
+          symbol={currentToken.coin}
+        />
+      ) : null}
     </Stack>
+  );
+  return (
+    <DebugRenderTracker
+      containerStyle={{
+        width: '100%',
+        height: '100%',
+        flex: 1,
+      }}
+      name="PerpCandles"
+      position="top-right"
+    >
+      {content}
+    </DebugRenderTracker>
   );
 }

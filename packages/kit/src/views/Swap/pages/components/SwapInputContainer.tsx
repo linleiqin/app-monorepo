@@ -12,7 +12,6 @@ import {
 import {
   Button,
   Dialog,
-  Icon,
   SizableText,
   XStack,
   YStack,
@@ -24,7 +23,6 @@ import {
   useRateDifferenceAtom,
   useSwapAlertsAtom,
   useSwapFromTokenAmountAtom,
-  useSwapNativeTokenReserveGasAtom,
   useSwapQuoteActionLockAtom,
   useSwapSelectFromTokenAtom,
   useSwapSelectToTokenAtom,
@@ -38,7 +36,6 @@ import {
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import platformEnv from '@onekeyhq/shared/src/platformEnv';
 import accountUtils from '@onekeyhq/shared/src/utils/accountUtils';
-import { numberFormat } from '@onekeyhq/shared/src/utils/numberUtils';
 import { checkWrappedTokenPair } from '@onekeyhq/shared/src/utils/tokenUtils';
 import type { ISwapToken } from '@onekeyhq/shared/types/swap/types';
 import {
@@ -161,7 +158,6 @@ const SwapInputContainer = ({
   const [fromTokenBalance] = useSwapSelectedFromTokenBalanceAtom();
   const [swapTypeSwitch] = useSwapTypeSwitchAtom();
   const [swapQuoteActionLock] = useSwapQuoteActionLockAtom();
-  const [swapNativeTokenReserveGas] = useSwapNativeTokenReserveGasAtom();
   const [, setInAppNotification] = useInAppNotificationAtom();
 
   const fromInputHasError = useMemo(() => {
@@ -331,45 +327,6 @@ const SwapInputContainer = ({
     }
     return false;
   }, [direction, swapTypeSwitch, fromToken, toToken]);
-  const balancePopoverContent = useMemo(() => {
-    const reserveGas = swapNativeTokenReserveGas.find(
-      (item) => item.networkId === fromToken?.networkId,
-    )?.reserveGas;
-    if (fromToken?.isNative) {
-      let reserveGasFormatted: string | undefined | number = reserveGas;
-      if (reserveGas) {
-        reserveGasFormatted = numberFormat(reserveGas.toString(), {
-          formatter: 'balance',
-          formatterOptions: {
-            tokenSymbol: fromToken?.symbol,
-          },
-        }) as string;
-      }
-      return (
-        <XStack alignItems="center" p="$4">
-          <SizableText size="$bodyMd">
-            {intl.formatMessage(
-              {
-                id: reserveGasFormatted
-                  ? ETranslations.swap_native_token_max_tip_already
-                  : ETranslations.swap_native_token_max_tip,
-              },
-              {
-                num_token: reserveGasFormatted,
-              },
-            )}
-          </SizableText>
-        </XStack>
-      );
-    }
-    return undefined;
-  }, [
-    swapNativeTokenReserveGas,
-    fromToken?.isNative,
-    fromToken?.networkId,
-    fromToken?.symbol,
-    intl,
-  ]);
   return (
     <YStack borderRadius="$3" backgroundColor="$bgSubdued" borderWidth="$0">
       <XStack justifyContent="space-between" pt="$2.5" px="$3.5">
@@ -378,7 +335,6 @@ const SwapInputContainer = ({
           onClickNetwork={onSelectToken}
         />
         <SwapInputActions
-          stagePopoverContent={balancePopoverContent}
           fromToken={fromToken}
           accountInfo={accountInfo}
           showPercentageInput={showPercentageInputDebounce}
@@ -396,7 +352,6 @@ const SwapInputContainer = ({
         }
         balanceProps={{
           value: balance,
-          popoverContent: balancePopoverContent,
           onPress:
             direction === ESwapDirectionType.FROM
               ? onBalanceMaxPress

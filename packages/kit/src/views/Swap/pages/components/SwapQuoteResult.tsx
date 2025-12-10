@@ -7,6 +7,7 @@ import {
   Accordion,
   Divider,
   Icon,
+  Keyboard,
   LottieView,
   NumberSizeableText,
   SizableText,
@@ -31,10 +32,10 @@ import {
   useSettingsPersistAtom,
 } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
+import type { INumberFormatProps } from '@onekeyhq/shared/src/utils/numberUtils';
 import { numberFormat } from '@onekeyhq/shared/src/utils/numberUtils';
 import {
   EProtocolOfExchange,
-  ESwapLimitOrderExpiryStep,
   ESwapQuoteKind,
   ESwapTabSwitchType,
   type IFetchQuoteResult,
@@ -49,6 +50,7 @@ import SwapCommonInfoItem from '../../components/SwapCommonInfoItem';
 import SwapProviderInfoItem from '../../components/SwapProviderInfoItem';
 import SwapQuoteResultRate from '../../components/SwapQuoteResultRate';
 import { useSwapRecipientAddressInfo } from '../../hooks/useSwapAccount';
+import { useSwapLimitConfigMaps } from '../../hooks/useSwapGlobal';
 import { useSwapSlippageActions } from '../../hooks/useSwapSlippageActions';
 import {
   useSwapQuoteEventFetching,
@@ -64,6 +66,10 @@ interface ISwapQuoteResultProps {
   onOpenRecipient?: () => void;
   refreshAction: (manual?: boolean) => void;
 }
+
+const SWAP_ACCORDION_VALUE = 'swap_accordion_value';
+
+const formatter: INumberFormatProps = { formatter: 'balance' };
 
 const SwapQuoteResult = ({
   onOpenProviderList,
@@ -189,70 +195,21 @@ const SwapQuoteResult = ({
 
   const quoting = useSwapQuoteEventFetching();
 
-  const limitOrderExpiryStepMap = useMemo(
-    () => [
-      {
-        label: `5 ${intl.formatMessage({
-          id: ETranslations.Limit_expire_minutes,
-        })}`,
-        value: ESwapLimitOrderExpiryStep.FIVE_MINUTES.toString(),
-      },
-      {
-        label: `30 ${intl.formatMessage({
-          id: ETranslations.Limit_expire_minutes,
-        })}`,
-        value: ESwapLimitOrderExpiryStep.THIRTY_MINUTES.toString(),
-      },
-      {
-        label: `1 ${intl.formatMessage({
-          id: ETranslations.Limit_expire_hour,
-        })}`,
-        value: ESwapLimitOrderExpiryStep.ONE_HOUR.toString(),
-      },
-      {
-        label: `1 ${intl.formatMessage({
-          id: ETranslations.Limit_expire_day,
-        })}`,
-        value: ESwapLimitOrderExpiryStep.ONE_DAY.toString(),
-      },
-      {
-        label: `3 ${intl.formatMessage({
-          id: ETranslations.Limit_expire_days,
-        })}`,
-        value: ESwapLimitOrderExpiryStep.THREE_DAYS.toString(),
-      },
-      {
-        label: `7 ${intl.formatMessage({
-          id: ETranslations.Limit_expire_days,
-        })}`,
-        value: ESwapLimitOrderExpiryStep.ONE_WEEK.toString(),
-      },
-      {
-        label: `1 ${intl.formatMessage({
-          id: ETranslations.Limit_expire_month,
-        })}`,
-        value: ESwapLimitOrderExpiryStep.ONE_MONTH.toString(),
-      },
-    ],
-    [intl],
-  );
-  const limitOrderPartiallyFillStepMap = useMemo(
-    () => [
-      {
-        label: intl.formatMessage({
-          id: ETranslations.Limit_info_partial_fill_enable,
-        }),
-        value: true,
-      },
-      {
-        label: intl.formatMessage({
-          id: ETranslations.Limit_info_partial_fill_disable,
-        }),
-        value: false,
-      },
-    ],
-    [intl],
-  );
+  const { limitOrderExpiryStepMap, limitOrderPartiallyFillStepMap } =
+    useSwapLimitConfigMaps();
+
+  const onValueChange = useCallback((value: string) => {
+    if (value === SWAP_ACCORDION_VALUE) {
+      Keyboard.dismiss();
+    }
+  }, []);
+
+  const allFeeFiatValueFormatter: INumberFormatProps = useMemo(() => {
+    return {
+      formatter: 'value',
+      formatterOptions: { currency: settingsPersistAtom.currencyInfo.symbol },
+    };
+  }, [settingsPersistAtom.currencyInfo.symbol]);
 
   const allCostFeeFormatValue = useMemo(() => {
     const oneKeyFeeAmountBN = new BigNumber(
@@ -268,30 +225,28 @@ const SwapQuoteResult = ({
       quoteResult?.fee?.estimatedFeeFiatValue ?? '0',
     );
     const allFeeFiatValue = estimatedFeeFiatValue.plus(oneKeyFeeFiatValue);
-    const allFeeFiatValueFormat = numberFormat(allFeeFiatValue.toFixed(), {
-      formatter: 'value',
-      formatterOptions: { currency: settingsPersistAtom.currencyInfo.symbol },
-    });
-    return `${allFeeFiatValueFormat as string}`;
+    const allFeeFiatValueFormat = numberFormat(
+      allFeeFiatValue.toFixed(),
+      allFeeFiatValueFormatter,
+    );
+    return `${allFeeFiatValueFormat}`;
   }, [
-    quoteResult?.fee?.estimatedFeeFiatValue,
-    quoteResult?.oneKeyFeeExtraInfo,
-    toToken?.price,
+    quoteResult?.oneKeyFeeExtraInfo?.oneKeyFeeAmount,
     quoteResult?.kind,
+    quoteResult?.fee?.estimatedFeeFiatValue,
+    toToken?.price,
     fromToken?.price,
-    settingsPersistAtom.currencyInfo.symbol,
+    allFeeFiatValueFormatter,
   ]);
 
   const limitNetworkFeeMarkQuestContent = useMemo(() => {
     const networkCostBuyAmountFormat = numberFormat(
       quoteResult?.networkCostBuyAmount ?? '0',
-      { formatter: 'balance' },
+      formatter,
     );
     const oneKeyFeeCostFormat = numberFormat(
       quoteResult?.oneKeyFeeExtraInfo?.oneKeyFeeAmount ?? '0',
-      {
-        formatter: 'balance',
-      },
+      formatter,
     );
 
     return (
@@ -302,9 +257,9 @@ const SwapQuoteResult = ({
               id: ETranslations.limit_order_info_network_cost,
             })}
           </SizableText>
-          <SizableText size="$bodyMdMedium">{`${
-            networkCostBuyAmountFormat as string
-          } ${quoteResult?.toTokenInfo?.symbol ?? ''}`}</SizableText>
+          <SizableText size="$bodyMdMedium">{`${networkCostBuyAmountFormat} ${
+            quoteResult?.toTokenInfo?.symbol ?? ''
+          }`}</SizableText>
         </XStack>
         <XStack justifyContent="space-between">
           <SizableText size="$bodyMdMedium" color="$textSubdued">
@@ -312,9 +267,7 @@ const SwapQuoteResult = ({
               id: ETranslations.provider_ios_popover_onekey_fee,
             })}
           </SizableText>
-          <SizableText size="$bodyMdMedium">{`${
-            oneKeyFeeCostFormat as string
-          } ${
+          <SizableText size="$bodyMdMedium">{`${oneKeyFeeCostFormat} ${
             quoteResult?.oneKeyFeeExtraInfo?.oneKeyFeeSymbol ?? ''
           }`}</SizableText>
         </XStack>
@@ -443,8 +396,8 @@ const SwapQuoteResult = ({
     !new BigNumber(fromAmountDebounce.value).isNaN()
   ) {
     return (
-      <Accordion type="single" collapsible>
-        <Accordion.Item value="1">
+      <Accordion type="single" collapsible onValueChange={onValueChange}>
+        <Accordion.Item value={SWAP_ACCORDION_VALUE}>
           <Accordion.Trigger
             unstyled
             borderWidth={0}

@@ -2,6 +2,7 @@ import { SUI_TYPE_ARG } from '@mysten/sui/utils';
 
 import { getNetworkIdsMap } from '../../src/config/networkIds';
 import {
+  BaseUSDC,
   EthereumCbBTC,
   EthereumDAI,
   EthereumPol,
@@ -38,6 +39,27 @@ const earnTradeDefaultSetUSDC = {
   'networkLogoURI': 'https://uni.onekey-asset.com/static/chain/eth.png',
 };
 
+const earnTradeDefaultSetBaseETH = {
+  'networkId': 'evm--8453',
+  'contractAddress': '',
+  'name': 'Ethereum',
+  'symbol': 'ETH',
+  'decimals': 18,
+  'isNative': true,
+  'networkLogoURI': 'https://uni.onekey-asset.com/static/chain/base.png',
+};
+
+const earnTradeDefaultSetBaseUSDC = {
+  'networkId': 'evm--8453',
+  'contractAddress': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+  'name': 'USD Coin',
+  'symbol': 'USDC',
+  'decimals': 6,
+  'isNative': false,
+  'isPopular': true,
+  'networkLogoURI': 'https://uni.onekey-asset.com/static/chain/base.png',
+};
+
 const earnTradeDefaultSetSOL = {
   'networkId': 'sol--101',
   'contractAddress': 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
@@ -58,11 +80,22 @@ const earnTradeDefaultSetSui = {
   'networkLogoURI': 'https://uni.onekey-asset.com/static/chain/sui.png',
 };
 
+const earnTradeDefaultSetBNB = {
+  'networkId': 'evm--56',
+  'contractAddress': '',
+  'name': 'BNB',
+  'symbol': 'BNB',
+  'decimals': 18,
+  'isNative': true,
+  'networkLogoURI': 'https://uni.onekey-asset.com/static/chain/bsc.png',
+};
+
 export const isSupportStaking = (symbol: string) =>
   [
     'BTC',
     'SBTC',
     'ETH',
+    'ADA',
     'SOL',
     'APT',
     'ATOM',
@@ -73,17 +106,33 @@ export const isSupportStaking = (symbol: string) =>
     'WETH',
     'CBBTC',
     'WBTC',
-    'USDF',
   ].includes(symbol.toUpperCase());
 
-export const earnMainnetNetworkIds = [
+export const earnMainnetNetworkIds: string[] = [
   getNetworkIdsMap().eth,
+  getNetworkIdsMap().base,
   getNetworkIdsMap().cosmoshub,
   getNetworkIdsMap().apt,
   getNetworkIdsMap().sol,
   getNetworkIdsMap().btc,
   getNetworkIdsMap().sui,
+  getNetworkIdsMap().bsc,
+  getNetworkIdsMap().ada,
 ];
+
+export const earnTestnetNetworkIds: string[] = [getNetworkIdsMap().hoodi];
+
+export function getEarnNetworkIds({
+  enableTestEndpoint,
+}: {
+  enableTestEndpoint?: boolean;
+}): string[] {
+  if (enableTestEndpoint) {
+    // Test environment: mainnet + testnet
+    return [...earnMainnetNetworkIds, ...earnTestnetNetworkIds];
+  }
+  return earnMainnetNetworkIds;
+}
 
 export function normalizeToEarnSymbol(
   symbol: string,
@@ -92,6 +141,7 @@ export function normalizeToEarnSymbol(
     'btc': 'BTC',
     'sbtc': 'SBTC',
     'eth': 'ETH',
+    'ada': 'ADA',
     'sol': 'SOL',
     'apt': 'APT',
     'atom': 'ATOM',
@@ -104,6 +154,7 @@ export function normalizeToEarnSymbol(
     'wbtc': 'WBTC',
     'usdf': 'USDf',
     'usde': 'USDe',
+    'lista': 'LISTA',
   };
   return symbolMap[symbol.toLowerCase()];
 }
@@ -116,9 +167,12 @@ export function normalizeToEarnProvider(
     'everstake': EEarnProviderEnum.Everstake,
     'babylon': EEarnProviderEnum.Babylon,
     'morpho': EEarnProviderEnum.Morpho,
+    'lista': EEarnProviderEnum.Lista,
+    'stakefish': EEarnProviderEnum.Stakefish,
     'falcon': EEarnProviderEnum.Falcon,
     'ethena': EEarnProviderEnum.Ethena,
     'momentum': EEarnProviderEnum.Momentum,
+    'staked': EEarnProviderEnum.Lista,
   };
   return providerMap[provider.toLowerCase()];
 }
@@ -165,6 +219,15 @@ export function getImportFromToken({
       swapTabSwitchType = ESwapTabSwitchType.SWAP;
       break;
     }
+    case networkIdsMap.base: {
+      if ([BaseUSDC.toLowerCase()].includes(tokenAddress.toLowerCase())) {
+        importFromToken = earnTradeDefaultSetBaseETH;
+      } else {
+        importFromToken = earnTradeDefaultSetBaseUSDC;
+      }
+      swapTabSwitchType = ESwapTabSwitchType.SWAP;
+      break;
+    }
     case networkIdsMap.sol: {
       importFromToken = earnTradeDefaultSetSOL;
       swapTabSwitchType = ESwapTabSwitchType.SWAP;
@@ -176,6 +239,10 @@ export function getImportFromToken({
       break;
     case networkIdsMap.sui:
       importFromToken = earnTradeDefaultSetSui;
+      swapTabSwitchType = ESwapTabSwitchType.SWAP;
+      break;
+    case networkIdsMap.bsc:
+      importFromToken = earnTradeDefaultSetBNB;
       swapTabSwitchType = ESwapTabSwitchType.SWAP;
       break;
     default:
@@ -198,17 +265,20 @@ export function getSymbolSupportedNetworks(): Record<
     'BTC': [networkIdsMap.btc],
     'SBTC': [networkIdsMap.sbtc],
     'ETH': [networkIdsMap.eth],
+    'ADA': [networkIdsMap.ada],
     'SOL': [networkIdsMap.sol],
     'APT': [networkIdsMap.apt],
     'ATOM': [networkIdsMap.cosmoshub],
     'POL': [networkIdsMap.eth],
-    'USDC': [networkIdsMap.eth, networkIdsMap.sui],
-    'USDT': [networkIdsMap.eth],
+    'USDC': [networkIdsMap.eth, networkIdsMap.sui, networkIdsMap.base],
+    'USDT': [networkIdsMap.eth, networkIdsMap.bsc],
     'DAI': [networkIdsMap.eth],
     'WETH': [networkIdsMap.eth],
     'cbBTC': [networkIdsMap.eth],
     'WBTC': [networkIdsMap.eth, networkIdsMap.sui],
     'USDf': [networkIdsMap.eth],
     'USDe': [networkIdsMap.eth],
+    'MORPHO': [networkIdsMap.eth],
+    'LISTA': [networkIdsMap.bsc],
   };
 }

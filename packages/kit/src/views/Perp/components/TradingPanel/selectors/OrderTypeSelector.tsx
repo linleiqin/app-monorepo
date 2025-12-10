@@ -10,11 +10,12 @@ interface IOrderTypeSelectorProps {
   value: 'market' | 'limit';
   onChange: (value: 'market' | 'limit') => void;
   disabled?: boolean;
+  isMobile?: boolean;
 }
 
 export const OrderTypeSelector = memo<IOrderTypeSelectorProps>(
   // eslint-disable-next-line react/prop-types
-  ({ value, onChange, disabled = false }) => {
+  ({ value, onChange, disabled = false, isMobile = false }) => {
     const intl = useIntl();
     const orderTypeOptions = useMemo(
       (): ISelectItem[] => [
@@ -39,13 +40,15 @@ export const OrderTypeSelector = memo<IOrderTypeSelectorProps>(
         value={value}
         onChange={onChange}
         disabled={disabled}
-        title="Order Type"
+        title={intl.formatMessage({
+          id: ETranslations.perp_trade_order_type,
+        })}
         renderTrigger={({ onPress, label, disabled: disabledTrigger }) => (
           <XStack
             cursor="pointer"
             onPress={onPress}
             disabled={disabledTrigger}
-            height={30}
+            height={isMobile ? 32 : 30}
             bg="$bgSubdued"
             borderRadius="$2"
             alignItems="center"
@@ -56,8 +59,8 @@ export const OrderTypeSelector = memo<IOrderTypeSelectorProps>(
             <SizableText size="$bodyMdMedium">{label}</SizableText>
             <Icon
               name="ChevronTriangleDownSmallOutline"
-              color="$icon"
-              size="$5"
+              color="$iconSubdued"
+              size="$4"
             />
           </XStack>
         )}

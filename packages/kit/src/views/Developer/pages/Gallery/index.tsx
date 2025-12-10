@@ -66,6 +66,12 @@ const DialogGallery = LazyLoadPage(
       '@onekeyhq/kit/src/views/Developer/pages/Gallery/Components/stories/Dialog'
     ),
 );
+const DiscoveryBrowserGallery = LazyLoadPage(
+  () =>
+    import(
+      '@onekeyhq/kit/src/views/Developer/pages/Gallery/Components/stories/DiscoveryBrowserGallery'
+    ),
+);
 const DividerGallery = LazyLoadPage(
   () =>
     import(
@@ -141,6 +147,18 @@ const InputGallery = LazyLoadPage(
   () =>
     import(
       '@onekeyhq/kit/src/views/Developer/pages/Gallery/Components/stories/Input'
+    ),
+);
+const IpRequestGallery = LazyLoadPage(
+  () =>
+    import(
+      '@onekeyhq/kit/src/views/Developer/pages/Gallery/Components/stories/IpRequest'
+    ),
+);
+const NetworkDoctorGallery = LazyLoadPage(
+  () =>
+    import(
+      '@onekeyhq/kit/src/views/Developer/pages/Gallery/Components/stories/NetworkDoctor'
     ),
 );
 const JotaiContextGallery = LazyLoadPage(
@@ -293,6 +311,12 @@ const SliderGallery = LazyLoadPage(
       '@onekeyhq/kit/src/views/Developer/pages/Gallery/Components/stories/Slider'
     ),
 );
+const SegmentSliderGallery = LazyLoadPage(
+  () =>
+    import(
+      '@onekeyhq/kit/src/views/Developer/pages/Gallery/Components/stories/SegmentSlider'
+    ),
+);
 const SortableListViewGallery = LazyLoadPage(
   () =>
     import(
@@ -435,6 +459,13 @@ const MarkdownGallery = LazyLoadPage(
     ),
 );
 
+const NetworkStatusBadgeGallery = LazyLoadPage(
+  () =>
+    import(
+      '@onekeyhq/kit/src/views/Developer/pages/Gallery/Components/stories/NetworkStatusBadge'
+    ),
+);
+
 const NotificationGallery = LazyLoadPage(
   () =>
     import(
@@ -491,6 +522,12 @@ const PerpGallery = LazyLoadPage(
     ),
 );
 
+const CloudBackupGallery = LazyLoadPage(
+  () =>
+    import(
+      '@onekeyhq/kit/src/views/Developer/pages/Gallery/Components/stories/CloudBackupGallery'
+    ),
+);
 const TradingViewGallery = LazyLoadPage(
   () =>
     import(
@@ -536,6 +573,13 @@ const AccordionGallery = LazyLoadPage(
   () =>
     import(
       '@onekeyhq/kit/src/views/Developer/pages/Gallery/Components/stories/AccordionGallery'
+    ),
+);
+
+const AuthGallery = LazyLoadPage(
+  () =>
+    import(
+      '@onekeyhq/kit/src/views/Developer/pages/Gallery/Components/stories/AuthGallery'
     ),
 );
 
@@ -641,6 +685,13 @@ const CarouselGallery = LazyLoadPage(
     ),
 );
 
+const PlaygroundGallery = LazyLoadPage(
+  () =>
+    import(
+      '@onekeyhq/kit/src/views/Developer/pages/Gallery/Components/stories/playground/index'
+    ),
+);
+
 export const galleryScreenList: {
   name: EGalleryRoutes;
   component: ComponentType;
@@ -676,6 +727,11 @@ export const galleryScreenList: {
   { name: EGalleryRoutes.ComponentBadge, component: BadgeGallery },
   { name: EGalleryRoutes.ComponentBreadcrumb, component: BreadcrumbGallery },
   { name: EGalleryRoutes.ComponentInput, component: InputGallery },
+  { name: EGalleryRoutes.ComponentIpRequest, component: IpRequestGallery },
+  {
+    name: EGalleryRoutes.ComponentNetworkDoctor,
+    component: NetworkDoctorGallery,
+  },
   { name: EGalleryRoutes.ComponentDialog, component: DialogGallery },
   { name: EGalleryRoutes.ComponentEmpty, component: EmptyGallery },
   { name: EGalleryRoutes.ComponentSend, component: SendGallery },
@@ -735,6 +791,10 @@ export const galleryScreenList: {
   { name: EGalleryRoutes.ComponentTextArea, component: TextAreaGallery },
   { name: EGalleryRoutes.ComponentSlider, component: SliderGallery },
   {
+    name: EGalleryRoutes.ComponentSegmentSlider,
+    component: SegmentSliderGallery,
+  },
+  {
     name: EGalleryRoutes.ComponentNavigation,
     component: DemoRootApp,
     // options: { headerShown: false },
@@ -744,6 +804,10 @@ export const galleryScreenList: {
     component: SegmentControlGallery,
   },
   { name: EGalleryRoutes.ComponentAlert, component: AlertGallery },
+  {
+    name: EGalleryRoutes.ComponentDiscoveryBrowser,
+    component: DiscoveryBrowserGallery,
+  },
   { name: EGalleryRoutes.ComponentDivider, component: DividerGallery },
   { name: EGalleryRoutes.ComponentScrollView, component: ScrollViewGallery },
   {
@@ -826,6 +890,10 @@ export const galleryScreenList: {
     component: MarkdownGallery,
   },
   {
+    name: EGalleryRoutes.ComponentNetworkStatusBadge,
+    component: NetworkStatusBadgeGallery,
+  },
+  {
     name: EGalleryRoutes.ComponentNotification,
     component: NotificationGallery,
   },
@@ -856,6 +924,10 @@ export const galleryScreenList: {
   {
     name: EGalleryRoutes.ComponentPerp,
     component: PerpGallery,
+  },
+  {
+    name: EGalleryRoutes.ComponentCloudBackup,
+    component: CloudBackupGallery,
   },
   {
     name: EGalleryRoutes.ComponentOrderBook,
@@ -937,5 +1009,13 @@ export const galleryScreenList: {
   {
     name: EGalleryRoutes.ComponentCarousel,
     component: CarouselGallery,
+  },
+  {
+    name: EGalleryRoutes.ComponentPlayground,
+    component: PlaygroundGallery,
+  },
+  {
+    name: EGalleryRoutes.ComponentAuth,
+    component: AuthGallery,
   },
 ];

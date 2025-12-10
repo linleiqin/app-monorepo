@@ -122,6 +122,7 @@ export function HyperlinkText({
                             EQRCodeHandlerNames.marketDetail,
                             EQRCodeHandlerNames.sendProtection,
                             EQRCodeHandlerNames.rewardCenter,
+                            EQRCodeHandlerNames.updatePreview,
                           ],
                           qrWalletScene: false,
                           autoHandleResult,
@@ -155,8 +156,8 @@ export function HyperlinkText({
               bold: ([string]) => (
                 <SizableText
                   {...basicTextProps}
-                  size="$headingLg"
                   {...boldTextProps}
+                  fontWeight="600"
                 >
                   {string}
                 </SizableText>

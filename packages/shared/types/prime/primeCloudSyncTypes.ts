@@ -51,6 +51,7 @@ export type IStartServerSyncFlowParams = {
   setUndefinedTimeToNow?: boolean;
   throwError?: boolean;
   callerName?: string;
+  noDebounceUpload?: boolean;
 };
 
 export type ICloudSyncServerItem = {
@@ -61,7 +62,7 @@ export type ICloudSyncServerItem = {
   pwdHash: string; // TODO server should return pwdHash
   key: string;
   // nonce: number;
-  // userId: string; privy user id
+  // userId: string; supabase user id
 };
 export type ICloudSyncServerItemByDownloaded = {
   data: string;

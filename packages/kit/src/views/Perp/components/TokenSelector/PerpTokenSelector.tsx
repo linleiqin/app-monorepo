@@ -1,9 +1,10 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 
 import { useIntl } from 'react-intl';
 
 import {
   Badge,
+  DebugRenderTracker,
   Icon,
   ListView,
   Popover,
@@ -14,14 +15,86 @@ import {
   YStack,
   usePopoverContext,
 } from '@onekeyhq/components';
+import { DelayedRender } from '@onekeyhq/components/src/hocs/DelayedRender';
 import { Token } from '@onekeyhq/kit/src/components/Token';
+import useAppNavigation from '@onekeyhq/kit/src/hooks/useAppNavigation';
 import { useThemeVariant } from '@onekeyhq/kit/src/hooks/useThemeVariant';
-import { useCurrentTokenAtom } from '@onekeyhq/kit/src/states/jotai/contexts/hyperliquid';
+import { useHyperliquidActions } from '@onekeyhq/kit/src/states/jotai/contexts/hyperliquid';
+import {
+  usePerpsAllAssetCtxsAtom,
+  usePerpsAllAssetsFilteredAtom,
+} from '@onekeyhq/kit/src/states/jotai/contexts/hyperliquid/atoms';
+import {
+  usePerpTokenSortConfigPersistAtom,
+  usePerpsActiveAssetAtom,
+} from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
+import { EModalRoutes } from '@onekeyhq/shared/src/routes';
+import { EModalPerpRoutes } from '@onekeyhq/shared/src/routes/perp';
+import {
+  getHyperliquidTokenImageUrl,
+  sortPerpsAssetIndices,
+} from '@onekeyhq/shared/src/utils/perpsUtils';
 
 import { usePerpTokenSelector } from '../../hooks';
 
 import { PerpTokenSelectorRow } from './PerpTokenSelectorRow';
+import { SortableHeaderCell } from './SortableHeaderCell';
+
+function TokenListHeader() {
+  const intl = useIntl();
+  return (
+    <XStack
+      px="$5"
+      py="$3"
+      borderBottomWidth="$px"
+      borderBottomColor="$borderSubdued"
+    >
+      <SortableHeaderCell
+        field="name"
+        label={intl.formatMessage({
+          id: ETranslations.perp_token_selector_asset,
+        })}
+        width={150}
+      />
+      <SortableHeaderCell
+        field="markPrice"
+        label={intl.formatMessage({
+          id: ETranslations.perp_token_selector_last_price,
+        })}
+        width={100}
+      />
+      <SortableHeaderCell
+        field="change24hPercent"
+        label={intl.formatMessage({
+          id: ETranslations.perp_token_selector_24h_change,
+        })}
+        width={120}
+      />
+      <SortableHeaderCell
+        field="fundingRate"
+        label={intl.formatMessage({
+          id: ETranslations.perp_position_funding,
+        })}
+        width={100}
+      />
+      <SortableHeaderCell
+        field="volume24h"
+        label={intl.formatMessage({
+          id: ETranslations.perp_token_selector_volume,
+        })}
+        width={100}
+      />
+      <SortableHeaderCell
+        field="openInterest"
+        label={intl.formatMessage({
+          id: ETranslations.perp_token_bar_open_Interest,
+        })}
+        width={110}
+      />
+    </XStack>
+  );
+}
 
 function BasePerpTokenSelectorContent({
   onLoadingChange,
@@ -29,29 +102,44 @@ function BasePerpTokenSelectorContent({
   onLoadingChange: (isLoading: boolean) => void;
 }) {
   const intl = useIntl();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { searchQuery, setSearchQuery, refreshAllAssets } =
+    usePerpTokenSelector();
   const { closePopover } = usePopoverContext();
-  const {
-    searchQuery,
-    setSearchQuery,
-    filteredTokens,
-    selectToken,
-    isLoading,
-  } = usePerpTokenSelector();
+  const actions = useHyperliquidActions();
 
-  useEffect(() => {
-    onLoadingChange(isLoading);
-  }, [isLoading, onLoadingChange]);
+  const handleSelectToken = useCallback(
+    async (symbol: string) => {
+      try {
+        onLoadingChange(true);
+        void closePopover?.();
+        await actions.current.changeActiveAsset({ coin: symbol });
+      } catch (error) {
+        console.error('Failed to switch token:', error);
+      } finally {
+        onLoadingChange(false);
+      }
+    },
+    [closePopover, actions, onLoadingChange],
+  );
 
-  const handleSelectToken = async (symbol: string) => {
-    try {
-      await selectToken(symbol);
-      await closePopover?.();
-    } catch (error) {
-      console.error('Failed to switch token:', error);
-    }
-  };
+  const [{ assets }] = usePerpsAllAssetsFilteredAtom();
+  const [{ assetCtxs }] = usePerpsAllAssetCtxsAtom();
+  const [sortConfig] = usePerpTokenSortConfigPersistAtom();
 
-  return (
+  const mockedListData = useMemo(() => {
+    const sortedIndices = sortPerpsAssetIndices({
+      assets,
+      assetCtxs,
+      sortField: sortConfig?.field ?? '',
+      sortDirection: sortConfig?.direction ?? 'desc',
+    });
+    return sortedIndices.map((originalIndex) => ({
+      index: originalIndex,
+    }));
+  }, [assets, assetCtxs, sortConfig]);
+
+  const content = (
     <YStack>
       <YStack gap="$2">
         <XStack px="$5" pt="$5">
@@ -60,71 +148,29 @@ function BasePerpTokenSelectorContent({
               borderRadius: '$2',
             }}
             autoFocus
-            placeholder="Search"
-            value={searchQuery}
+            placeholder={intl.formatMessage({
+              id: ETranslations.global_search_asset,
+            })}
             onChangeText={setSearchQuery}
+            // value={searchQuery} // keep value undefined to make debounce works
           />
         </XStack>
-        <XStack
-          px="$5"
-          py="$3"
-          borderBottomWidth="$px"
-          borderBottomColor="$borderSubdued"
-        >
-          <XStack width={150} justifyContent="flex-start">
-            <SizableText size="$bodySm" color="$textSubdued">
-              {intl.formatMessage({
-                id: ETranslations.perp_token_selector_asset,
-              })}
-            </SizableText>
-          </XStack>
-          <XStack width={80} justifyContent="flex-start">
-            <SizableText size="$bodySm" color="$textSubdued">
-              {intl.formatMessage({
-                id: ETranslations.perp_token_selector_last_price,
-              })}
-            </SizableText>
-          </XStack>
-          <XStack width={130} justifyContent="flex-start">
-            <SizableText size="$bodySm" color="$textSubdued">
-              {intl.formatMessage({
-                id: ETranslations.perp_token_selector_24h_change,
-              })}
-            </SizableText>
-          </XStack>
-          <XStack width={100} justifyContent="flex-start">
-            <SizableText size="$bodySm" color="$textSubdued">
-              {intl.formatMessage({
-                id: ETranslations.perp_position_funding,
-              })}
-            </SizableText>
-          </XStack>
-          <XStack width={100} justifyContent="flex-start">
-            <SizableText size="$bodySm" color="$textSubdued">
-              {intl.formatMessage({
-                id: ETranslations.perp_token_selector_volume,
-              })}
-            </SizableText>
-          </XStack>
-          <XStack flex={1} justifyContent="flex-end">
-            <SizableText size="$bodySm" color="$textSubdued">
-              {intl.formatMessage({
-                id: ETranslations.perp_token_bar_open_Interest,
-              })}
-            </SizableText>
-          </XStack>
-        </XStack>
+        {/* <Button onPress={refreshAllAssets}>{filteredTokensLength}</Button> */}
+        <TokenListHeader />
       </YStack>
 
       {/* Token List */}
       <YStack flex={1} height={300}>
         <ListView
           useFlashList
-          data={filteredTokens.filter((token) => !token.isDelisted)}
-          renderItem={({ item: token }) => (
+          contentContainerStyle={{
+            paddingBottom: 10,
+          }}
+          data={mockedListData}
+          renderItem={({ item: mockedToken }) => (
             <PerpTokenSelectorRow
-              token={token}
-              onPress={() => handleSelectToken(token.name)}
+              mockedToken={mockedToken}
+              onPress={(name) => handleSelectToken(name)}
             />
           )}
           ListEmptyComponent={
@@ -144,6 +190,11 @@ function BasePerpTokenSelectorContent({
       </YStack>
     </YStack>
   );
+  return (
+    <DebugRenderTracker position="top-right" name="PerpTokenSelectorContent">
+      {content}
+    </DebugRenderTracker>
+  );
 }
 
 function PerpTokenSelectorContent({
@@ -154,7 +205,12 @@ function PerpTokenSelectorContent({
   onLoadingChange: (isLoading: boolean) => void;
 }) {
   return isOpen ? (
-    <BasePerpTokenSelectorContent onLoadingChange={onLoadingChange} />
+    <DelayedRender
+      // wait popover open animation done, otherwise the list layout will be wrong
+      delay={200}
+    >
+      <BasePerpTokenSelectorContent onLoadingChange={onLoadingChange} />
+    </DelayedRender>
   ) : null;
 }
 
@@ -163,14 +219,15 @@ const PerpTokenSelectorContentMemo = memo(PerpTokenSelectorContent);
 function BasePerpTokenSelector() {
   const themeVariant = useThemeVariant();
   const [isOpen, setIsOpen] = useState(false);
-  const [currentToken] = useCurrentTokenAtom();
+  const [currentToken] = usePerpsActiveAssetAtom();
+  const { coin } = currentToken;
   const [isLoading, setIsLoading] = useState(false);
-  return useMemo(
+  const content = useMemo(
     () => (
       <Popover
         title="Select Token"
         floatingPanelProps={{
-          width: 680,
+          width: 700,
         }}
         open={isOpen}
         onOpenChange={setIsOpen}
@@ -195,12 +252,12 @@ function BasePerpTokenSelector() {
               size="md"
               borderRadius="$full"
               bg={themeVariant === 'light' ? null : '$bgInverse'}
-              tokenImageUri={`https://app.hyperliquid.xyz/coins/${currentToken}.svg`}
+              tokenImageUri={getHyperliquidTokenImageUrl(coin)}
               fallbackIcon="CryptoCoinOutline"
             />
 
             {/* Token Name */}
-            <SizableText size="$heading2xl">{currentToken}</SizableText>
+            <SizableText size="$heading2xl">{coin}USDC</SizableText>
             <Icon name="ChevronBottomOutline" size="$4" />
             {isLoading ? <Spinner size="small" /> : null}
           </Badge>
@@ -213,8 +270,66 @@ function BasePerpTokenSelector() {
         )}
       />
     ),
-    [isOpen, currentToken, isLoading, themeVariant],
+    [isOpen, coin, isLoading, themeVariant],
+  );
+  return (
+    <DebugRenderTracker name="PerpTokenSelector">{content}</DebugRenderTracker>
   );
 }
 
 export const PerpTokenSelector = memo(BasePerpTokenSelector);
+
+const BasePerpTokenSelectorMobileView = memo(
+  ({
+    onPressTokenSelector,
+    coin,
+  }: {
+    onPressTokenSelector: () => void;
+    coin: string;
+  }) => {
+    const intl = useIntl();
+
+    return (
+      <DebugRenderTracker name="BasePerpTokenSelectorMobileView">
+        <XStack
+          gap="$1"
+          bg="$bgApp"
+          onPress={onPressTokenSelector}
+          justifyContent="center"
+          alignItems="center"
+        >
+          <SizableText size="$headingXl">{coin}USDC</SizableText>
+          <Badge radius="$1" bg="$bgSubdued" px="$1" py={0}>
+            <SizableText color="$textSubdued" fontSize={11}>
+              {intl.formatMessage({
+                id: ETranslations.perp_label_perp,
+              })}
+            </SizableText>
+          </Badge>
+          <Icon name="ChevronTriangleDownSmallOutline" size="$5" />
+        </XStack>
+      </DebugRenderTracker>
+    );
+  },
+);
+BasePerpTokenSelectorMobileView.displayName = 'BasePerpTokenSelectorMobileView';
+function BasePerpTokenSelectorMobile() {
+  const navigation = useAppNavigation();
+
+  const [asset] = usePerpsActiveAssetAtom();
+  const coin = asset?.coin || '';
+  const onPressTokenSelector = useCallback(() => {
+    navigation.pushModal(EModalRoutes.PerpModal, {
+      screen: EModalPerpRoutes.MobileTokenSelector,
+    });
+  }, [navigation]);
+
+  return (
+    <BasePerpTokenSelectorMobileView
+      onPressTokenSelector={onPressTokenSelector}
+      coin={coin}
+    />
+  );
+}
+
+export const PerpTokenSelectorMobile = memo(BasePerpTokenSelectorMobile);

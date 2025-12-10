@@ -1,4 +1,4 @@
-import { Stack, useOrientation, usePropsAndStyle } from '@onekeyhq/components';
+import { Stack, usePropsAndStyle } from '@onekeyhq/components';
 import type { IStackStyle } from '@onekeyhq/components';
 import platformEnv from '@onekeyhq/shared/src/platformEnv';
 
@@ -21,7 +21,6 @@ interface IBaseTradingViewProps {
    */
   tokenAddress?: string;
   networkId?: string;
-  tradingViewUrl?: string;
   interval?: string;
   timeFrom?: number;
   timeTo?: number;
@@ -39,7 +38,6 @@ export function TradingViewV1(props: ITradingViewProps & WebViewProps) {
     // Strip out TradingViewV2-specific optional props so they are not forwarded to the inner WebView.
     tokenAddress: _tokenAddress,
     networkId: _networkId,
-    tradingViewUrl: _tradingViewUrl,
     interval: _interval,
     timeFrom: _timeFrom,
     timeTo: _timeTo,
@@ -51,17 +49,11 @@ export function TradingViewV1(props: ITradingViewProps & WebViewProps) {
     identifier,
     baseToken,
   });
-  const isLandscape = useOrientation();
-  const isIPadPortrait = platformEnv.isNativeIOSPad && !isLandscape;
 
   return (
     <Stack
       position="relative"
-      paddingBottom={
-        (platformEnv.isNative && !platformEnv.isNativeIOSPad) || isIPadPortrait
-          ? 60
-          : 0
-      }
+      paddingBottom={platformEnv.isNative ? 60 : 0}
       style={style as ViewStyle}
     >
       <WebView
@@ -69,13 +61,13 @@ export function TradingViewV1(props: ITradingViewProps & WebViewProps) {
         style={{ flex: 1 }}
         {...otherProps}
       />
-      {platformEnv.isNativeIOS || isIPadPortrait ? (
+      {platformEnv.isNativeIOS ? (
         <Stack
           position="absolute"
           left={0}
           top={0}
           bottom={0}
-          width={isIPadPortrait ? 50 : 40}
+          width={platformEnv.isNativeIOSPad ? 50 : 40}
           zIndex={1}
           pointerEvents="auto"
         />

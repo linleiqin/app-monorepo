@@ -2,10 +2,10 @@ import { memo, useCallback, useMemo } from 'react';
 
 import { type IProps } from '.';
 
+import { isNil } from 'lodash';
 import { useIntl } from 'react-intl';
 
 import {
-  Alert,
   DebugRenderTracker,
   Divider,
   Icon,
@@ -22,6 +22,7 @@ import { ReviewControl } from '@onekeyhq/kit/src/components/ReviewControl';
 import { useAccountData } from '@onekeyhq/kit/src/hooks/useAccountData';
 import useAppNavigation from '@onekeyhq/kit/src/hooks/useAppNavigation';
 import { useCopyAccountAddress } from '@onekeyhq/kit/src/hooks/useCopyAccountAddress';
+import { useDisplayAccountAddress } from '@onekeyhq/kit/src/hooks/useDisplayAccountAddress';
 import { usePromiseResult } from '@onekeyhq/kit/src/hooks/usePromiseResult';
 import { useReceiveToken } from '@onekeyhq/kit/src/hooks/useReceiveToken';
 import { useUserWalletProfile } from '@onekeyhq/kit/src/hooks/useUserWalletProfile';
@@ -92,43 +93,59 @@ function TokenDetailsHeader(props: IProps) {
   });
 
   const { isFocused } = useTabIsRefreshingFocused();
-  const { result: tokenDetailsResult } = usePromiseResult(
-    async () => {
-      const tokensDetails =
-        await backgroundApiProxy.serviceToken.fetchTokensDetails({
+  const { result: tokenDetailsResult, isLoading: isLoadingTokenDetails } =
+    usePromiseResult(
+      async () => {
+        const tokensDetails =
+          await backgroundApiProxy.serviceToken.fetchTokensDetails({
+            accountId,
+            networkId,
+            contractList: [tokenInfo.address],
+          });
+        updateTokenMetadata({
+          price: tokensDetails[0]?.price ?? 0,
+          priceChange24h: tokensDetails[0]?.price24h ?? 0,
+          coingeckoId: tokensDetails[0]?.info?.coingeckoId ?? '',
+        });
+
+        const data = tokensDetails[0];
+
+        if (isNil(data.fiatValue)) {
+          data.fiatValue = '0';
+        }
+
+        updateTokenDetails({
           accountId,
           networkId,
-          contractList: [tokenInfo.address],
+          isInit: true,
+          data,
         });
-      updateTokenMetadata({
-        price: tokensDetails[0]?.price ?? 0,
-        priceChange24h: tokensDetails[0]?.price24h ?? 0,
-        coingeckoId: tokensDetails[0]?.info?.coingeckoId ?? '',
-      });
-      updateTokenDetails({
+        return tokensDetails[0];
+      },
+      [
         accountId,
         networkId,
-        isInit: true,
-        data: tokensDetails[0],
-      });
-      return tokensDetails[0];
-    },
-    [
-      accountId,
-      networkId,
-      tokenInfo.address,
-      updateTokenMetadata,
-      updateTokenDetails,
-    ],
-    {
-      overrideIsFocused: (isPageFocused) =>
-        isPageFocused && (isTabView ? isFocused : true),
-      debounced: POLLING_DEBOUNCE_INTERVAL,
-    },
-  );
+        tokenInfo.address,
+        updateTokenMetadata,
+        updateTokenDetails,
+      ],
+      {
+        watchLoading: true,
+        overrideIsFocused: (isPageFocused) =>
+          isPageFocused && (isTabView ? isFocused : true),
+        debounced: POLLING_DEBOUNCE_INTERVAL,
+      },
+    );
 
   const tokenDetails =
     tokenDetailsResult ?? tokenDetailsContext[tokenDetailsKey]?.data;
+
+  const showLoadingState = useMemo(() => {
+    if (tokenDetailsContext[tokenDetailsKey]?.init) {
+      return false;
+    }
+    return isLoadingTokenDetails;
+  }, [tokenDetailsContext, tokenDetailsKey, isLoadingTokenDetails]);
 
   const { isSoftwareWalletOnlyUser } = useUserWalletProfile();
 
@@ -198,18 +215,23 @@ function TokenDetailsHeader(props: IProps) {
         isNFT: false,
         token: tokenDetails?.info ?? tokenInfo,
         isAllNetworks,
+        disableAddressTypeSelector: true,
+        showAddressTypeSelectorWhenDisabled: !accountUtils.isOthersWallet({
+          walletId,
+        }),
       },
     });
   }, [
-    accountId,
-    isAllNetworks,
-    navigation,
+    wallet?.type,
     network?.id,
+    isSoftwareWalletOnlyUser,
+    navigation,
     networkId,
+    accountId,
     tokenDetails?.info,
     tokenInfo,
-    wallet?.type,
-    isSoftwareWalletOnlyUser,
+    isAllNetworks,
+    walletId,
   ]);
 
   const isReceiveDisabled = useMemo(
@@ -222,53 +244,53 @@ function TokenDetailsHeader(props: IProps) {
     [accountId],
   );
 
+  const { hideAccountAddress } = useDisplayAccountAddress({ networkId });
   const shouldShowAddressBlock = useMemo(() => {
     if (networkUtils.isLightningNetworkByNetworkId(networkId)) return false;
 
     if (wallet?.type === WALLET_TYPE_HD && !wallet?.backuped) return false;
 
+    if (hideAccountAddress) return false;
+
     return true;
-  }, [wallet?.type, networkId, wallet?.backuped]);
+  }, [wallet?.type, networkId, wallet?.backuped, hideAccountAddress]);
 
   return (
-    <DebugRenderTracker timesBadgePosition="top-right">
+    <DebugRenderTracker position="top-right" name="TokenDetailsHeader">
       <>
-        {isAllNetworks &&
-        !tokenInfo.isAggregateToken &&
-        tokenInfo.isSameSymbolWithAggregateToken ? (
-          <Alert
-            icon="InfoCircleOutline"
-            type="critical"
-            title={intl.formatMessage({
-              id: ETranslations.identical_name_asset_alert,
-            })}
-            fullBleed
-          />
-        ) : null}
         {/* Overview */}
         <Stack px="$5" py="$5">
           {/* Balance */}
           <XStack alignItems="center" mb="$5">
             <Stack flex={1}>
-              <NumberSizeableTextWrapper
-                hideValue
-                size="$heading4xl"
-                formatter="balance"
-                fontWeight="bold"
-              >
-                {tokenDetails?.balanceParsed ?? '0'}
-              </NumberSizeableTextWrapper>
-              <NumberSizeableTextWrapper
-                hideValue
-                formatter="value"
-                formatterOptions={{
-                  currency: settings.currencyInfo.symbol,
-                }}
-                color="$textSubdued"
-                size="$bodyLg"
-              >
-                {tokenDetails?.fiatValue ?? '0'}
-              </NumberSizeableTextWrapper>
+              {showLoadingState ? (
+                <Skeleton.Group show>
+                  <Skeleton.Heading4Xl />
+                  <Skeleton.BodyLg />
+                </Skeleton.Group>
+              ) : (
+                <>
+                  <NumberSizeableTextWrapper
+                    hideValue
+                    size="$heading4xl"
+                    formatter="balance"
+                    fontWeight="bold"
+                  >
+                    {tokenDetails?.balanceParsed ?? '0'}
+                  </NumberSizeableTextWrapper>
+                  <NumberSizeableTextWrapper
+                    hideValue
+                    formatter="value"
+                    formatterOptions={{
+                      currency: settings.currencyInfo.symbol,
+                    }}
+                    color="$textSubdued"
+                    size="$bodyLg"
+                  >
+                    {tokenDetails?.fiatValue ?? '0'}
+                  </NumberSizeableTextWrapper>
+                </>
+              )}
             </Stack>
           </XStack>
           {/* Actions */}
@@ -312,13 +334,12 @@ function TokenDetailsHeader(props: IProps) {
               trackID="wallet-token-details-bridge"
             />
             <WalletActionEarn
-              accountId={accountId}
               tokenAddress={tokenInfo.address}
               networkId={networkId}
-              indexedAccountId={indexedAccountId}
               walletType={wallet?.type}
               source="tokenDetails"
               trackID="wallet-token-details-stake"
+              logoURI={tokenInfo.logoURI}
             />
             <ReviewControl>
               <ActionBuy
@@ -378,6 +399,7 @@ function TokenDetailsHeader(props: IProps) {
                 <SizableText
                   size="$bodyMd"
                   color="$text"
+                  flexShrink={1}
                   $platform-web={{
                     wordBreak: 'break-word',
                   }}

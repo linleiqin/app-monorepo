@@ -9,10 +9,13 @@ import { OneKeyLocalError } from '@onekeyhq/shared/src/errors';
 import { type IModalSendParamList } from '@onekeyhq/shared/src/routes';
 import networkUtils from '@onekeyhq/shared/src/utils/networkUtils';
 import { EMessageTypesEth } from '@onekeyhq/shared/types/message';
-import type {
-  EApproveType,
-  IStakeTxResponse,
-  IStakingInfo,
+import {
+  type EApproveType,
+  EInternalDappEnum,
+  EInternalStakingAction,
+  type IEarnPermit2ApproveSignData,
+  type IStakeTxResponse,
+  type IStakingInfo,
 } from '@onekeyhq/shared/types/staking';
 import type { ISendTxOnSuccessData } from '@onekeyhq/shared/types/tx';
 
@@ -76,10 +79,14 @@ export function useUniversalStake({
       protocolVault,
       approveType,
       permitSignature,
+      unsignedMessage,
+      message,
       provider,
       stakingInfo,
       onSuccess,
       onFail,
+      // Stakefish specific param
+      validatorPublicKey,
     }: {
       amount: string;
       symbol: string;
@@ -88,10 +95,16 @@ export function useUniversalStake({
       protocolVault?: string;
       approveType?: EApproveType;
       permitSignature?: string;
+      // Permit2 sign data for Morpho
+      unsignedMessage?: IEarnPermit2ApproveSignData;
+      // Stakefish: original message for permit signature
+      message?: string;
       provider: string;
       stakingInfo?: IStakingInfo;
       onSuccess?: IModalSendParamList['SendConfirm']['onSuccess'];
       onFail?: IModalSendParamList['SendConfirm']['onFail'];
+      // Stakefish specific param
+      validatorPublicKey?: string;
     }) => {
       const stakeTx =
         await backgroundApiProxy.serviceStaking.buildStakeTransaction({
@@ -105,13 +118,20 @@ export function useUniversalStake({
           protocolVault,
           approveType,
           permitSignature,
+          unsignedMessage,
+          message,
+          // Stakefish specific param
+          validatorPublicKey,
         });
 
-      const encodedTx = await backgroundApiProxy.serviceStaking.buildEarnTx({
-        networkId,
-        accountId,
-        tx: stakeTx.tx,
-      });
+      const encodedTx =
+        await backgroundApiProxy.serviceStaking.buildInternalDappTx({
+          networkId,
+          accountId,
+          tx: stakeTx.tx,
+          internalDappType: EInternalDappEnum.Staking,
+          stakingAction: EInternalStakingAction.Stake,
+        });
 
       let useFeeInTx;
       let feeInfoEditable;
@@ -170,6 +190,9 @@ export function useUniversalWithdraw({
       stakingInfo,
       onSuccess,
       onFail,
+      // Signature and message for withdraw all
+      withdrawSignature,
+      withdrawMessage,
     }: {
       amount: string;
       symbol: string;
@@ -180,6 +203,9 @@ export function useUniversalWithdraw({
       stakingInfo?: IStakingInfo;
       onSuccess?: IModalSendParamList['SendConfirm']['onSuccess'];
       onFail?: IModalSendParamList['SendConfirm']['onFail'];
+      // Signature and message for withdraw all
+      withdrawSignature?: string;
+      withdrawMessage?: string;
     }) => {
       let stakeTx: IStakeTxResponse | undefined;
       const stakingConfig =
@@ -240,13 +266,19 @@ export function useUniversalWithdraw({
             provider,
             protocolVault,
             withdrawAll,
+            // Pass signature and message for withdraw all
+            signature: withdrawSignature,
+            message: withdrawMessage,
           });
       }
-      const encodedTx = await backgroundApiProxy.serviceStaking.buildEarnTx({
-        networkId,
-        accountId,
-        tx: stakeTx.tx,
-      });
+      const encodedTx =
+        await backgroundApiProxy.serviceStaking.buildInternalDappTx({
+          networkId,
+          accountId,
+          tx: stakeTx.tx,
+          internalDappType: EInternalDappEnum.Staking,
+          stakingAction: EInternalStakingAction.Withdraw,
+        });
       let useFeeInTx;
       let feeInfoEditable;
       if (
@@ -333,6 +365,8 @@ export function useUniversalClaim({
       vault: string;
       onSuccess?: IModalSendParamList['SendConfirm']['onSuccess'];
       onFail?: IModalSendParamList['SendConfirm']['onFail'];
+      portfolioSymbol?: string;
+      portfolioRewardSymbol?: string;
     }) => {
       const continueClaim = async () => {
         const stakeTx =
@@ -346,11 +380,14 @@ export function useUniversalClaim({
             claimTokenAddress,
             vault,
           });
-        const encodedTx = await backgroundApiProxy.serviceStaking.buildEarnTx({
-          networkId,
-          accountId,
-          tx: stakeTx.tx,
-        });
+        const encodedTx =
+          await backgroundApiProxy.serviceStaking.buildInternalDappTx({
+            networkId,
+            accountId,
+            tx: stakeTx.tx,
+            internalDappType: EInternalDappEnum.Staking,
+            stakingAction: EInternalStakingAction.Claim,
+          });
         let useFeeInTx;
         let feeInfoEditable;
         if (
@@ -398,16 +435,19 @@ export function useUniversalClaim({
             identity,
             accountAddress: account.address,
           });
-        const tokenFiatValueBN = BigNumber(
-          estimateFeeResp.token.price,
-        ).multipliedBy(amount);
-        if (tokenFiatValueBN.lt(estimateFeeResp.feeFiatValue)) {
-          showClaimEstimateGasAlert({
-            claimTokenFiatValue: tokenFiatValueBN.toFixed(),
-            estFiatValue: estimateFeeResp.feeFiatValue,
-            onConfirm: continueClaim,
-          });
-          return;
+        // Only check gas fee vs claim value if token price is available
+        if (estimateFeeResp.token?.price) {
+          const tokenFiatValueBN = BigNumber(
+            estimateFeeResp.token.price,
+          ).multipliedBy(amount);
+          if (tokenFiatValueBN.lt(estimateFeeResp.feeFiatValue)) {
+            showClaimEstimateGasAlert({
+              claimTokenFiatValue: tokenFiatValueBN.toFixed(),
+              estFiatValue: estimateFeeResp.feeFiatValue,
+              onConfirm: continueClaim,
+            });
+            return;
+          }
         }
       }
       await continueClaim();

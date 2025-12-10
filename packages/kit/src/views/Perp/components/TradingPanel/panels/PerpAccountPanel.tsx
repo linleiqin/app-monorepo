@@ -1,31 +1,37 @@
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useMemo } from 'react';
 
 import { BigNumber } from 'bignumber.js';
 import { useIntl } from 'react-intl';
 
 import {
   Button,
-  Icon,
-  NumberSizeableText,
+  DashText,
+  DebugRenderTracker,
+  IconButton,
   SizableText,
-  Skeleton,
-  Spinner,
+  Tooltip,
   XStack,
   YStack,
+  useClipboard,
+  useInTabDialog,
 } from '@onekeyhq/components';
+import { openHyperLiquidExplorerUrl } from '@onekeyhq/kit/src/utils/explorerUtils';
 import {
-  usePerpsAccountLoadingInfoAtom,
-  usePerpsSelectedAccountAtom,
+  usePerpsActiveAccountAtom,
+  usePerpsActiveAccountMmrAtom,
+  usePerpsActiveAccountSummaryAtom,
 } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import platformEnv from '@onekeyhq/shared/src/platformEnv';
+import accountUtils from '@onekeyhq/shared/src/utils/accountUtils';
+import { numberFormat } from '@onekeyhq/shared/src/utils/numberUtils';
 
-import { useHyperliquidAccount } from '../../../hooks';
-import { showDepositWithdrawModal } from '../modals/DepositWithdrawModal';
+import { PerpsAccountNumberValue } from '../components/PerpsAccountNumberValue';
+import { showDepositWithdrawDialog } from '../modals/DepositWithdrawModal';
 
 export function PerpAccountDebugInfo() {
-  const { currentUser } = useHyperliquidAccount();
-  const [perpsSelectedAccount] = usePerpsSelectedAccountAtom();
+  const [accountSummary] = usePerpsActiveAccountSummaryAtom();
+  const [perpsSelectedAccount] = usePerpsActiveAccountAtom();
 
   if (!platformEnv.isDev) {
     return null;
@@ -34,105 +40,230 @@ export function PerpAccountDebugInfo() {
   return (
     <>
       <SizableText>S:{perpsSelectedAccount.accountAddress}</SizableText>
-      <SizableText>W:{currentUser}</SizableText>
+      <SizableText>W:{accountSummary?.accountAddress}</SizableText>
     </>
   );
 }
 
-function PerpAccountPanel() {
-  const { userWebData2, accountSummary } = useHyperliquidAccount();
-  const [perpsAccountLoading] = usePerpsAccountLoadingInfoAtom();
-  const [selectedAccount] = usePerpsSelectedAccountAtom();
-  const userAddress = selectedAccount.accountAddress;
-  const userAccountId = selectedAccount.accountId;
-
-  const accountDataInfo = useMemo(() => {
-    const availableBalance = accountSummary.withdrawable;
-    let currentPositionValue = new BigNumber(0);
-    if (userWebData2) {
-      currentPositionValue =
-        userWebData2.clearinghouseState.assetPositions.reduce(
-          (acc, curr) =>
-            acc.plus(new BigNumber(curr.position.positionValue || 0)),
-          new BigNumber(0),
-        );
-    }
-    return { availableBalance, currentPositionValue };
-  }, [accountSummary.withdrawable, userWebData2]);
+function PerpAccountMMRView() {
+  const [{ mmrPercent }] = usePerpsActiveAccountMmrAtom();
   const intl = useIntl();
-  const handleDepositOrWithdraw = useCallback(
-    async (actionType: 'deposit' | 'withdraw') => {
-      if (!userAccountId || !userAddress) {
-        return;
-      }
+  if (mmrPercent) {
+    // return (
+    //   <XStack justifyContent="space-between">
+    //     <SizableText size="$bodySm" color="$textSubdued" cursor="default">
+    //       Cross Margin Ratio
+    //     </SizableText>
+    //     <SizableText size="$bodySmMedium" color="$textSubdued">
+    //       {mmrPercent}%
+    //     </SizableText>
+    //   </XStack>
+    // );
 
-      const params = {
-        withdrawable: accountSummary.withdrawable || '0',
-        actionType,
-      };
+    return (
+      <XStack justifyContent="space-between">
+        <Tooltip
+          placement="top"
+          renderContent={intl.formatMessage({
+            id: ETranslations.perp_account_cross_margin_ration_tip,
+          })}
+          renderTrigger={
+            <DashText
+              size="$bodySm"
+              color="$textSubdued"
+              cursor="help"
+              dashColor="$textDisabled"
+              dashThickness={0.5}
+            >
+              {intl.formatMessage({
+                id: ETranslations.perp_account_cross_margin_ration,
+              })}
+            </DashText>
+          }
+        />
+        <SizableText
+          size="$bodySmMedium"
+          color={parseFloat(mmrPercent) <= 50 ? '$green11' : '$red11'}
+        >
+          {mmrPercent}%
+        </SizableText>
+      </XStack>
+    );
+  }
+  return null;
+}
 
-      await showDepositWithdrawModal(params);
-    },
-    [userAccountId, userAddress, accountSummary.withdrawable],
-  );
+function PerpAccountPanel() {
+  const [accountSummary] = usePerpsActiveAccountSummaryAtom();
+  const [selectedAccount] = usePerpsActiveAccountAtom();
+  const userAddress = selectedAccount.accountAddress;
+  const dialogInTab = useInTabDialog();
+  const intl = useIntl();
+  const { copyText } = useClipboard();
 
-  return (
-    <YStack flex={1} gap="$1.5">
+  const unrealizedPnlInfo = useMemo(() => {
+    const pnlBn = new BigNumber(accountSummary?.totalUnrealizedPnl || '0');
+    const pnlAbs = pnlBn.abs().toFixed();
+    const pnlFormatted = numberFormat(pnlAbs, {
+      formatter: 'value',
+      formatterOptions: {
+        currency: '$',
+      },
+    });
+    let pnlColor = '$text';
+    if (!pnlBn.isZero()) {
+      pnlColor = pnlBn.lt(0) ? '$red11' : '$green11';
+    }
+    let pnlPlusOrMinus = '';
+    if (!pnlBn.isZero()) {
+      pnlPlusOrMinus = pnlBn.lt(0) ? '-' : '+';
+    }
+    return { pnlFormatted, pnlColor, pnlPlusOrMinus };
+  }, [accountSummary?.totalUnrealizedPnl]);
+
+  const content = (
+    <YStack flex={1} gap="$4" pt="$4" px="$2.5">
       {/* Header */}
-      <XStack p="$4" justifyContent="space-between" alignItems="center">
+      <XStack justifyContent="space-between" alignItems="center">
         <SizableText size="$headingSm">
           {intl.formatMessage({
             id: ETranslations.perp_trade_account_overview,
           })}
         </SizableText>
       </XStack>
-      <YStack flex={1} px="$4" gap="$2.5">
+      <YStack flex={1} gap="$2.5">
         {/* Available Balance */}
         <XStack justifyContent="space-between">
-          <SizableText size="$bodySm" color="$textSubdued">
-            {intl.formatMessage({
-              id: ETranslations.perp_trade_account_overview_available,
+          <Tooltip
+            placement="top"
+            renderContent={intl.formatMessage({
+              id: ETranslations.perp_account_panel_account_value_tooltip,
             })}
-          </SizableText>
-          {perpsAccountLoading || !userWebData2 ? (
-            <Skeleton width={70} height={16} />
-          ) : (
-            <NumberSizeableText
-              size="$bodySmMedium"
-              formatter="value"
-              formatterOptions={{ currency: '$' }}
-            >
-              {accountDataInfo.availableBalance}
-            </NumberSizeableText>
-          )}
+            renderTrigger={
+              <DashText
+                size="$bodySm"
+                color="$textSubdued"
+                cursor="help"
+                dashColor="$textDisabled"
+                dashThickness={0.5}
+              >
+                {intl.formatMessage({
+                  id: ETranslations.perp_account_panel_account_value,
+                })}
+              </DashText>
+            }
+          />
+          <PerpsAccountNumberValue
+            value={accountSummary?.accountValue ?? ''}
+            skeletonWidth={70}
+          />
         </XStack>
         <XStack justifyContent="space-between">
-          <SizableText size="$bodySm" color="$textSubdued">
+          <SizableText size="$bodySm" color="$textSubdued" cursor="default">
             {intl.formatMessage({
-              id: ETranslations.perp_trade_current_position,
+              id: ETranslations.perp_account_unrealized_pnl,
             })}
           </SizableText>
-          {perpsAccountLoading || !userWebData2 ? (
-            <Skeleton width={60} height={16} />
-          ) : (
-            <NumberSizeableText
-              size="$bodySmMedium"
-              formatter="value"
-              formatterOptions={{ currency: '$' }}
-            >
-              {accountDataInfo.currentPositionValue.toFixed()}
-            </NumberSizeableText>
-          )}
+          <SizableText size="$bodySmMedium" color={unrealizedPnlInfo.pnlColor}>
+            {`${unrealizedPnlInfo.pnlPlusOrMinus}${unrealizedPnlInfo.pnlFormatted}`}
+          </SizableText>
         </XStack>
+        <XStack justifyContent="space-between">
+          <SizableText size="$bodySm" color="$textSubdued" cursor="default">
+            {intl.formatMessage({
+              id: ETranslations.perp_account_panel_withrawable_value,
+            })}
+          </SizableText>
+          <PerpsAccountNumberValue
+            value={accountSummary?.withdrawable ?? ''}
+            skeletonWidth={60}
+          />
+        </XStack>
+        <XStack justifyContent="space-between">
+          <Tooltip
+            placement="top"
+            renderContent={intl.formatMessage({
+              id: ETranslations.perp_account_panel_account_maintenance_margin_tooltip,
+            })}
+            renderTrigger={
+              <DashText
+                size="$bodySm"
+                color="$textSubdued"
+                cursor="help"
+                dashColor="$textDisabled"
+                dashThickness={0.5}
+              >
+                {intl.formatMessage({
+                  id: ETranslations.perp_account_panel_account_maintenance_margin,
+                })}
+              </DashText>
+            }
+          />
+          <PerpsAccountNumberValue
+            value={accountSummary?.crossMaintenanceMarginUsed ?? ''}
+            skeletonWidth={70}
+          />
+        </XStack>
+        <PerpAccountMMRView />
+        {userAddress ? (
+          <XStack justifyContent="space-between">
+            <SizableText size="$bodySm" color="$textSubdued" cursor="default">
+              {intl.formatMessage({
+                id: ETranslations.copy_address_modal_title,
+              })}
+            </SizableText>
+
+            <XStack gap="$1" alignItems="center">
+              <SizableText
+                size="$bodySmMedium"
+                cursor="pointer"
+                onPress={() => {
+                  copyText(userAddress ?? '');
+                }}
+              >
+                {userAddress
+                  ? accountUtils.shortenAddress({
+                      address: userAddress,
+                      leadingLength: 6,
+                      trailingLength: 4,
+                    })
+                  : ''}
+              </SizableText>
+              <IconButton
+                icon="OpenOutline"
+                color="$iconSubdued"
+                variant="tertiary"
+                cursor="pointer"
+                iconSize="$3.5"
+                onPress={() => {
+                  if (userAddress) {
+                    void openHyperLiquidExplorerUrl({
+                      address: userAddress,
+                      openInExternal: true,
+                    });
+                  }
+                }}
+              />
+            </XStack>
+          </XStack>
+        ) : null}
       </YStack>
       {/* Action Buttons */}
       {userAddress ? (
-        <XStack px="$4" pb="$4" gap="$2.5" mt="$3">
+        <XStack gap="$2.5">
           <Button
+            borderRadius="$full"
             flex={1}
             size="medium"
             variant="secondary"
-            onPress={() => handleDepositOrWithdraw('deposit')}
+            onPress={() =>
+              showDepositWithdrawDialog(
+                {
+                  actionType: 'deposit',
+                },
+                dialogInTab,
+              )
+            }
             alignItems="center"
             justifyContent="center"
           >
@@ -141,10 +272,18 @@ function PerpAccountPanel() {
             </SizableText>
           </Button>
           <Button
+            borderRadius="$full"
             flex={1}
             size="medium"
             variant="secondary"
-            onPress={() => handleDepositOrWithdraw('withdraw')}
+            onPress={() =>
+              showDepositWithdrawDialog(
+                {
+                  actionType: 'withdraw',
+                },
+                dialogInTab,
+              )
+            }
             alignItems="center"
             justifyContent="center"
           >
@@ -153,24 +292,13 @@ function PerpAccountPanel() {
             </SizableText>
           </Button>
         </XStack>
-      ) : (
-        <XStack
-          flex={1}
-          justifyContent="flex-start"
-          alignItems="center"
-          mt="$3"
-          px="$4"
-          gap="$1.5"
-        >
-          <Icon name="InfoCircleOutline" size="$3.5" color="$icon" />
-          <SizableText size="$bodySm" color="$text">
-            {intl.formatMessage({
-              id: ETranslations.perp_account_create,
-            })}
-          </SizableText>
-        </XStack>
-      )}
+      ) : null}
     </YStack>
+  );
+  return (
+    <DebugRenderTracker name="PerpAccountPanel" position="top-right">
+      {content}
+    </DebugRenderTracker>
   );
 }
 

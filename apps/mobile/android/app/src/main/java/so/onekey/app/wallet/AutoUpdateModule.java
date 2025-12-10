@@ -8,7 +8,6 @@ import android.icu.text.SimpleDateFormat;
 import android.os.Build;
 import android.content.Intent;
 import android.net.Uri;
-import android.util.Log;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
@@ -19,11 +18,11 @@ import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.File;
-import java.io.InputStreamReader;
-import java.io.FileOutputStream;
 import java.io.FileReader;
+import java.io.InputStreamReader;
 import java.security.MessageDigest;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
@@ -35,10 +34,9 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReadableMap;
+import com.facebook.react.bridge.ReadableType;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
-
-import javax.net.ssl.HttpsURLConnection;
 
 import okhttp3.Call;
 import okhttp3.OkHttpClient;
@@ -174,6 +172,41 @@ public class AutoUpdateModule extends ReactContextBaseJavaModule {
         return extractedSha256;
     }
 
+    public long getFileSize(final ReadableMap map) {
+        String key = "fileSize";
+        try {
+            if (map.hasKey(key)) {
+                ReadableType type = map.getType(key);
+                switch (type) {
+                    case Number:
+                        // Try different number types
+                        try {
+                            return map.getLong(key);
+                        } catch (Exception e1) {
+                            log("getFileSize e1", "Error getting file size: " + e1.getMessage());
+                            try {
+                                return (long) map.getDouble(key);
+                            } catch (Exception e2) {
+                                log("getFileSize e2", "Error getting file size: " + e2.getMessage());
+                                return (long) map.getInt(key);
+                            }
+                        }
+                    case String:
+                        String sizeStr = map.getString(key);
+                        if (sizeStr != null) {
+                            return Long.parseLong(sizeStr);
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            }
+            return 0;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
     @ReactMethod
     public void verifyASC(final ReadableMap map, final Promise promise) {
         String filePath = map.getString("filePath");
@@ -191,6 +224,7 @@ public class AutoUpdateModule extends ReactContextBaseJavaModule {
             log("verifyASC", "Error verifying ASC file: " + e.getMessage());
             promise.reject(new Exception("UPDATE_SIGNATURE_VERIFICATION_FAILED_ALERT_TEXT"));
         }
+        promise.resolve(null);
     }
 
     @ReactMethod
@@ -200,7 +234,7 @@ public class AutoUpdateModule extends ReactContextBaseJavaModule {
          // Fetch the signature file
          String ascFileUrl = url + ".SHA256SUMS.asc";
          String ascFilePath = filePath + ".SHA256SUMS.asc";
-         
+         promise.resolve(null);
          try {
             OkHttpClient client = new OkHttpClient();
             Request request = new Request.Builder()
@@ -245,7 +279,6 @@ public class AutoUpdateModule extends ReactContextBaseJavaModule {
 
     @ReactMethod void verifyAPK(final ReadableMap map, final Promise promise) {
         String filePath = map.getString("filePath");
-
         File downloadedFile = buildFile(filePath);
         if (!downloadedFile.exists()) {
             promise.reject(new Exception("NOT_FOUND_PACKAGE"));
@@ -272,6 +305,8 @@ public class AutoUpdateModule extends ReactContextBaseJavaModule {
         String url = map.getString("downloadUrl");
         String filePath = map.getString("filePath");
         String notificationTitle = map.getString("notificationTitle");
+        long fileSize = getFileSize(map);
+        log("downloadAPK", "fileSize: " + fileSize);
         if (this.isDownloading) {
             return;
         }
@@ -323,7 +358,7 @@ public class AutoUpdateModule extends ReactContextBaseJavaModule {
                 }
 
                 ResponseBody body = response.body();
-                long contentLength = body.contentLength();
+                long contentLength = fileSize > 0 ? fileSize : body.contentLength();
                 BufferedSource source = body.source();
 
                 BufferedSink sink = null;

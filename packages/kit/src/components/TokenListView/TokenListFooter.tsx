@@ -5,6 +5,7 @@ import { groupBy, keyBy, mapValues } from 'lodash';
 import { useIntl } from 'react-intl';
 
 import {
+  Button,
   Icon,
   IconButton,
   NumberSizeableText,
@@ -45,14 +46,19 @@ import {
   useSmallBalanceTokensFiatValueAtom,
 } from '../../states/jotai/contexts/tokenList';
 
+import { useTokenListViewContext } from './TokenListViewContext';
+
 type IProps = {
   tableLayout?: boolean;
   hideZeroBalanceTokens?: boolean;
+  hasTokens?: boolean;
+  manageTokenEnabled?: boolean;
 };
 
 function TokenListFooter(props: IProps) {
   const intl = useIntl();
-  const { tableLayout, hideZeroBalanceTokens } = props;
+  const { tableLayout, hideZeroBalanceTokens, hasTokens, manageTokenEnabled } =
+    props;
   const navigation = useAppNavigation();
   const {
     activeAccount: {
@@ -68,6 +74,8 @@ function TokenListFooter(props: IProps) {
   const [settings] = useSettingsPersistAtom();
 
   const [{ hideValue }] = useSettingsValuePersistAtom();
+
+  const { allAggregateTokenMap } = useTokenListViewContext();
 
   const [smallBalanceTokenList] = useSmallBalanceTokenListAtom();
 
@@ -104,7 +112,7 @@ function TokenListFooter(props: IProps) {
   );
 
   const filteredSmallBalanceTokens = useMemo(() => {
-    if (hideZeroBalanceTokens && network?.isAllNetworks) {
+    if (hideZeroBalanceTokens) {
       return smallBalanceTokens.filter((token) => {
         const tokenBalance = new BigNumber(
           smallBalanceTokenListMap[token.$key]?.balance ??
@@ -123,13 +131,12 @@ function TokenListFooter(props: IProps) {
   }, [
     smallBalanceTokens,
     hideZeroBalanceTokens,
-    network?.isAllNetworks,
     smallBalanceTokenListMap,
     aggregateTokensMap,
   ]);
 
   const filteredRiskyTokens = useMemo(() => {
-    if (hideZeroBalanceTokens && network?.isAllNetworks) {
+    if (hideZeroBalanceTokens) {
       return riskyTokens.filter((token) => {
         const tokenBalance = new BigNumber(
           riskyTokenListMap[token.$key]?.balance ??
@@ -148,7 +155,6 @@ function TokenListFooter(props: IProps) {
   }, [
     riskyTokens,
     hideZeroBalanceTokens,
-    network?.isAllNetworks,
     riskyTokenListMap,
     aggregateTokensMap,
   ]);
@@ -175,6 +181,9 @@ function TokenListFooter(props: IProps) {
         isAllNetworks: network.isAllNetworks,
         aggregateTokensListMap,
         aggregateTokensMap,
+        accountAddress: account.address,
+        allAggregateTokenMap,
+        searchKeyLengthThreshold: 1,
       },
     });
   }, [
@@ -193,6 +202,7 @@ function TokenListFooter(props: IProps) {
     hideValue,
     aggregateTokensListMap,
     aggregateTokensMap,
+    allAggregateTokenMap,
   ]);
 
   const handleOnPressRiskyTokens = useCallback(() => {
@@ -213,6 +223,7 @@ function TokenListFooter(props: IProps) {
         deriveInfo,
         isAllNetworks: network.isAllNetworks,
         hideValue,
+        accountAddress: account.address,
       },
     });
   }, [
@@ -228,6 +239,21 @@ function TokenListFooter(props: IProps) {
     deriveInfo,
     hideValue,
   ]);
+
+  const handleOnPressManageTokens = useCallback(() => {
+    if (!account || !network || !wallet) return;
+    navigation.pushModal(EModalRoutes.MainModal, {
+      screen: EModalAssetListRoutes.TokenManagerModal,
+      params: {
+        accountId: account.id,
+        networkId: network.id,
+        walletId: wallet.id,
+        indexedAccountId: indexedAccount?.id,
+        deriveType,
+        isAllNetworks: network.isAllNetworks,
+      },
+    });
+  }, [account, network, wallet, navigation, indexedAccount?.id, deriveType]);
 
   const { result: blockedTokensLength, run } = usePromiseResult(
     async () => {
@@ -375,6 +401,24 @@ function TokenListFooter(props: IProps) {
             />
           </XStack>
         </ListItem>
+      ) : null}
+      {hasTokens && manageTokenEnabled ? (
+        <XStack py="$10" justifyContent="center" gap="$1">
+          <SizableText size="$bodyMd" color="$textDisabled">
+            {intl.formatMessage({ id: ETranslations.add_token_instruction })}
+          </SizableText>
+          <Button
+            size="small"
+            variant="tertiary"
+            onPress={handleOnPressManageTokens}
+            iconAfter="ArrowRightOutline"
+            iconColor="$iconSubdued"
+          >
+            <SizableText size="$bodyMd" color="$textSubdued">
+              {intl.formatMessage({ id: ETranslations.add_token_label })}
+            </SizableText>
+          </Button>
+        </XStack>
       ) : null}
     </Stack>
   );

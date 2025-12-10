@@ -5,6 +5,7 @@ export enum EUpdateStrategy {
   silent = 0,
   force = 1,
   manual = 2,
+  seamless = 3,
 }
 
 export enum EUpdateFileType {
@@ -31,6 +32,7 @@ export interface IBasicAppUpdateInfo {
   updateStrategy: EUpdateStrategy;
   summary?: string;
   jsBundleVersion?: string;
+  fileSize?: number;
   jsBundle?: {
     downloadUrl?: string;
     fileSize?: number;
@@ -44,6 +46,8 @@ export interface IResponseAppUpdateInfo extends IBasicAppUpdateInfo {
 }
 
 export interface IAppUpdateInfo extends IBasicAppUpdateInfo {
+  // the previous app version before update
+  previousAppVersion?: string;
   // the latest version of remote server
   latestVersion?: string;
   // the last time the app update info was fetched
@@ -56,7 +60,6 @@ export interface IAppUpdateInfo extends IBasicAppUpdateInfo {
   status: EAppUpdateStatus;
   errorText?: ETranslations;
   downloadedEvent?: IUpdateDownloadedEvent;
-  isShowUpdateDialog?: boolean;
   summary?: string;
 }
 

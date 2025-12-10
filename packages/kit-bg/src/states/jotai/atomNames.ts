@@ -1,6 +1,7 @@
 export enum EAtomNames {
   bannerCloseIdsAtom = 'bannerCloseIdsAtom',
   demoPriceAtom = 'demoPriceAtom',
+  demoPriceInfoAtom = 'demoPriceInfoAtom',
   demoPriceNotPersistAtom = 'demoPriceNotPersistAtom',
   // accountIdAtom = 'accountIdAtom',
   settingsPersistAtom = 'settingsPersistAtom',
@@ -9,6 +10,8 @@ export enum EAtomNames {
   currencyPersistAtom = 'currencyPersistAtom',
   settingsLastActivityAtom = 'settingsLastActivityAtom',
   cloudBackupPersistAtom = 'cloudBackupPersistAtom',
+  cloudBackupStatusAtom = 'cloudBackupStatusAtom',
+  cloudBackupExitPreventAtom = 'cloudBackupExitPreventAtom',
   passwordAtom = 'passwordAtom',
   passwordPromptPromiseTriggerAtom = 'passwordPromptPromiseTriggerAtom',
   passwordPersistAtom = 'passwordPersistAtom',
@@ -28,6 +31,7 @@ export enum EAtomNames {
   appUpdatePersistAtom = 'appUpdatePersistAtom',
   spotlightPersistAtom = 'spotlightPersistAtom',
   onboardingConnectWalletLoadingAtom = 'onboardingConnectWalletLoadingAtom',
+  onboardingCloudBackupListRefreshAtom = 'onboardingCloudBackupListRefreshAtom',
   inAppNotificationAtom = 'inAppNotificationAtom',
   v4migrationAtom = 'v4migrationAtom',
   v4migrationPersistAtom = 'v4migrationPersistAtom',
@@ -38,6 +42,7 @@ export enum EAtomNames {
   activeAccountValueAtom = 'activeAccountValueAtom',
   settingsValuePersistAtom = 'settingsValuePersistAtom',
   settingsTronRentalPersistAtom = 'settingsTronRentalPersistAtom',
+  appSideBarStatusAtom = 'appSideBarStatusAtom',
   // notificationsAtom, notificationsPersistAtom is reserved for notificationsPersistAtom
   notificationsAtom = 'notificationsAtom', // persist
   notificationsReadedAtom = 'notificationsReadedAtom',
@@ -56,10 +61,38 @@ export enum EAtomNames {
   desktopBluetoothAtom = 'desktopBluetoothAtom',
   hardwareForceTransportAtom = 'hardwareForceTransportAtom',
   // perps
-  perpsSelectedAccountAtom = 'perpsSelectedAccountAtom',
+  perpsActiveAccountAtom = 'perpsActiveAccountAtom',
+  perpsActiveAccountRefreshHookAtom = 'perpsActiveAccountRefreshHookAtom',
+  perpsActiveAccountSummaryAtom = 'perpsActiveAccountSummaryAtom',
+  perpsActiveAccountStatusInfoAtom = 'perpsActiveAccountStatusInfoAtom',
   perpsAccountLoadingInfoAtom = 'perpsAccountLoadingInfoAtom',
-  perpsSelectedAccountStatusAtom = 'perpsSelectedAccountStatusAtom',
-  perpsSelectedSymbolAtom = 'perpsSelectedSymbolAtom',
+  perpsActiveAssetAtom = 'perpsActiveAssetAtom',
+  perpsActiveAssetCtxAtom = 'perpsActiveAssetCtxAtom',
+  perpsActiveAssetDataAtom = 'perpsActiveAssetDataAtom',
+  perpsActiveOrderBookOptionsAtom = 'perpsActiveOrderBookOptionsAtom',
+  perpsCustomSettingsAtom = 'perpsCustomSettingsAtom',
+  perpsTradingPreferencesAtom = 'perpsTradingPreferencesAtom',
+  perpsCommonConfigPersistAtom = 'perpsCommonConfigPersistAtom',
+  perpsUserConfigPersistAtom = 'perpsUserConfigPersistAtom',
+  perpsNetworkStatusAtom = 'perpsNetworkStatusAtom',
+  perpsDepositNetworksAtom = 'perpsDepositNetworksAtom',
+  perpsDepositTokensAtom = 'perpsDepositTokensAtom',
+  perpsWebSocketReadyStateAtom = 'perpsWebSocketReadyStateAtom',
+  perpsTradesHistoryRefreshHookAtom = 'perpsTradesHistoryRefreshHookAtom',
+  perpsTradesHistoryDataAtom = 'perpsTradesHistoryDataAtom',
+  perpsCandlesWebviewReloadHookAtom = 'perpsCandlesWebviewReloadHookAtom',
+  perpsCandlesWebviewMountedAtom = 'perpsCandlesWebviewMountedAtom',
+  perpsWebSocketDataUpdateTimesAtom = 'perpsWebSocketDataUpdateTimesAtom',
+  perpTokenSortConfigPersistAtom = 'perpTokenSortConfigPersistAtom',
+  perpsDepositOrderAtom = 'perpsDepositOrderAtom',
+  perpsLastUsedLeverageAtom = 'perpsLastUsedLeverageAtom',
+  // network doctor
+  networkDoctorStateAtom = 'networkDoctorStateAtom',
+
+  // swap
+  swapProJumpTokenAtom = 'swapProJumpTokenAtom',
+  // market
+  marketSelectedTabAtom = 'marketSelectedTabAtom',
 }
 export type IAtomNameKeys = keyof typeof EAtomNames;
 export const atomsConfig: Partial<

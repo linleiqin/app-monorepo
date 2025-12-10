@@ -26,6 +26,7 @@ import type {
   IEarnClaimActionIcon,
   IEarnClaimWithKycActionIcon,
   IEarnIcon,
+  IEarnListaCheckActionIcon,
   IEarnPopupActionIcon,
   IEarnPortfolioActionIcon,
   IEarnText,
@@ -34,10 +35,21 @@ import type {
   IProtocolInfo,
 } from '@onekeyhq/shared/types/staking';
 
+import { useEarnSignMessage } from '../../hooks/useEarnSignMessage';
 import { useHandleClaim } from '../../pages/ProtocolDetails/useHandleClaim';
 
 import { EarnIcon } from './EarnIcon';
 import { EarnText } from './EarnText';
+
+type IActionTrigger = ({
+  onPress,
+  loading,
+  disabled,
+}: {
+  onPress: () => void;
+  loading?: boolean;
+  disabled?: boolean;
+}) => React.ReactNode;
 
 // Hook to handle claim action press
 function useHandleClaimAction({
@@ -74,6 +86,8 @@ function useHandleClaimAction({
           providerName: tokenInfo?.provider,
         })
       );
+      const receiveToken = earnUtils.convertEarnTokenToIToken(token);
+
       await handleClaim({
         claimType: actionIcon.type,
         symbol: protocolInfo?.symbol || '',
@@ -93,12 +107,12 @@ function useHandleClaimAction({
             providerName: tokenInfo?.provider || '',
           }),
           protocolLogoURI: protocolInfo?.providerDetail.logoURI,
-          receive: {
-            token: token as IEarnToken,
-            amount: claimAmount,
-          },
+          receive: receiveToken
+            ? { token: receiveToken, amount: claimAmount }
+            : undefined,
           tags: protocolInfo?.stakeTag ? [protocolInfo.stakeTag] : [],
         },
+        portfolioSymbol: token?.symbol,
       });
       setLoading(false);
     },
@@ -238,10 +252,12 @@ function BasicPortfolioActionIcon({
   actionIcon,
   protocolInfo,
   tokenInfo,
+  trigger,
 }: {
   protocolInfo?: IProtocolInfo;
   tokenInfo?: IEarnTokenInfo;
   actionIcon: IEarnPortfolioActionIcon;
+  trigger?: IActionTrigger;
 }) {
   const appNavigation = useAppNavigation();
 
@@ -259,6 +275,15 @@ function BasicPortfolioActionIcon({
     protocolInfo?.symbol,
     tokenInfo?.networkId,
   ]);
+
+  if (trigger) {
+    return trigger({
+      onPress: onPortfolioDetails,
+      loading: false,
+      disabled: actionIcon.disabled,
+    });
+  }
+
   return (
     <Button
       disabled={actionIcon.disabled}
@@ -278,11 +303,13 @@ function BasicClaimActionIcon({
   protocolInfo,
   tokenInfo,
   token,
+  trigger,
 }: {
   actionIcon: IEarnClaimActionIcon;
   protocolInfo?: IProtocolInfo;
   tokenInfo?: IEarnTokenInfo;
   token?: IEarnToken;
+  trigger?: IActionTrigger;
 }) {
   const [loading, setLoading] = useState(false);
   const handleClaimAction = useHandleClaimAction({
@@ -290,6 +317,16 @@ function BasicClaimActionIcon({
     tokenInfo,
     token,
   });
+
+  if (trigger) {
+    return trigger({
+      onPress: () => {
+        void handleClaimAction({ actionIcon, setLoading });
+      },
+      loading,
+      disabled: loading || actionIcon?.disabled,
+    });
+  }
 
   return (
     <Button
@@ -308,20 +345,75 @@ function BasicClaimActionIcon({
 
 const ClaimActionIcon = memo(BasicClaimActionIcon);
 
+function BasicListaCheckActionIcon({
+  actionIcon,
+  protocolInfo,
+  token,
+  trigger,
+}: {
+  actionIcon: IEarnListaCheckActionIcon;
+  protocolInfo?: IProtocolInfo;
+  token?: IEarnToken;
+  trigger?: IActionTrigger;
+}) {
+  const [loading, setLoading] = useState(false);
+  const signMessage = useEarnSignMessage();
+
+  const handlePress = useCallback(async () => {
+    if (!protocolInfo) {
+      return;
+    }
+    setLoading(true);
+
+    void signMessage({
+      accountId: protocolInfo.earnAccount?.accountId ?? '',
+      networkId: protocolInfo.earnAccount?.networkId ?? '',
+      provider: protocolInfo.provider,
+      symbol: token?.symbol,
+      request: { origin: 'https://lista.org/', scope: 'ethereum' },
+    }).finally(() => setLoading(false));
+  }, [protocolInfo, signMessage, token]);
+
+  if (trigger) {
+    return trigger({
+      onPress: handlePress,
+      loading,
+      disabled: loading || actionIcon?.disabled,
+    });
+  }
+
+  return (
+    <Button
+      size="small"
+      variant="primary"
+      loading={loading}
+      disabled={loading || actionIcon?.disabled}
+      onPress={handlePress}
+    >
+      {typeof actionIcon.text === 'string'
+        ? actionIcon.text
+        : actionIcon.text.text}
+    </Button>
+  );
+}
+
+const ListaCheckActionIcon = memo(BasicListaCheckActionIcon);
+
 function BasicClaimWithKycActionIcon({
   actionIcon,
   protocolInfo,
   tokenInfo,
+  trigger,
 }: {
   actionIcon: IEarnClaimWithKycActionIcon;
   protocolInfo?: IProtocolInfo;
   tokenInfo?: IEarnTokenInfo;
+  trigger?: IActionTrigger;
 }) {
   const [loading, setLoading] = useState(false);
   const handleClaimAction = useHandleClaimAction({
     protocolInfo,
     tokenInfo,
-    token: actionIcon.data?.token,
   });
 
   const handlePress = useCallback(async () => {
@@ -393,6 +485,14 @@ function BasicClaimWithKycActionIcon({
     }
   }, [actionIcon, protocolInfo, tokenInfo, handleClaimAction]);
 
+  if (trigger) {
+    return trigger({
+      onPress: handlePress,
+      loading,
+      disabled: loading || actionIcon?.disabled,
+    });
+  }
+
   return (
     <Button
       size="small"
@@ -417,6 +517,7 @@ function BasicEarnActionIcon({
   tokenInfo,
   token,
   onHistory,
+  trigger,
 }: {
   title?: string;
   actionIcon?: IEarnActionIcon;
@@ -424,6 +525,7 @@ function BasicEarnActionIcon({
   tokenInfo?: IEarnTokenInfo;
   token?: IEarnToken;
   onHistory?: (params?: { filterType?: string }) => void;
+  trigger?: IActionTrigger;
 }) {
   if (!actionIcon) {
     return null;
@@ -441,25 +543,41 @@ function BasicEarnActionIcon({
           actionIcon={actionIcon}
           protocolInfo={protocolInfo}
           tokenInfo={tokenInfo}
+          trigger={trigger}
+        />
+      );
+    case 'listaCheck':
+      return (
+        <ListaCheckActionIcon
+          actionIcon={actionIcon}
+          protocolInfo={protocolInfo}
+          token={token}
+          trigger={trigger}
         />
       );
     case 'claim':
+    case 'claimOrder':
+    case 'claimAirdrop':
       return (
         <ClaimActionIcon
           protocolInfo={protocolInfo}
           tokenInfo={tokenInfo}
           token={token}
           actionIcon={actionIcon}
+          trigger={trigger}
         />
       );
-    case 'claimWithKyc':
+    case 'claimWithKyc': {
+      const claimWithKycAction = actionIcon as IEarnClaimWithKycActionIcon;
       return (
         <ClaimWithKycActionIcon
-          actionIcon={actionIcon}
+          actionIcon={claimWithKycAction}
           protocolInfo={protocolInfo}
           tokenInfo={tokenInfo}
+          trigger={trigger}
         />
       );
+    }
     case 'popup':
       return actionIcon.data.icon ? (
         <Popover
@@ -482,7 +600,7 @@ function BasicEarnActionIcon({
               description={actionIcon.data.description}
             />
           }
-          placement="top"
+          placement="bottom-start"
         />
       ) : null;
     case 'history':

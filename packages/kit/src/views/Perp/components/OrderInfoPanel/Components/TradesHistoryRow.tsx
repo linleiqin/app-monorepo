@@ -1,23 +1,41 @@
 import { memo, useMemo } from 'react';
 
 import BigNumber from 'bignumber.js';
+import { useIntl } from 'react-intl';
 
-import { Divider, SizableText, XStack, YStack } from '@onekeyhq/components';
+import {
+  Divider,
+  IconButton,
+  SizableText,
+  XStack,
+  YStack,
+} from '@onekeyhq/components';
 import { ListItem } from '@onekeyhq/kit/src/components/ListItem';
+import { useHyperliquidActions } from '@onekeyhq/kit/src/states/jotai/contexts/hyperliquid';
+import { ETranslations } from '@onekeyhq/shared/src/locale';
 import { formatTime } from '@onekeyhq/shared/src/utils/dateUtils';
+import type { INumberFormatProps } from '@onekeyhq/shared/src/utils/numberUtils';
 import { numberFormat } from '@onekeyhq/shared/src/utils/numberUtils';
+import { getValidPriceDecimals } from '@onekeyhq/shared/src/utils/perpsUtils';
 import type { IFill } from '@onekeyhq/shared/types/hyperliquid/sdk';
 
 import { calcCellAlign, getColumnStyle } from '../utils';
 
 import type { IColumnConfig } from '../List/CommonTableListView';
 
+const formatter: INumberFormatProps = {
+  formatter: 'value',
+  formatterOptions: {
+    currency: '$',
+  },
+};
 export type ITradesHistoryRowProps = {
   fill: IFill;
   cellMinWidth: number;
   columnConfigs: IColumnConfig[];
   isMobile?: boolean;
   index: number;
+  onShare?: (fill: IFill) => void;
 };
 
 const TradesHistoryRow = memo(
@@ -27,7 +45,15 @@ const TradesHistoryRow = memo(
     columnConfigs,
     isMobile,
     index,
+    onShare,
   }: ITradesHistoryRowProps) => {
+    const canShare = useMemo(() => {
+      return (
+        fill.closedPnl && !new BigNumber(fill.closedPnl).isZero() && onShare
+      );
+    }, [fill.closedPnl, onShare]);
+    const actions = useHyperliquidActions();
+    const intl = useIntl();
     const assetSymbol = useMemo(() => fill.coin ?? '-', [fill.coin]);
     const dateInfo = useMemo(() => {
       const timeDate = new Date(fill.time);
@@ -41,48 +67,48 @@ const TradesHistoryRow = memo(
     }, [fill.time]);
 
     const directionInfo = useMemo(() => {
-      const directionStr = fill.dir;
       const side = fill.side;
-      let directionColor = '#18794E';
+      let directionColor = '$green11';
       if (side === 'A') {
-        directionColor = '#C62A2F';
+        directionColor = '$red11';
       }
+
+      let directionStr = fill.dir;
+      if (fill.liquidation) {
+        // market: common liquidation via market order
+        // backstop: rare fallback when market liquidity is insufficient
+        const liqPrefix =
+          fill.liquidation.method === 'backstop'
+            ? 'Backstop Liq'
+            : 'Market Liq';
+        directionStr = `${liqPrefix}: ${fill.dir}`;
+      }
+
       return { directionStr, directionColor };
-    }, [fill.dir, fill.side]);
+    }, [fill.dir, fill.side, fill.liquidation]);
 
     const tradeBaseInfo = useMemo(() => {
       const price = fill.px;
       const size = fill.sz;
       const fee = fill.fee;
+      const decimals = getValidPriceDecimals(price);
       const priceBN = new BigNumber(price);
       const sizeBN = new BigNumber(size);
-      const priceFormatted = numberFormat(price, {
-        formatter: 'price',
-      });
-      const feeFormatted = numberFormat(fee, {
-        formatter: 'value',
-        formatterOptions: {
-          currency: '$',
-        },
-      });
+      const priceFormatted = priceBN.toFixed(decimals);
+      const feeFormatted = numberFormat(fee, formatter);
 
       const tradeValue = priceBN.times(sizeBN).toFixed();
-      const tradeValueFormatted = numberFormat(tradeValue, {
-        formatter: 'value',
-        formatterOptions: {
-          currency: '$',
-        },
-      });
+      const tradeValueFormatted = numberFormat(tradeValue, formatter);
       return { priceFormatted, size, feeFormatted, tradeValueFormatted };
     }, [fill.fee, fill.px, fill.sz]);
 
     const closePnlInfo = useMemo(() => {
       const closePnl = fill.closedPnl;
-      const closePnlBN = new BigNumber(closePnl);
+      const closePnlBN = new BigNumber(closePnl).minus(new BigNumber(fill.fee));
       let closePnlPlusOrMinus = '';
-      let closePnlColor = '#18794E';
+      let closePnlColor = '$green11';
       if (closePnlBN.lt(0)) {
-        closePnlColor = '#C62A2F';
+        closePnlColor = '$red11';
         closePnlPlusOrMinus = '-';
       }
       const closePnlStr = closePnlBN.abs().toFixed();
@@ -93,7 +119,7 @@ const TradesHistoryRow = memo(
         },
       });
       return { closePnlFormatted, closePnlColor, closePnlPlusOrMinus };
-    }, [fill.closedPnl]);
+    }, [fill.closedPnl, fill.fee]);
 
     if (isMobile) {
       return (
@@ -113,8 +139,15 @@ const TradesHistoryRow = memo(
             alignItems="center"
             width="100%"
           >
-            <YStack gap="$2">
-              <XStack gap="$2">
+            <YStack gap="$1">
+              <XStack
+                gap="$2"
+                alignItems="center"
+                // cursor="pointer"
+                // onPress={() =>
+                //   actions.current.changeActiveAsset({ coin: assetSymbol })
+                // }
+              >
                 <SizableText size="$bodyMdMedium">{assetSymbol}</SizableText>
                 <SizableText
                   size="$bodySm"
@@ -127,16 +160,35 @@ const TradesHistoryRow = memo(
                 {dateInfo.date} {dateInfo.time}
               </SizableText>
             </YStack>
-            <YStack gap="$2" alignItems="flex-end">
-              <SizableText size="$bodySm" color="$textSubdued">
-                Close PnL
-              </SizableText>
-              <SizableText size="$bodySm" color={closePnlInfo.closePnlColor}>
-                {`${closePnlInfo.closePnlPlusOrMinus}${
-                  closePnlInfo.closePnlFormatted as string
-                }`}
-              </SizableText>
-            </YStack>
+            <XStack gap="$2" alignItems="center">
+              <YStack gap="$1" alignItems="flex-end">
+                <SizableText size="$bodySm" color="$textSubdued">
+                  {intl.formatMessage({
+                    id: ETranslations.perp_trades_close_pnl,
+                  })}
+                </SizableText>
+                <XStack gap="$1" alignItems="center">
+                  <SizableText
+                    size="$bodySm"
+                    color={closePnlInfo.closePnlColor}
+                  >
+                    {`${closePnlInfo.closePnlPlusOrMinus}${closePnlInfo.closePnlFormatted}`}
+                  </SizableText>
+                  {canShare ? (
+                    <IconButton
+                      variant="tertiary"
+                      size="small"
+                      icon="ShareOutline"
+                      iconSize="$4"
+                      onPress={() => onShare?.(fill)}
+                      cursor="pointer"
+                      hoverStyle={null}
+                      pressStyle={null}
+                    />
+                  ) : null}
+                </XStack>
+              </YStack>
+            </XStack>
           </XStack>
           <Divider width="100%" borderColor="$borderSubdued" />
           <XStack
@@ -149,15 +201,19 @@ const TradesHistoryRow = memo(
           >
             <YStack gap="$1" flex={1} alignItems="flex-start">
               <SizableText size="$bodySm" color="$textSubdued">
-                Price
+                {intl.formatMessage({
+                  id: ETranslations.perp_trades_history_price,
+                })}
               </SizableText>
               <SizableText size="$bodySm">
-                {`${tradeBaseInfo.priceFormatted as string}`}
+                {`${tradeBaseInfo.priceFormatted}`}
               </SizableText>
             </YStack>
             <YStack gap="$1" flex={1} alignItems="flex-start">
               <SizableText size="$bodySm" color="$textSubdued">
-                Size
+                {intl.formatMessage({
+                  id: ETranslations.perp_position_position_size,
+                })}
               </SizableText>
               <SizableText size="$bodySm">
                 {`${tradeBaseInfo.size}`}
@@ -165,18 +221,22 @@ const TradesHistoryRow = memo(
             </YStack>
             <YStack gap="$1" flex={1} alignItems="flex-start">
               <SizableText size="$bodySm" color="$textSubdued">
-                Value
+                {intl.formatMessage({
+                  id: ETranslations.perp_trades_history_trade_value,
+                })}
               </SizableText>
               <SizableText size="$bodySm">
-                {`${tradeBaseInfo.tradeValueFormatted as string}`}
+                {`${tradeBaseInfo.tradeValueFormatted}`}
               </SizableText>
             </YStack>
             <YStack gap="$1" flex={1} alignItems="flex-end">
               <SizableText size="$bodySm" color="$textSubdued">
-                Fee
+                {intl.formatMessage({
+                  id: ETranslations.perp_trades_history_fee,
+                })}
               </SizableText>
               <SizableText size="$bodySm">
-                {`${tradeBaseInfo.feeFormatted as string}`}
+                {`${tradeBaseInfo.feeFormatted}`}
               </SizableText>
             </YStack>
           </XStack>
@@ -219,6 +279,10 @@ const TradesHistoryRow = memo(
           {...getColumnStyle(columnConfigs[1])}
           justifyContent={calcCellAlign(columnConfigs[1].align)}
           alignItems="center"
+          cursor="pointer"
+          onPress={() =>
+            actions.current.changeActiveAsset({ coin: assetSymbol })
+          }
         >
           <SizableText
             numberOfLines={1}
@@ -255,7 +319,7 @@ const TradesHistoryRow = memo(
             numberOfLines={1}
             ellipsizeMode="tail"
             size="$bodySm"
-          >{`${tradeBaseInfo.priceFormatted as string}`}</SizableText>
+          >{`${tradeBaseInfo.priceFormatted}`}</SizableText>
         </XStack>
 
         {/* Position size */}
@@ -278,7 +342,7 @@ const TradesHistoryRow = memo(
           alignItems="center"
         >
           <SizableText numberOfLines={1} ellipsizeMode="tail" size="$bodySm">
-            {`${tradeBaseInfo.tradeValueFormatted as string}`}
+            {`${tradeBaseInfo.tradeValueFormatted}`}
           </SizableText>
         </XStack>
 
@@ -289,7 +353,7 @@ const TradesHistoryRow = memo(
           alignItems="center"
         >
           <SizableText numberOfLines={1} ellipsizeMode="tail" size="$bodySm">
-            {`${tradeBaseInfo.feeFormatted as string}`}
+            {`${tradeBaseInfo.feeFormatted}`}
           </SizableText>
         </XStack>
 
@@ -298,6 +362,7 @@ const TradesHistoryRow = memo(
           {...getColumnStyle(columnConfigs[7])}
           justifyContent={calcCellAlign(columnConfigs[7].align)}
           alignItems="center"
+          gap="$1"
         >
           <SizableText
             numberOfLines={1}
@@ -305,10 +370,20 @@ const TradesHistoryRow = memo(
             size="$bodySm"
             color={closePnlInfo.closePnlColor}
           >
-            {`${closePnlInfo.closePnlPlusOrMinus}${
-              closePnlInfo.closePnlFormatted as string
-            }`}
+            {`${closePnlInfo.closePnlPlusOrMinus}${closePnlInfo.closePnlFormatted}`}
           </SizableText>
+          {canShare ? (
+            <IconButton
+              variant="tertiary"
+              size="small"
+              icon="ShareOutline"
+              iconSize="$4"
+              onPress={() => onShare?.(fill)}
+              cursor="pointer"
+              hoverStyle={null}
+              pressStyle={null}
+            />
+          ) : null}
         </XStack>
       </XStack>
     );

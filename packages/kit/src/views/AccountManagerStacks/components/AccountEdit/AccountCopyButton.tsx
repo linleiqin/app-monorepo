@@ -26,11 +26,13 @@ import {
 import accountUtils from '@onekeyhq/shared/src/utils/accountUtils';
 
 export function AccountCopyButton({
+  avatarNetworkId,
   indexedAccount,
   account,
   wallet,
   onClose,
 }: {
+  avatarNetworkId?: string;
   indexedAccount?: IDBIndexedAccount;
   account?: IDBAccount;
   wallet?: IDBWallet;
@@ -44,7 +46,7 @@ export function AccountCopyButton({
   const copyAddressWithDeriveType = useCopyAddressWithDeriveType();
 
   const currentNetworkId =
-    account?.createAtNetwork ?? activeAccount?.network?.id;
+    avatarNetworkId || account?.createAtNetwork || activeAccount?.network?.id;
 
   const { network, vaultSettings } = useAccountData({
     networkId: currentNetworkId,
@@ -106,13 +108,13 @@ export function AccountCopyButton({
         deriveInfo: activeAccount?.deriveInfoItems?.find(
           (item) => item.value === defaultDeriveType,
         )?.item,
-        networkName: network?.shortname,
+        networkName: network?.name,
       });
     } else {
       copyAddressWithDeriveType({
         address:
           account?.address || indexedAccount?.associateAccount?.address || '',
-        networkName: network?.shortname,
+        networkName: network?.name,
       });
     }
     onClose();
@@ -121,7 +123,7 @@ export function AccountCopyButton({
     wallet?.type,
     network?.id,
     network?.isAllNetworks,
-    network?.shortname,
+    network?.name,
     isSoftwareWalletOnlyUser,
     vaultSettings?.mergeDeriveAssetsEnabled,
     onClose,

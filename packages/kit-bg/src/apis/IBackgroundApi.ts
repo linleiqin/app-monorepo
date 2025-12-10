@@ -23,6 +23,7 @@ import type ServiceAppUpdate from '../services/ServiceAppUpdate';
 import type ServiceBatchCreateAccount from '../services/ServiceBatchCreateAccount';
 import type ServiceBootstrap from '../services/ServiceBootstrap';
 import type ServiceCloudBackup from '../services/ServiceCloudBackup';
+import type ServiceCloudBackupV2 from '../services/ServiceCloudBackupV2';
 import type ServiceContextMenu from '../services/ServiceContextMenu';
 import type ServiceCustomRpc from '../services/ServiceCustomRpc';
 import type ServiceCustomToken from '../services/ServiceCustomToken';
@@ -37,6 +38,7 @@ import type ServiceE2E from '../services/ServiceE2E';
 import type ServiceExplorer from '../services/ServiceExplorer';
 import type ServiceFiatCrypto from '../services/ServiceFiatCrypto';
 import type ServiceFirmwareUpdate from '../services/ServiceFirmwareUpdate';
+import type ServiceFreshAddress from '../services/ServiceFreshAddress';
 import type ServiceGas from '../services/ServiceGas';
 import type ServiceHardware from '../services/ServiceHardware';
 import type ServiceHardwareUI from '../services/ServiceHardwareUI';
@@ -46,6 +48,7 @@ import type ServiceHyperliquidExchange from '../services/ServiceHyperLiquid/Serv
 import type ServiceHyperliquidSubscription from '../services/ServiceHyperLiquid/ServiceHyperliquidSubscription';
 import type ServiceHyperliquidWallet from '../services/ServiceHyperLiquid/ServiceHyperliquidWallet';
 import type ServiceInternalSignAndVerify from '../services/ServiceInternalSignAndVerify';
+import type ServiceIpTable from '../services/ServiceIpTable';
 import type ServiceLightning from '../services/ServiceLightning';
 import type ServiceLiteCardMnemonic from '../services/ServiceLiteCardMnemonic';
 import type ServiceLogger from '../services/ServiceLogger';
@@ -55,6 +58,7 @@ import type ServiceMarketWS from '../services/ServiceMarketWS';
 import type ServiceMasterPassword from '../services/ServiceMasterPassword';
 import type ServiceNameResolver from '../services/ServiceNameResolver';
 import type ServiceNetwork from '../services/ServiceNetwork';
+import type ServiceNetworkDoctor from '../services/ServiceNetworkDoctor';
 import type ServiceNFT from '../services/ServiceNFT';
 import type ServiceNostr from '../services/ServiceNostr';
 import type ServiceNotification from '../services/ServiceNotification';
@@ -75,11 +79,13 @@ import type ServiceSpotlight from '../services/ServiceSpotlight';
 import type ServiceStaking from '../services/ServiceStaking';
 import type ServiceSwap from '../services/ServiceSwap';
 import type ServiceToken from '../services/ServiceToken';
+import type ServiceTransaction from '../services/ServiceTransaction';
 import type ServiceUniversalSearch from '../services/ServiceUniversalSearch';
 import type ServiceV4Migration from '../services/ServiceV4Migration';
 import type ServiceValidator from '../services/ServiceValidator';
 import type ServiceWalletBanner from '../services/ServiceWalletBanner';
 import type ServiceWalletConnect from '../services/ServiceWalletConnect';
+import type ServiceWalletStatus from '../services/ServiceWalletStatus';
 import type ServiceWebviewPerp from '../services/ServiceWebviewPerp';
 import type { EAtomNames } from '../states/jotai/atomNames';
 import type { IWebembedApiKeys } from '../webembeds/instance/IWebembedApi';
@@ -160,6 +166,7 @@ export interface IBackgroundApi extends IBackgroundApiBridge {
   serviceNFT: ServiceNFT;
   serviceAppCleanup: ServiceAppCleanup;
   serviceHistory: ServiceHistory;
+  serviceTransaction: ServiceTransaction;
   serviceDefi: ServiceDefi;
   serviceValidator: ServiceValidator;
   serviceNameResolver: ServiceNameResolver;
@@ -175,6 +182,7 @@ export interface IBackgroundApi extends IBackgroundApiBridge {
   servicePrimeCloudSync: ServicePrimeCloudSync;
   serviceQrWallet: ServiceQrWallet;
   serviceAccountProfile: ServiceAccountProfile;
+  serviceFreshAddress: ServiceFreshAddress;
   serviceHardware: ServiceHardware;
   serviceHardwareUI: ServiceHardwareUI;
   serviceFirmwareUpdate: ServiceFirmwareUpdate;
@@ -182,6 +190,7 @@ export interface IBackgroundApi extends IBackgroundApiBridge {
   serviceOnboarding: ServiceOnboarding;
   serviceScanQRCode: ServiceScanQRCode;
   serviceCloudBackup: ServiceCloudBackup;
+  serviceCloudBackupV2: ServiceCloudBackupV2;
   serviceLiteCardMnemonic: ServiceLiteCardMnemonic;
   serviceAddressBook: ServiceAddressBook;
   serviceAppUpdate: ServiceAppUpdate;
@@ -196,6 +205,7 @@ export interface IBackgroundApi extends IBackgroundApiBridge {
   serviceReferralCode: ServiceReferralCode;
   serviceDBBackup: ServiceDBBackup;
   serviceWalletBanner: ServiceWalletBanner;
+  serviceWalletStatus: ServiceWalletStatus;
   serviceApproval: ServiceApproval;
   serviceInternalSignAndVerify: ServiceInternalSignAndVerify;
 
@@ -213,4 +223,7 @@ export interface IBackgroundApi extends IBackgroundApiBridge {
   serviceHyperliquidExchange: ServiceHyperliquidExchange;
   serviceHyperliquidWallet: ServiceHyperliquidWallet;
   serviceHyperliquidSubscription: ServiceHyperliquidSubscription;
+
+  serviceIpTable: ServiceIpTable;
+  serviceNetworkDoctor: ServiceNetworkDoctor;
 }

@@ -1,13 +1,15 @@
+/* eslint-disable no-continue */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useRoute } from '@react-navigation/core';
 import BigNumber from 'bignumber.js';
-import { isUndefined } from 'lodash';
+import { isNil, isUndefined } from 'lodash';
 import { type IntlShape, useIntl } from 'react-intl';
 
 import {
   Accordion,
   Alert,
+  Button,
   Dialog,
   NumberSizeableText,
   Page,
@@ -18,13 +20,16 @@ import {
   getCurrentVisibilityState,
   onVisibilityStateChange,
 } from '@onekeyhq/components';
+import type { IUnsignedTxPro } from '@onekeyhq/core/src/types';
 import { useSettingsPersistAtom } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
+import { EResponseCode } from '@onekeyhq/shared/src/consts/requestConsts';
 import { OneKeyLocalError } from '@onekeyhq/shared/src/errors';
 import { EOneKeyErrorClassNames } from '@onekeyhq/shared/src/errors/types/errorTypes';
 import type {
   IOneKeyError,
   IOneKeyRpcError,
 } from '@onekeyhq/shared/src/errors/types/errorTypes';
+import { isHardwareInterruptErrorByCode } from '@onekeyhq/shared/src/errors/utils/deviceErrorUtils';
 import errorUtils from '@onekeyhq/shared/src/errors/utils/errorUtils';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import type {
@@ -32,6 +37,7 @@ import type {
   IModalApprovalManagementParamList,
 } from '@onekeyhq/shared/src/routes/approvalManagement';
 import accountUtils from '@onekeyhq/shared/src/utils/accountUtils';
+import { calculateFeeForSend } from '@onekeyhq/shared/src/utils/feeUtils';
 import timerUtils from '@onekeyhq/shared/src/utils/timerUtils';
 import {
   ERevokeProgressState,
@@ -46,7 +52,6 @@ import type {
 import backgroundApiProxy from '../../../background/instance/backgroundApiProxy';
 import useAppNavigation from '../../../hooks/useAppNavigation';
 import { usePromiseResult } from '../../../hooks/usePromiseResult';
-import { calculateFeeForSend } from '../../../utils/gasFee';
 import BulkRevokeItem from '../components/BulkRevokeItem';
 
 import type { RouteProp } from '@react-navigation/core';
@@ -83,7 +88,23 @@ function BulkRevoke() {
       >
     >();
 
-  const { unsignedTxs, contractMap } = route.params;
+  const { contractMap } = route.params;
+
+  const [unsignedTxs, setUnsignedTxs] = useState<IUnsignedTxPro[]>(
+    route.params.unsignedTxs,
+  );
+
+  const networkStatusRef = useRef<
+    Record<
+      string,
+      {
+        isInsufficientFunds: boolean;
+        nativeBalance: string;
+        fillUpAmount: string;
+        nativeSymbol: string;
+      }
+    >
+  >({});
 
   const navigation = useAppNavigation();
 
@@ -165,13 +186,68 @@ function BulkRevoke() {
       await waitUntilInProgress();
       const uuid = tx.uuid ?? '';
 
+      if (!uuid || !tx.networkId || !tx.accountId) {
+        throw new OneKeyLocalError(
+          `params missing: uuid: ${uuid}, networkId: ${
+            tx.networkId ?? ''
+          }, accountId: ${tx.accountId ?? ''}`,
+        );
+      }
+
       try {
-        if (!uuid || !tx.networkId || !tx.accountId) {
-          throw new OneKeyLocalError(
-            `params missing: uuid: ${uuid}, networkId: ${
-              tx.networkId ?? ''
-            }, accountId: ${tx.accountId ?? ''}`,
+        if (
+          isNil(networkStatusRef.current[tx.networkId ?? '']?.nativeBalance)
+        ) {
+          const nativeTokenAddress =
+            await backgroundApiProxy.serviceToken.getNativeTokenAddress({
+              networkId: tx.networkId,
+            });
+          const resp = await backgroundApiProxy.serviceToken.fetchTokensDetails(
+            {
+              accountId: tx.accountId,
+              networkId: tx.networkId,
+              contractList: [nativeTokenAddress],
+            },
           );
+
+          if (resp && resp[0] && !isNil(resp[0].balanceParsed)) {
+            networkStatusRef.current[tx.networkId ?? ''] = {
+              ...networkStatusRef.current[tx.networkId ?? ''],
+              nativeBalance: resp[0].balanceParsed,
+              nativeSymbol: resp[0].info?.symbol,
+            };
+          }
+        }
+      } catch (error) {
+        console.error('=====>>>>>> fetchAccountNativeBalance error', error);
+      }
+
+      if (isAborted.current) {
+        break;
+      }
+
+      await waitUntilInProgress();
+
+      try {
+        if (networkStatusRef.current[tx.networkId ?? '']?.isInsufficientFunds) {
+          const nativeSymbol =
+            networkStatusRef.current[tx.networkId ?? '']?.nativeSymbol;
+          setRevokeTxsStatusMap((prev) => ({
+            ...prev,
+            [uuid]: {
+              isInsufficientFunds: true,
+              status: ERevokeTxStatus.Skipped,
+              skippedReason: intl.formatMessage(
+                {
+                  id: ETranslations.wallet_approval_bulk_revoke_status_skipped_reason_insufficient_gas,
+                },
+                {
+                  symbol: nativeSymbol,
+                },
+              ),
+            },
+          }));
+          continue;
         }
 
         setRevokeTxsStatusMap((prev) => ({
@@ -226,6 +302,45 @@ function BulkRevoke() {
           txSize: tx.txSize,
           estimateFeeParams,
         });
+
+        if (
+          !isNil(networkStatusRef.current[tx.networkId ?? '']?.nativeBalance) &&
+          new BigNumber(
+            networkStatusRef.current[tx.networkId ?? '']?.nativeBalance,
+          ).lt(feeResult.totalNativeForDisplay ?? feeResult.totalNative)
+        ) {
+          const fillUpAmount = new BigNumber(
+            feeResult.totalNativeForDisplay ?? feeResult.totalNative,
+          )
+            .minus(networkStatusRef.current[tx.networkId ?? '']?.nativeBalance)
+            .sd(4, BigNumber.ROUND_UP)
+            .toFixed();
+
+          networkStatusRef.current[tx.networkId ?? ''].isInsufficientFunds =
+            true;
+          networkStatusRef.current[tx.networkId ?? ''].fillUpAmount =
+            fillUpAmount;
+          networkStatusRef.current[tx.networkId ?? ''].nativeSymbol =
+            feeInfo.common.nativeSymbol;
+          setRevokeTxsStatusMap((prev) => ({
+            ...prev,
+            [uuid]: {
+              isInsufficientFunds: true,
+              status: ERevokeTxStatus.Failed,
+              skippedReason: intl.formatMessage(
+                {
+                  id: ETranslations.msg__str_is_required_for_network_fees_top_up_str_to_make_tx,
+                },
+                {
+                  symbol: feeInfo.common.nativeSymbol,
+                  amount: fillUpAmount,
+                },
+              ),
+            },
+          }));
+          continue;
+        }
+
         if (isAborted.current) {
           break;
         }
@@ -251,7 +366,7 @@ function BulkRevoke() {
             [uuid]: {
               status: ERevokeTxStatus.Skipped,
               skippedReason: intl.formatMessage({
-                id: ETranslations.fee_alert_dialog_description,
+                id: ETranslations.wallet_approval_bulk_revoke_status_paused_reason_excessive_gas,
               }),
             },
           }));
@@ -298,6 +413,16 @@ function BulkRevoke() {
             transferPayload: undefined,
           });
 
+        if (
+          !isNil(networkStatusRef.current[tx.networkId ?? '']?.nativeBalance)
+        ) {
+          networkStatusRef.current[tx.networkId ?? ''].nativeBalance =
+            new BigNumber(
+              networkStatusRef.current[tx.networkId ?? '']?.nativeBalance,
+            )
+              .minus(feeResult.totalNativeForDisplay ?? feeResult.totalNative)
+              .toFixed();
+        }
         if (isAborted.current) {
           break;
         }
@@ -315,6 +440,24 @@ function BulkRevoke() {
         }));
       } catch (error: unknown) {
         let passphraseEnabled;
+        let deviceCommunicationError;
+        if (
+          isHardwareInterruptErrorByCode({
+            error: error as IOneKeyError,
+          })
+        ) {
+          i -= 1;
+          deviceCommunicationError = true;
+          setProgressState(ERevokeProgressState.Paused);
+          progressStateRef.current = ERevokeProgressState.Paused;
+          setRevokeTxsStatusMap((prev) => ({
+            ...prev,
+            [uuid]: {
+              status: ERevokeTxStatus.Paused,
+            },
+          }));
+        }
+
         if (
           errorUtils.isErrorByClassName({
             error,
@@ -362,10 +505,23 @@ function BulkRevoke() {
           });
         }
 
-        if (!passphraseEnabled) {
+        if (!passphraseEnabled && !deviceCommunicationError) {
+          if (
+            (error as { code: number }).code ===
+            EResponseCode.insufficient_funds_for_tx_fee
+          ) {
+            networkStatusRef.current[tx.networkId ?? ''] = {
+              ...networkStatusRef.current[tx.networkId ?? ''],
+              isInsufficientFunds: true,
+            };
+          }
+
           setRevokeTxsStatusMap((prev) => ({
             ...prev,
             [uuid]: {
+              isInsufficientFunds:
+                (error as { code: number }).code ===
+                EResponseCode.insufficient_funds_for_tx_fee,
               status: ERevokeTxStatus.Failed,
               skippedReason:
                 (error as { data: { data: IOneKeyRpcError } }).data?.data?.res
@@ -422,7 +578,10 @@ function BulkRevoke() {
 
   useEffect(() => {
     const handleVisibilityStateChange = (visible: boolean) => {
-      if (visible === false) {
+      if (
+        visible === false &&
+        progressState === ERevokeProgressState.InProgress
+      ) {
         setProgressState(ERevokeProgressState.Paused);
         setRevokeTxsStatusMap((prev) => ({
           ...prev,
@@ -437,7 +596,7 @@ function BulkRevoke() {
       handleVisibilityStateChange,
     );
     return removeSubscription;
-  }, [currentProcessIndex, unsignedTxs]);
+  }, [currentProcessIndex, unsignedTxs, progressState]);
 
   const handleOnConfirm = useCallback(() => {
     if (progressState === ERevokeProgressState.Finished) {
@@ -464,6 +623,25 @@ function BulkRevoke() {
     }
   }, [progressState, navigation, currentProcessIndex, unsignedTxs]);
 
+  const handleOnCancel = useCallback(() => {
+    if (skippedTxCount === 0 && failedTxCount === 0) {
+      isAborted.current = true;
+      setProgressState(ERevokeProgressState.Aborted);
+      navigation.popStack();
+      return;
+    }
+    setProgressState(ERevokeProgressState.InProgress);
+    networkStatusRef.current = {};
+    setUnsignedTxs((prev) =>
+      prev.filter(
+        (tx) =>
+          revokeTxsStatusMap[tx.uuid ?? '']?.status !==
+          ERevokeTxStatus.Succeeded,
+      ),
+    );
+    setRevokeTxsStatusMap({});
+  }, [skippedTxCount, failedTxCount, navigation, revokeTxsStatusMap]);
+
   return (
     <Page
       scrollEnabled
@@ -485,20 +663,36 @@ function BulkRevoke() {
       </Page.Body>
       <Page.Footer>
         <Page.FooterActions
-          onCancel={
-            progressState === ERevokeProgressState.Finished
-              ? undefined
-              : () => {
-                  isAborted.current = true;
-                  setProgressState(ERevokeProgressState.Aborted);
-                  navigation.popStack();
-                }
-          }
           onConfirm={handleOnConfirm}
           onConfirmText={getConfirmText({
             intl,
             progressState,
           })}
+          cancelButton={
+            progressState === ERevokeProgressState.Finished &&
+            skippedTxCount === 0 &&
+            failedTxCount === 0 ? undefined : (
+              <Button
+                $md={
+                  {
+                    flexGrow: 1,
+                    flexBasis: 0,
+                    size: 'large',
+                  } as any
+                }
+                onPress={handleOnCancel}
+              >
+                {progressState === ERevokeProgressState.Finished &&
+                (failedTxCount !== 0 || skippedTxCount !== 0)
+                  ? `${intl.formatMessage({
+                      id: ETranslations.global_retry,
+                    })} (${failedTxCount + skippedTxCount})`
+                  : intl.formatMessage({
+                      id: ETranslations.global_cancel,
+                    })}
+              </Button>
+            )
+          }
         >
           <YStack
             gap="$1"

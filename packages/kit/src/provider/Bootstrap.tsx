@@ -11,6 +11,8 @@ import {
   getDialogInstances,
   getFormInstances,
   rootNavigationRef,
+  useIsTabletDetailView,
+  useMedia,
   useShortcuts,
 } from '@onekeyhq/components';
 import { ipcMessageKeys } from '@onekeyhq/desktop/app/config';
@@ -19,7 +21,11 @@ import {
   useDevSettingsPersistAtom,
   useOnboardingConnectWalletLoadingAtom,
 } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
-import { EAppUpdateStatus } from '@onekeyhq/shared/src/appUpdate';
+import {
+  EAppUpdateStatus,
+  EUpdateFileType,
+  getUpdateFileType,
+} from '@onekeyhq/shared/src/appUpdate';
 import {
   EAppEventBusNames,
   appEventBus,
@@ -27,18 +33,23 @@ import {
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import { defaultLogger } from '@onekeyhq/shared/src/logger/logger';
 import { electronUpdateListeners } from '@onekeyhq/shared/src/modules3rdParty/auto-update/electronUpdateListeners';
-import { initIntercom } from '@onekeyhq/shared/src/modules3rdParty/intercom';
+import {
+  initIntercom,
+  update,
+} from '@onekeyhq/shared/src/modules3rdParty/intercom';
 import performance from '@onekeyhq/shared/src/performance';
 import platformEnv from '@onekeyhq/shared/src/platformEnv';
 import {
   EDiscoveryModalRoutes,
+  EGalleryRoutes,
   EModalRoutes,
   EModalSettingRoutes,
   EMultiTabBrowserRoutes,
-  EOnboardingPages,
+  EOnboardingPagesV2,
+  EOnboardingV2Routes,
+  ETabEarnRoutes,
   ETabRoutes,
 } from '@onekeyhq/shared/src/routes';
-import { EPrimePages } from '@onekeyhq/shared/src/routes/prime';
 import { ERootRoutes } from '@onekeyhq/shared/src/routes/root';
 import { EShortcutEvents } from '@onekeyhq/shared/src/shortcuts/shortcuts.enum';
 import { ESpotlightTour } from '@onekeyhq/shared/src/spotlight';
@@ -47,10 +58,6 @@ import backgroundApiProxy from '../background/instance/backgroundApiProxy';
 import { useAppUpdateInfo } from '../components/UpdateReminder/hooks';
 import useAppNavigation from '../hooks/useAppNavigation';
 import { useOnLock } from '../hooks/useOnLock';
-import {
-  isOpenedReferFriendsPage,
-  useReferFriends,
-} from '../hooks/useReferFriends';
 import {
   isOpenedMyOneKeyModal,
   useToMyOneKeyModal,
@@ -76,7 +83,6 @@ const useDesktopEvents = platformEnv.isDesktop
       const useOnLockRef = useRef(onLock);
       useOnLockRef.current = onLock;
 
-      const { toReferFriendsPage } = useReferFriends();
       const toMyOneKeyModal = useToMyOneKeyModal();
 
       const { checkForUpdates, onUpdateAction } = useAppUpdateInfoCallback(
@@ -136,7 +142,10 @@ const useDesktopEvents = platformEnv.isDesktop
                 (route.params as { screen: string })?.screen ===
                   EModalRoutes.SettingModal
               ) {
-                if (route.name === ERootRoutes.Modal) {
+                if (
+                  route.name === ERootRoutes.Modal ||
+                  route.name === ERootRoutes.iOSFullScreen
+                ) {
                   const routeLength =
                     route.state?.routes?.[0]?.state?.routes.length || 1;
                   for (let i = 0; i < routeLength; i += 1)
@@ -261,7 +270,9 @@ const useDesktopEvents = platformEnv.isDesktop
             break;
           case EShortcutEvents.TabEarn:
             ensureModalClosedAndNavigate(() => {
-              navigation.switchTab(ETabRoutes.Earn);
+              navigation.switchTab(ETabRoutes.Earn, {
+                screen: ETabEarnRoutes.EarnHome,
+              });
             });
             break;
           case EShortcutEvents.TabSwap:
@@ -274,14 +285,15 @@ const useDesktopEvents = platformEnv.isDesktop
               navigation.switchTab(ETabRoutes.Market);
             });
             break;
+          case EShortcutEvents.TabPerps:
+            ensureModalClosedAndNavigate(() => {
+              navigation.switchTab(ETabRoutes.Perp);
+            });
+            break;
           case EShortcutEvents.TabReferAFriend:
-            if (!isOpenedReferFriendsPage()) {
-              ensureModalClosedAndNavigate(() => {
-                void toReferFriendsPage();
-              });
-            } else {
-              ensureModalClosedAndNavigate();
-            }
+            ensureModalClosedAndNavigate(() => {
+              navigation.switchTab(ETabRoutes.ReferFriends);
+            });
             break;
           case EShortcutEvents.TabMyOneKey:
             if (!isOpenedMyOneKeyModal()) {
@@ -376,6 +388,12 @@ export const useFetchMarketBasicConfig = () => {
   }, []);
 };
 
+export const useFetchPerpConfig = () => {
+  useEffect(() => {
+    void backgroundApiProxy.serviceHyperliquid.updatePerpsConfigByServerWithCache();
+  }, []);
+};
+
 const launchFloatingIconEvent = async (intl: IntlShape) => {
   const visited = await backgroundApiProxy.serviceSpotlight.isVisited(
     ESpotlightTour.showFloatingIconDialog,
@@ -442,10 +460,21 @@ const launchFloatingIconEvent = async (intl: IntlShape) => {
 };
 
 export const useIntercomInit = () => {
+  const { md } = useMedia();
+  const isInitializedRef = useRef(false);
+
   useEffect(() => {
-    // 初始化 Intercom
-    void initIntercom();
-  }, []);
+    const shouldHideLauncher = md || !platformEnv.isWebDappMode;
+
+    if (!isInitializedRef.current) {
+      // Initialize Intercom on first render, hide launcher on small screens
+      void initIntercom({ hide_default_launcher: shouldHideLauncher });
+      isInitializedRef.current = true;
+    } else {
+      // Update launcher visibility when screen size changes
+      update({ hide_default_launcher: shouldHideLauncher });
+    }
+  }, [md]);
 };
 
 export const useLaunchEvents = (): void => {
@@ -492,8 +521,21 @@ export const useCheckUpdateOnDesktop =
             },
           );
           setTimeout(async () => {
+            const updateInfo =
+              await backgroundApiProxy.serviceAppUpdate.getUpdateInfo();
+            const fileType = getUpdateFileType(updateInfo);
+            if (
+              updateInfo.status === EAppUpdateStatus.done ||
+              fileType === EUpdateFileType.appShell
+            ) {
+              return;
+            }
             const previousBuildNumber =
               await globalThis.desktopApiProxy.appUpdate.getPreviousUpdateBuildNumber();
+            defaultLogger.app.appUpdate.isInstallFailed(
+              previousBuildNumber,
+              platformEnv.buildNumber || '',
+            );
             if (
               previousBuildNumber &&
               getBuilderNumber(previousBuildNumber) >=
@@ -557,6 +599,51 @@ export const useRemindDevelopmentBuildExtension =
       }
     : noop;
 
+export const useTabletDetailView = () => {
+  const isTabletDetailView = useIsTabletDetailView();
+  const appNavigation = useAppNavigation();
+  useEffect(() => {
+    if (isTabletDetailView) {
+      const onSwitchTabBar = (event: { route: ETabRoutes }) => {
+        appNavigation.switchTab(event.route);
+      };
+      const onPushPageInTabletDetailView = (event: any) => {
+        setTimeout(() => {
+          appNavigation.push(...event);
+        }, 10);
+      };
+      const onPushModalPageInTabletDetailView = (event: {
+        route: EModalRoutes;
+        params: any;
+      }) => {
+        setTimeout(() => {
+          appNavigation.pushModal(event.route, event.params);
+        }, 10);
+      };
+      appEventBus.on(EAppEventBusNames.SwitchTabBar, onSwitchTabBar);
+      appEventBus.on(
+        EAppEventBusNames.PushPageInTabletDetailView,
+        onPushPageInTabletDetailView,
+      );
+      appEventBus.on(
+        EAppEventBusNames.PushModalPageInTabletDetailView,
+        onPushModalPageInTabletDetailView,
+      );
+      return () => {
+        appEventBus.off(EAppEventBusNames.SwitchTabBar, onSwitchTabBar);
+        appEventBus.off(
+          EAppEventBusNames.PushPageInTabletDetailView,
+          onPushPageInTabletDetailView,
+        );
+        appEventBus.off(
+          EAppEventBusNames.PushModalPageInTabletDetailView,
+          onPushModalPageInTabletDetailView,
+        );
+      };
+    }
+  }, [appNavigation, isTabletDetailView]);
+};
+
 export function Bootstrap() {
   const navigation = useAppNavigation();
   const [devSettings] = useDevSettingsPersistAtom();
@@ -576,14 +663,36 @@ export function Bootstrap() {
       autoNavigation?.selectedTab &&
       Object.values(ETabRoutes).includes(autoNavigation.selectedTab)
     ) {
+      /*
+        Auto Jump on Launch
+        Jump to Page
+        Choose which page to open when launching the app
+      */
       const timer = setTimeout(() => {
         navigation.switchTab(autoNavigation.selectedTab as ETabRoutes);
+        // ----------------------------------------------
+        // navigate to auth gallery
+        navigation.navigate(ERootRoutes.Main, {
+          screen: ETabRoutes.Developer,
+          params: {
+            screen: EGalleryRoutes.ComponentAuth,
+          },
+        });
+        // ----------------------------------------------
         // navigation.pushModal(EModalRoutes.PrimeModal, {
         //   screen: EPrimePages.PrimeTransfer,
         // });
-        navigation.pushModal(EModalRoutes.OnboardingModal, {
-          screen: EOnboardingPages.ConnectWallet,
-        });
+        // ----------------------------------------------
+        // navigation.pushModal(EModalRoutes.OnboardingModal, {
+        //   screen: EOnboardingPages.ConnectWallet,
+        // });
+        // ----------------------------------------------
+        // navigation.navigate(ERootRoutes.Onboarding, {
+        //   screen: EOnboardingV2Routes.OnboardingV2,
+        //   params: {
+        //     screen: EOnboardingPagesV2.AddExistingWallet,
+        //   },
+        // });
       }, 1000);
 
       return () => clearTimeout(timer);
@@ -602,6 +711,7 @@ export function Bootstrap() {
 
   useFetchCurrencyList();
   useFetchMarketBasicConfig();
+  useFetchPerpConfig();
   useAboutVersion();
   useDesktopEvents();
   useLaunchEvents();
@@ -609,5 +719,6 @@ export function Bootstrap() {
   useIntercomInit();
   useClearStorageOnExtension();
   useRemindDevelopmentBuildExtension();
+  useTabletDetailView();
   return null;
 }

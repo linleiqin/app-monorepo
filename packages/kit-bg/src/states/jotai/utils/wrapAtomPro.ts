@@ -67,6 +67,9 @@ export function wrapAtomPro(
             prev: any | Promise<any>,
           ) => any | Promise<any> | typeof JOTAI_RESET
         )(prevValue);
+        if (prevValue === nextValue) {
+          return;
+        }
       }
 
       if (nextValue instanceof Promise) {
@@ -125,5 +128,6 @@ export function wrapAtomPro(
     Promise<void> | undefined
   >;
 
+  proAtom.name = name;
   return proAtom;
 }

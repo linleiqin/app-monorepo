@@ -29,7 +29,6 @@ export type IToken = {
 
   // for aggregate token
   isAggregateToken?: boolean;
-  isSameSymbolWithAggregateToken?: boolean;
   commonSymbol?: string;
 };
 
@@ -82,11 +81,10 @@ export type IFetchAccountTokensParams = {
   allNetworksAccountId?: string;
   allNetworksNetworkId?: string;
   saveToLocal?: boolean;
+  saveToLocalLimit?: number;
   customTokensRawData?: ICustomTokenDBStruct;
   blockedTokensRawData?: IRiskTokenManagementDBStruct['blockedTokens'];
   unblockedTokensRawData?: IRiskTokenManagementDBStruct['unblockedTokens'];
-  aggregateTokenConfigMapRawData?: Record<string, IAggregateToken>;
-  aggregateTokenSymbolMapRawData?: Record<string, boolean>;
 };
 
 export type ITokenData = {
@@ -221,20 +219,4 @@ export type IHomeDefaultToken = {
   networkId: string;
   logoURI: string;
   order: number;
-};
-
-export type IFetchAggregateTokenConfigMapResp = {
-  data: {
-    meta: {
-      homeDefaults: IHomeDefaultToken[];
-    };
-    tokens: Record<
-      string,
-      {
-        logoURI: string;
-        name: string;
-        data: IAggregateToken[];
-      }
-    >;
-  };
 };

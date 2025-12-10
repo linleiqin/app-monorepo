@@ -3,16 +3,22 @@ import { useCallback, useMemo, useState } from 'react';
 import BigNumber from 'bignumber.js';
 import { useIntl } from 'react-intl';
 
-import { Button, useMedia } from '@onekeyhq/components';
+import { Button, rootNavigationRef, useMedia } from '@onekeyhq/components';
 import type { IButtonProps } from '@onekeyhq/components';
 import backgroundApiProxy from '@onekeyhq/kit/src/background/instance/backgroundApiProxy';
 import { useAccountSelectorCreateAddress } from '@onekeyhq/kit/src/components/AccountSelector/hooks/useAccountSelectorCreateAddress';
 import useAppNavigation from '@onekeyhq/kit/src/hooks/useAppNavigation';
+import { closeModalPages } from '@onekeyhq/kit/src/hooks/usePageNavigation';
 import { usePromiseResult } from '@onekeyhq/kit/src/hooks/usePromiseResult';
 import { useActiveAccount } from '@onekeyhq/kit/src/states/jotai/contexts/accountSelector';
 import { useSettingsPersistAtom } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
-import { EModalRoutes, EOnboardingPages } from '@onekeyhq/shared/src/routes';
+import {
+  EOnboardingPagesV2,
+  EOnboardingV2Routes,
+  ERootRoutes,
+} from '@onekeyhq/shared/src/routes';
+import type { INumberFormatProps } from '@onekeyhq/shared/src/utils/numberUtils';
 import { numberFormat } from '@onekeyhq/shared/src/utils/numberUtils';
 
 import { useTokenDetail } from '../../../hooks/useTokenDetail';
@@ -48,6 +54,7 @@ export function ActionButton({
   onSwapAction,
   ...otherProps
 }: IActionButtonProps) {
+  const [hasClickedWithoutAmount, setHasClickedWithoutAmount] = useState(false);
   const intl = useIntl();
   const { gtMd } = useMedia();
   const { tokenDetail } = useTokenDetail();
@@ -95,6 +102,24 @@ export function ActionButton({
     amountBN,
   ]);
 
+  const tokenFormatter: INumberFormatProps = useMemo(() => {
+    return {
+      formatter: 'balance',
+      formatterOptions: {
+        tokenSymbol: token?.symbol || '',
+      },
+    };
+  }, [token?.symbol]);
+
+  const currencyFormatter: INumberFormatProps = useMemo(() => {
+    return {
+      formatter: 'value',
+      formatterOptions: {
+        currency: settingsValue.currencyInfo.symbol,
+      },
+    };
+  }, [settingsValue.currencyInfo.symbol]);
+
   const shouldCreateAddress = usePromiseResult(async () => {
     let result = false;
     if (activeAccount?.canCreateAddress && !createAddressLoading) {
@@ -134,23 +159,11 @@ export function ActionButton({
 
   // Disable button if insufficient balance
   const shouldDisable = isInsufficientBalance;
-  const displayAmountFormatted = numberFormat(displayAmount, {
-    formatter: 'balance',
-    formatterOptions: {
-      tokenSymbol: token?.symbol || '',
-    },
-  });
+  const displayAmountFormatted = numberFormat(displayAmount, tokenFormatter);
 
-  let buttonText = `${actionText} ${displayAmountFormatted as string} `;
+  let buttonText = `${actionText} ${displayAmountFormatted} `;
   if (typeof totalValue === 'number') {
-    buttonText += `(${
-      numberFormat(totalValue.toFixed(2), {
-        formatter: 'value',
-        formatterOptions: {
-          currency: settingsValue.currencyInfo.symbol,
-        },
-      }) as string
-    })`;
+    buttonText += `(${numberFormat(totalValue.toFixed(2), currencyFormatter)})`;
   }
 
   if (isWrapped) {
@@ -184,7 +197,20 @@ export function ActionButton({
   }
 
   // Use colored style only for normal trading states (has amount, not disabled, has account)
-  const shouldUseColoredStyle = hasAmount && !shouldDisable && !noAccount;
+  let shouldUseColoredStyle =
+    hasAmount && !shouldDisable && !noAccount && !disabled;
+
+  let isButtonDisabled = Boolean(
+    (shouldDisable || disabled || !hasAmount) &&
+      !shouldCreateAddress?.result &&
+      !noAccount,
+  );
+
+  if (!hasAmount && !hasClickedWithoutAmount) {
+    shouldUseColoredStyle = true;
+    buttonText = `${actionText} ${tokenDetail?.symbol || ''}`.trim();
+    isButtonDisabled = false;
+  }
 
   const buttonStyleProps = shouldUseColoredStyle
     ? {
@@ -193,7 +219,10 @@ export function ActionButton({
             ? '$buttonSuccess'
             : '$buttonCritical',
         color: '$textOnColor',
-        borderWidth: 0,
+        borderColor:
+          tradeType === ESwapDirection.BUY
+            ? '$buttonSuccess'
+            : '$buttonCritical',
         shadowOpacity: 0,
         elevation: 0,
         hoverStyle: {
@@ -209,25 +238,38 @@ export function ActionButton({
 
   const handlePress = useCallback(
     async (event: GestureResponderEvent) => {
+      setHasClickedWithoutAmount(true);
+      if (!hasAmount && !hasClickedWithoutAmount) {
+        return;
+      }
       if (noAccount) {
-        navigation.pushModal(EModalRoutes.OnboardingModal, {
-          screen: EOnboardingPages.GetStarted,
+        await closeModalPages();
+        rootNavigationRef.current?.navigate(ERootRoutes.Onboarding, {
+          screen: EOnboardingV2Routes.OnboardingV2,
+          params: {
+            screen: EOnboardingPagesV2.GetStarted,
+          },
         });
         return;
       }
       if (shouldCreateAddress?.result) {
         setCreateAddressLoading(true);
-        await createAddress({
-          num: 0,
-          selectAfterCreate: false,
-          account: {
-            walletId: activeAccount?.wallet?.id,
-            networkId: networkId ?? '',
-            indexedAccountId: activeAccount?.indexedAccount?.id,
-            deriveType: activeAccount?.deriveType ?? 'default',
-          },
-        });
-        setCreateAddressLoading(false);
+        try {
+          await createAddress({
+            num: 0,
+            selectAfterCreate: false,
+            account: {
+              walletId: activeAccount?.wallet?.id,
+              networkId: networkId ?? '',
+              indexedAccountId: activeAccount?.indexedAccount?.id,
+              deriveType: activeAccount?.deriveType ?? 'default',
+            },
+          });
+        } catch (e) {
+          console.error('Create address failed:', e);
+        } finally {
+          setCreateAddressLoading(false);
+        }
         return;
       }
 
@@ -242,15 +284,16 @@ export function ActionButton({
       onPress?.(event);
     },
     [
-      networkId,
+      hasClickedWithoutAmount,
+      hasAmount,
       noAccount,
-      shouldCreateAddress,
+      shouldCreateAddress?.result,
       onPress,
-      navigation,
       createAddress,
       activeAccount?.wallet?.id,
       activeAccount?.indexedAccount?.id,
       activeAccount?.deriveType,
+      networkId,
       onSwapAction,
     ],
   );
@@ -258,12 +301,8 @@ export function ActionButton({
   return (
     <Button
       size={gtMd ? 'medium' : 'large'}
-      disabled={Boolean(
-        (shouldDisable || disabled || !hasAmount) &&
-          !shouldCreateAddress?.result &&
-          !noAccount,
-      )}
-      onPress={shouldDisable ? undefined : handlePress}
+      disabled={isButtonDisabled}
+      onPress={handlePress}
       loading={createAddressLoading || otherProps.loading}
       {...otherProps}
       {...buttonStyleProps}

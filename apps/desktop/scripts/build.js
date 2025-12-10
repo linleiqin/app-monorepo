@@ -4,7 +4,18 @@ const path = require('path');
 const childProcess = require('child_process');
 const { build } = require('esbuild');
 const glob = require('glob');
+const fs = require('fs');
 const pkg = require('../app/package.json');
+
+// Add passport-desktop-win32-x64-msvc dependency for Windows
+if (process.platform === 'win32') {
+  pkg.dependencies = pkg.dependencies || {};
+  pkg.dependencies['passport-desktop-win32-x64-msvc'] = '0.1.2';
+
+  // Write back to package.json file
+  const packageJsonPath = path.join(__dirname, '..', 'app', 'package.json');
+  fs.writeFileSync(packageJsonPath, JSON.stringify(pkg, null, 2));
+}
 
 const electronSource = path.join(__dirname, '..', 'app');
 
@@ -22,6 +33,14 @@ const serviceFiles = glob
   .sync(path.join(electronSource, 'service', '*.ts'))
   .map((name) => name.split('app/').pop());
 
+console.log('process.env.NODE_ENV', process.env.NODE_ENV);
+console.log('process.env.DESK_CHANNEL', process.env.DESK_CHANNEL);
+console.log('process.env.SNAP', process.env.SNAP);
+console.log('process.env.BUILD_NUMBER', process.env.BUILD_NUMBER);
+console.log('process.env.BUILD_TIME', process.env.BUILD_TIME);
+console.log('process.env.VERSION', process.env.VERSION);
+console.log('process.env.BUNDLE_VERSION', process.env.BUNDLE_VERSION);
+console.log('process.env.GITHUB_SHA', process.env.GITHUB_SHA);
 build({
   entryPoints: ['app.ts', 'preload.ts', ...serviceFiles].map((f) =>
     path.join(electronSource, f),

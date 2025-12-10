@@ -5,7 +5,6 @@ import {
 import {
   IMPL_ALLNETWORKS,
   IMPL_EVM,
-  getEnabledNFTNetworkIds,
 } from '@onekeyhq/shared/src/engine/engineConsts';
 import { OneKeyLocalError } from '@onekeyhq/shared/src/errors';
 import { defaultLogger } from '@onekeyhq/shared/src/logger/logger';
@@ -231,7 +230,7 @@ class ServiceAllNetwork extends ServiceBase {
     defaultLogger.account.allNetworkAccountPerf.consoleLog(
       'process all networks',
     );
-    const enableNFTNetworkIds = getEnabledNFTNetworkIds();
+    const enableNFTNetworkIds = networkUtils.getEnabledNFTNetworkIds();
 
     let enabledNetworks: Record<string, boolean> = {};
     let disabledNetworks: Record<string, boolean> = {};
@@ -431,13 +430,11 @@ class ServiceAllNetwork extends ServiceBase {
   async buildAllNetworkAccountsForApiParam(
     params: IAllNetworkAccountsParams & { withoutAccountId?: boolean },
   ) {
-    const { accountsInfo } =
-      await this.backgroundApi.serviceAllNetwork.getAllNetworkAccountsWithEnabledNetworks(
-        {
-          ...params,
-          includingNonExistingAccount: true,
-        },
-      );
+    const { accountsInfo } = await this.getAllNetworkAccounts({
+      ...params,
+      networksEnabledOnly: params.networksEnabledOnly ?? true,
+      excludeTestNetwork: params.excludeTestNetwork ?? false,
+    });
 
     const allNetworkAccounts = accountsInfo.map((acc) => ({
       accountId: params.withoutAccountId ? undefined : acc.accountId,

@@ -14,9 +14,19 @@ import {
   useState,
 } from 'react';
 
-import { Dimensions, useWindowDimensions } from 'react-native';
-import { Popover as TMPopover, useMedia, withStaticProperties } from 'tamagui';
+import { Dimensions } from 'react-native';
 
+import { useMedia } from '@onekeyhq/components/src/hooks/useStyle';
+import {
+  TMPopover,
+  withStaticProperties,
+} from '@onekeyhq/components/src/shared/tamagui';
+import type {
+  PopoverContentProps as PopoverContentTypeProps,
+  SheetProps,
+  TMPopoverProps,
+  UseMediaState,
+} from '@onekeyhq/components/src/shared/tamagui';
 import { defaultLogger } from '@onekeyhq/shared/src/logger/logger';
 import platformEnv from '@onekeyhq/shared/src/platformEnv';
 
@@ -33,7 +43,7 @@ import {
 } from '../../hooks';
 import { PageContext, usePageContext } from '../../layouts/Page/PageContext';
 import { SizableText, Stack, XStack, YStack } from '../../primitives';
-import { NATIVE_HIT_SLOP } from '../../utils';
+import { NATIVE_HIT_SLOP } from '../../utils/getFontSize';
 import { IconButton } from '../IconButton';
 import { Trigger } from '../Trigger';
 
@@ -41,13 +51,7 @@ import { PopoverContent } from './PopoverContent';
 
 import type { IPopoverTooltip } from './type';
 import type { IIconButtonProps } from '../IconButton';
-import type { UseMediaState } from '@tamagui/core';
-import type { LayoutChangeEvent, View } from 'react-native';
-import type {
-  PopoverContentTypeProps,
-  SheetProps,
-  PopoverProps as TMPopoverProps,
-} from 'tamagui';
+import type { View } from 'react-native';
 
 const gtMdShFrameStyle = {
   minWidth: 400,
@@ -589,6 +593,7 @@ function Tooltip({
   placement = 'bottom',
   iconSize = '$4',
   renderContent,
+  triggerProps,
 }: IPopoverTooltip & {
   iconSize?: IIconButtonProps['iconSize'];
 }) {
@@ -602,6 +607,7 @@ function Tooltip({
           iconSize={iconSize}
           icon="InfoCircleOutline"
           variant="tertiary"
+          {...triggerProps}
         />
       }
       renderContent={

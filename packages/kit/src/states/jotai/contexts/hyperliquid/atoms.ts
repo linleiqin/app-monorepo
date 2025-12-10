@@ -1,17 +1,15 @@
-import memoizee from 'memoizee';
-
-import backgroundApiProxy from '@onekeyhq/kit/src/background/instance/backgroundApiProxy';
+import { createJotaiContext } from '@onekeyhq/kit/src/states/jotai/utils/createJotaiContext';
 import {
-  // eslint-disable-next-line @typescript-eslint/no-restricted-imports
-  atom,
-  createJotaiContext,
-} from '@onekeyhq/kit/src/states/jotai/utils/createJotaiContext';
-import { PERPS_EMPTY_ADDRESS } from '@onekeyhq/shared/src/consts/perp';
+  computeMaxTradeSize,
+  resolveTradingSizeBN,
+  sanitizeManualSize,
+} from '@onekeyhq/shared/src/utils/perpsUtils';
 import type * as HL from '@onekeyhq/shared/types/hyperliquid/sdk';
 import type {
   IConnectionState,
-  ITokenListItem,
+  IPerpOrderBookTickOptionPersist,
 } from '@onekeyhq/shared/types/hyperliquid/types';
+import { EPerpsSizeInputMode } from '@onekeyhq/shared/types/hyperliquid/types';
 
 const {
   Provider: ProviderJotaiContextHyperliquid,
@@ -21,21 +19,39 @@ const {
 } = createJotaiContext();
 export { contextAtomMethod, ProviderJotaiContextHyperliquid };
 
-export const { atom: allMidsAtom, use: useAllMidsAtom } =
+export const { atom: perpsAllMidsAtom, use: usePerpsAllMidsAtom } =
   contextAtom<HL.IWsAllMids | null>(null);
 
-export const { atom: webData2Atom, use: useWebData2Atom } =
-  contextAtom<HL.IWsWebData2 | null>(null);
+export const {
+  atom: perpsAllAssetsFilteredAtom,
+  use: usePerpsAllAssetsFilteredAtom,
+} = contextAtom<{
+  assets: HL.IPerpsUniverse[];
+  query: string;
+}>({
+  assets: [],
+  query: '',
+});
 
-export const { atom: activeAssetCtxAtom, use: useActiveAssetCtxAtom } =
-  contextAtom<(HL.IWsActiveAssetCtx & { coin: string }) | null>(null);
+export const {
+  atom: perpsAllAssetsFilteredLengthAtom,
+  use: usePerpsAllAssetsFilteredLengthAtom,
+} = contextAtomComputed((get) => {
+  const perpsAllAssetsFiltered = get(perpsAllAssetsFilteredAtom());
+  return perpsAllAssetsFiltered.assets.length;
+});
 
-export const { atom: activeAssetDataAtom, use: useActiveAssetDataAtom } =
-  contextAtom<(HL.IActiveAssetData & { coin: string }) | null>(null);
+export const { atom: perpsAllAssetCtxsAtom, use: usePerpsAllAssetCtxsAtom } =
+  contextAtom<{
+    assetCtxs: HL.IPerpsAssetCtx[];
+  }>({
+    assetCtxs: [],
+  });
 
 export const { atom: l2BookAtom, use: useL2BookAtom } =
   contextAtom<HL.IBook | null>(null);
 
+// TODO remove
 export const { atom: connectionStateAtom, use: useConnectionStateAtom } =
   contextAtom<IConnectionState>({
     isConnected: false,
@@ -44,144 +60,20 @@ export const { atom: connectionStateAtom, use: useConnectionStateAtom } =
   });
 
 export const {
-  atom: basicCurrentTokenAtom,
-  useContextAtom: useCurrentTokenContextAtom,
-} = contextAtom<string>('ETH');
-
-export const {
-  atom: hyperliquidStorageReadyAtom,
-  use: useHyperliquidStorageReadyAtom,
-} = contextAtom<boolean>(false);
-
-const INIT = Symbol('INIT');
-export const currentTokenAtom = memoizee(() =>
-  atom(
-    (get) => {
-      const basicToken = get(basicCurrentTokenAtom());
-      return basicToken;
-    },
-    (get, set, arg: any) => {
-      if (arg === INIT) {
-        void backgroundApiProxy.simpleDb.perp
-          .getCurrentToken()
-          .then((token: string) => {
-            set(basicCurrentTokenAtom(), token);
-            set(hyperliquidStorageReadyAtom(), true);
-          });
-      } else {
-        set(basicCurrentTokenAtom(), arg);
-        if (get(hyperliquidStorageReadyAtom())) {
-          void backgroundApiProxy.simpleDb.perp.setCurrentToken(arg as string);
-        }
-      }
-    },
-  ),
-);
-
-currentTokenAtom().onMount = (setAtom) => {
-  setAtom(INIT);
-};
-
-export const useCurrentTokenAtom = () =>
-  useCurrentTokenContextAtom(currentTokenAtom());
-
-export const { atom: currentUserAtom, use: useCurrentUserAtom } =
-  contextAtom<HL.IHex | null>(null);
+  atom: orderBookTickOptionsAtom,
+  use: useOrderBookTickOptionsAtom,
+} = contextAtom<Record<string, IPerpOrderBookTickOptionPersist>>({});
 
 export const { atom: subscriptionActiveAtom, use: useSubscriptionActiveAtom } =
   contextAtom<boolean>(false);
-
-// TODO move to simpleDB
-export const { atom: tokenListAtom } = contextAtomComputed(
-  (get): ITokenListItem[] => {
-    const webData2 = get(webData2Atom());
-
-    const universe = webData2?.meta?.universe?.slice() || [];
-    if (!universe?.length) return [];
-    const assetCtxs = webData2?.assetCtxs || [];
-    return universe.map((u, i) => {
-      const assetCtx = assetCtxs[i];
-      const mid = assetCtx?.midPx || '0';
-      const prevDayPx = assetCtx?.prevDayPx || mid;
-      const change24h = (parseFloat(mid) - parseFloat(prevDayPx)).toString();
-      const change24hPercent =
-        prevDayPx !== '0'
-          ? ((parseFloat(change24h) / parseFloat(prevDayPx)) * 100).toFixed(2)
-          : '0';
-      return {
-        assetId: i,
-        coin: u.name,
-        lastPrice: mid,
-        change24h,
-        change24hPercent,
-        funding8h: assetCtx?.funding || '0',
-        volume24h: assetCtx?.dayNtlVlm || '0',
-        openInterest: assetCtx?.openInterest || '0',
-        markPrice: mid,
-        indexPrice: assetCtx?.markPx || mid,
-        fundingRate: assetCtx?.funding || '0',
-      };
-    });
-  },
-);
-
-export const useTokenListAtom = () => tokenListAtom();
-
-export const { atom: currentTokenInfoAtom, use: useCurrentTokenInfoAtom } =
-  contextAtomComputed((get): ITokenListItem | null => {
-    const currentToken = get(currentTokenAtom());
-    const tokenList = get(tokenListAtom());
-
-    return tokenList.find((token) => token.coin === currentToken) || null;
-  });
-
-export const { atom: accountSummaryAtom, use: useAccountSummaryAtom } =
-  contextAtomComputed((get) => {
-    const webData2 = get(webData2Atom());
-    if (!webData2?.clearinghouseState.marginSummary) return null;
-
-    return {
-      accountValue: webData2.clearinghouseState.marginSummary.accountValue,
-      totalMarginUsed:
-        webData2.clearinghouseState.marginSummary.totalMarginUsed,
-      totalNtlPos: webData2.clearinghouseState.marginSummary.totalNtlPos,
-      totalRawUsd: webData2.clearinghouseState.marginSummary.totalRawUsd,
-      withdrawable: webData2.clearinghouseState.withdrawable,
-      lastUpdate: Date.now(),
-    };
-  });
-
-export const {
-  atom: requiredSubscriptionsAtom,
-  use: useRequiredSubscriptionsAtom,
-} = contextAtomComputed((get): string[] => {
-  const currentToken = get(currentTokenAtom());
-  const currentUser = get(currentUserAtom());
-  const subscriptions: string[] = ['allMids'];
-
-  if (currentToken) {
-    subscriptions.push(`activeAssetCtx:${currentToken}`);
-    subscriptions.push(`l2Book:${currentToken}`);
-  }
-
-  if (currentUser) {
-    subscriptions.push(`webData2:${currentUser}`);
-    subscriptions.push(`userEvents:${currentUser}`);
-    subscriptions.push(`userNotifications:${currentUser}`);
-
-    if (currentToken) {
-      subscriptions.push(`activeAssetData:${currentUser}:${currentToken}`);
-    }
-  }
-
-  return subscriptions;
-});
 
 export interface ITradingFormData {
   side: 'long' | 'short';
   type: 'market' | 'limit';
   price: string;
   size: string;
+  sizeInputMode: EPerpsSizeInputMode;
+  sizePercent: number;
   leverage?: number;
 
   // Take Profit / Stop Loss
@@ -190,6 +82,12 @@ export interface ITradingFormData {
   tpGainPercent: string; // Gain %
   slTriggerPx: string; // SL Price
   slLossPercent: string; // Loss %
+
+  // New TPSL fields for form input
+  tpType?: 'price' | 'percentage';
+  tpValue?: string;
+  slType?: 'price' | 'percentage';
+  slValue?: string;
 }
 
 export const { atom: tradingFormAtom, use: useTradingFormAtom } =
@@ -198,204 +96,180 @@ export const { atom: tradingFormAtom, use: useTradingFormAtom } =
     type: 'market',
     price: '',
     size: '',
+    sizeInputMode: EPerpsSizeInputMode.MANUAL,
+    sizePercent: 0,
     leverage: 1,
     hasTpsl: false,
     tpTriggerPx: '',
     tpGainPercent: '',
     slTriggerPx: '',
     slLossPercent: '',
+    tpType: 'price',
+    tpValue: '',
+    slType: 'price',
+    slValue: '',
   });
 
 export const { atom: tradingLoadingAtom, use: useTradingLoadingAtom } =
   contextAtom<boolean>(false);
 
-export const { atom: currentTokenPriceAtom, use: useCurrentTokenPriceAtom } =
-  contextAtomComputed((get) => {
-    const activeAssetCtx = get(activeAssetCtxAtom());
-    const currentToken = get(currentTokenAtom());
+export type IPerpsActivePositionAtom = {
+  accountAddress: string | undefined;
+  activePositions: HL.IPerpsAssetPosition[];
+};
+export const {
+  atom: perpsActivePositionAtom,
+  use: usePerpsActivePositionAtom,
+} = contextAtom<IPerpsActivePositionAtom>({
+  accountAddress: undefined,
+  activePositions: [],
+});
+export const {
+  atom: perpsActivePositionLengthAtom,
+  use: usePerpsActivePositionLengthAtom,
+} = contextAtomComputed((get) => {
+  const activePositions = get(perpsActivePositionAtom());
+  return activePositions?.activePositions?.length ?? 0;
+});
 
-    if (!activeAssetCtx?.ctx || activeAssetCtx.coin !== currentToken) {
-      return {
-        markPrice: '0',
-        oraclePrice: '0',
-        funding: '0',
-        openInterest: '0',
-        volume24h: '0',
-        change24h: '0',
-        change24hPercent: 0,
-        prevDayPx: '0',
-        coin: currentToken,
-        isLoading: true,
-        lastUpdate: Date.now(),
-      };
-    }
+export type IPerpsActiveOpenOrdersAtom = {
+  accountAddress: string | undefined;
+  openOrders: HL.IPerpsFrontendOrder[];
+  openOrdersByCoin: Record<string, HL.IPerpsFrontendOrder[]>;
+};
+export const {
+  atom: perpsActiveOpenOrdersAtom,
+  use: usePerpsActiveOpenOrdersAtom,
+} = contextAtom<IPerpsActiveOpenOrdersAtom>({
+  accountAddress: undefined,
+  openOrders: [],
+  openOrdersByCoin: {},
+});
 
-    const ctx = activeAssetCtx.ctx;
-    const markPrice = ctx.markPx || '0';
-    const oraclePrice = ctx.oraclePx || '0';
-    const funding = ctx.funding || '0';
-    const openInterest = ctx.openInterest || '0';
-    const volume24h = ctx.dayNtlVlm || '0';
-    const prevDayPx = ctx.prevDayPx || markPrice;
+export const {
+  atom: perpsActiveOpenOrdersLengthAtom,
+  use: usePerpsActiveOpenOrdersLengthAtom,
+} = contextAtomComputed((get) => {
+  const { openOrders } = get(perpsActiveOpenOrdersAtom());
+  const filteredOpenOrders = openOrders.filter((o) => !o.coin.startsWith('@'));
+  return filteredOpenOrders.length ?? 0;
+});
 
-    const markPriceNum = parseFloat(markPrice);
-    const prevDayPxNum = parseFloat(prevDayPx);
-    const change24h = (markPriceNum - prevDayPxNum).toString();
-    const change24hPercent =
-      prevDayPxNum > 0
-        ? ((markPriceNum - prevDayPxNum) / prevDayPxNum) * 100
-        : 0;
+export const {
+  atom: perpsActiveOpenOrdersMapAtom,
+  use: usePerpsActiveOpenOrdersMapAtom,
+} = contextAtomComputed<
+  Partial<{
+    [coin: string]: number[];
+  }>
+>((get) => {
+  const { openOrders } = get(perpsActiveOpenOrdersAtom());
+  const filteredOpenOrders = openOrders.filter((o) => !o.coin.startsWith('@'));
+  return filteredOpenOrders.reduce((acc, order, index) => {
+    acc[order.coin] = [...(acc[order.coin] || []), index];
+    return acc;
+  }, {} as { [coin: string]: number[] });
+});
 
-    return {
-      markPrice,
-      oraclePrice,
-      funding,
-      openInterest,
-      volume24h,
-      change24h,
-      change24hPercent,
-      prevDayPx,
-      coin: currentToken,
-      isLoading: false,
-      lastUpdate: Date.now(),
-    };
-  });
+export const perpsOpenOrdersByCoinAtomCache = new Map<
+  string,
+  ReturnType<typeof contextAtomComputed<HL.IPerpsFrontendOrder[]>>
+>();
 
-export const { atom: positionListAtom, use: usePositionListAtom } =
-  contextAtomComputed((get) => {
-    const webData2 = get(webData2Atom());
-
-    if (!webData2?.clearinghouseState?.assetPositions) {
-      return [];
-    }
-
-    const positions = webData2.clearinghouseState.assetPositions;
-
-    const activePositions = positions.filter((pos) => {
-      const size = parseFloat(pos.position?.szi || '0');
-      return Math.abs(size) > 0;
+function getOrCreatePerpsOpenOrdersByCoinAtom(coin: string) {
+  let entry = perpsOpenOrdersByCoinAtomCache.get(coin);
+  if (!entry) {
+    entry = contextAtomComputed((get) => {
+      const { openOrdersByCoin } = get(perpsActiveOpenOrdersAtom());
+      return openOrdersByCoin?.[coin] ?? [];
     });
+    perpsOpenOrdersByCoinAtomCache.set(coin, entry);
+  }
+  return entry;
+}
 
-    return activePositions;
+export function usePerpsOpenOrdersByCoin(
+  coin: string,
+): HL.IPerpsFrontendOrder[] {
+  const { use } = getOrCreatePerpsOpenOrdersByCoinAtom(coin);
+  const [orders] = use();
+  return orders;
+}
+
+export type IPerpsLedgerUpdatesAtom = {
+  accountAddress: string | undefined;
+  updates: HL.IUserNonFundingLedgerUpdate[];
+  isSubscribed: boolean;
+};
+export const { atom: perpsLedgerUpdatesAtom, use: usePerpsLedgerUpdatesAtom } =
+  contextAtom<IPerpsLedgerUpdatesAtom>({
+    accountAddress: undefined,
+    updates: [],
+    isSubscribed: false,
   });
 
-export const { atom: openOrdersListAtom, use: useOpenOrdersListAtom } =
-  contextAtomComputed((get) => {
-    const webData2 = get(webData2Atom());
+export interface ITradingFormEnv {
+  markPrice?: string;
+  availableToTrade?: Array<number | string>;
+  leverageValue?: number;
+  fallbackLeverage?: number;
+  szDecimals?: number;
+}
 
-    if (!webData2?.openOrders) {
-      return [];
-    }
+export const { atom: tradingFormEnvAtom, use: useTradingFormEnvAtom } =
+  contextAtom<ITradingFormEnv>({});
 
-    return webData2.openOrders;
+export const {
+  atom: tradingFormComputedAtom,
+  use: useTradingFormComputedAtom,
+} = contextAtomComputed((get) => {
+  const form = get(tradingFormAtom());
+  const env = get(tradingFormEnvAtom());
+
+  const mode = form.sizeInputMode ?? EPerpsSizeInputMode.MANUAL;
+  const percent = form.sizePercent ?? 0;
+
+  const price = form.type === 'limit' ? form.price : '';
+
+  const maxSizeBN = computeMaxTradeSize({
+    side: form.side,
+    price,
+    markPrice: env.markPrice,
+    availableToTrade: env.availableToTrade,
+    leverageValue: env.leverageValue,
+    fallbackLeverage: env.fallbackLeverage,
+    szDecimals: env.szDecimals,
   });
 
-export const { atom: tradingPanelDataAtom, use: useTradingPanelDataAtom } =
-  contextAtomComputed((get) => {
-    const currentToken = get(currentTokenAtom());
-    const tokenList = get(tokenListAtom());
-    const activeAssetData = get(activeAssetDataAtom());
-    const priceData = get(currentTokenPriceAtom());
-
-    if (priceData.isLoading) {
-      return null;
-    }
-
-    const tokenInfo = tokenList.find((token) => token.coin === currentToken);
-    if (!tokenInfo) {
-      return null;
-    }
-
-    return {
-      ...tokenInfo,
-      ...activeAssetData,
-      ...priceData,
-      name: currentToken,
-      markPx: priceData.markPrice,
-      prevDayPrice: priceData.prevDayPx,
-      fundingRate: priceData.funding,
-    };
+  const computedSizeBN = resolveTradingSizeBN({
+    sizeInputMode: mode,
+    manualSize: form.size,
+    sizePercent: percent,
+    side: form.side,
+    price,
+    markPrice: env.markPrice,
+    availableToTrade: env.availableToTrade,
+    leverageValue: env.leverageValue,
+    fallbackLeverage: env.fallbackLeverage,
+    szDecimals: env.szDecimals,
   });
 
-export const { atom: accountPanelDataAtom, use: useAccountPanelDataAtom } =
-  contextAtomComputed<{
-    currentUser: HL.IHex | null; // current user address in webData2 from websocket message
-    isLoggedIn: boolean;
-    // TODO separate low frequency data and high frequency data
-    accountSummary: {
-      accountValue: string | undefined;
-      totalMarginUsed: string | undefined;
-      totalNtlPos: string | undefined;
-      totalRawUsd: string | undefined;
-      withdrawable: string | undefined;
-    };
-    positions: HL.IAssetPosition[];
-    orders: HL.IFrontendOrder[];
-    activeAssetData: HL.IActiveAssetData | null;
-    hasUserData: boolean;
-    userWebData2: HL.IWsWebData2 | null;
-  }>((get) => {
-    const webData2 = get(webData2Atom());
-    const activeAssetData = get(activeAssetDataAtom());
-    const positions = get(positionListAtom());
-    const orders = get(openOrdersListAtom());
-    const currentUserInAtom = get(currentUserAtom());
+  let computedSizeString = '0';
+  if (mode === 'slider') {
+    computedSizeString = computedSizeBN.isFinite()
+      ? computedSizeBN.toFixed()
+      : '0';
+  } else {
+    computedSizeString = sanitizeManualSize(form.size);
+  }
 
-    const currentUser =
-      (webData2?.user === PERPS_EMPTY_ADDRESS ? null : webData2?.user) || null;
-
-    if (
-      !webData2 ||
-      !currentUser ||
-      !currentUserInAtom ||
-      (currentUserInAtom &&
-        currentUser &&
-        currentUser?.toLowerCase() !== currentUserInAtom?.toLowerCase())
-    ) {
-      return {
-        isLoggedIn: false,
-        currentUser: null,
-        accountSummary: {
-          accountValue: undefined,
-          totalMarginUsed: undefined,
-          totalNtlPos: undefined,
-          totalRawUsd: undefined,
-          withdrawable: undefined,
-        },
-        positions: [],
-        orders: [],
-        activeAssetData: null,
-        hasUserData: false,
-        userWebData2: null,
-      };
-    }
-
-    const isLoggedIn = !!currentUser;
-    const hasUserData = isLoggedIn && !!webData2;
-
-    const accountSummary = {
-      accountValue: webData2.clearinghouseState?.marginSummary?.accountValue,
-      totalMarginUsed:
-        webData2.clearinghouseState?.marginSummary?.totalMarginUsed,
-      totalNtlPos: webData2.clearinghouseState?.marginSummary?.totalNtlPos,
-      totalRawUsd: webData2.clearinghouseState?.marginSummary?.totalRawUsd,
-      withdrawable: webData2.clearinghouseState?.withdrawable,
-    };
-
-    const totalPositionValue = positions.reduce((acc: number, pos) => {
-      return acc + parseFloat(pos.position?.positionValue || '0');
-    }, 0);
-
-    return {
-      isLoggedIn,
-      currentUser,
-      accountSummary,
-      positions,
-      orders,
-      activeAssetData,
-      hasUserData,
-      totalPositionValue,
-      userWebData2: webData2,
-      userPositions: positions,
-    };
-  });
+  return {
+    sizeInputMode: mode,
+    sizePercent: percent,
+    computedSizeBN,
+    computedSizeString,
+    maxSizeBN,
+    maxSize: maxSizeBN.isFinite() ? maxSizeBN.toNumber() : 0,
+    sliderEnabled: maxSizeBN.isFinite() && maxSizeBN.gte(0),
+  };
+});

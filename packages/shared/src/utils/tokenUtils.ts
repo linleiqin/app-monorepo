@@ -94,6 +94,7 @@ export function getFilteredTokenBySearchKey({
   searchTokenList,
   allowEmptyWhenBelowMinLength,
   aggregateTokenListMap,
+  searchKeyLengthThreshold,
 }: {
   tokens: IAccountToken[];
   searchKey: string;
@@ -101,6 +102,7 @@ export function getFilteredTokenBySearchKey({
   searchTokenList?: IAccountToken[];
   allowEmptyWhenBelowMinLength?: boolean;
   aggregateTokenListMap?: Record<string, { tokens: IAccountToken[] }>;
+  searchKeyLengthThreshold?: number;
 }) {
   let mergedTokens = tokens;
 
@@ -122,7 +124,10 @@ export function getFilteredTokenBySearchKey({
       (token) => `${token.address}_${token.networkId ?? ''}`,
     );
   }
-  if (!searchKey || searchKey.length < SEARCH_KEY_MIN_LENGTH) {
+  if (
+    !searchKey ||
+    searchKey.length < (searchKeyLengthThreshold ?? SEARCH_KEY_MIN_LENGTH)
+  ) {
     return allowEmptyWhenBelowMinLength ? [] : mergedTokens;
   }
 
@@ -167,17 +172,17 @@ export function sortTokensByFiatValue({
   sortDirection?: 'desc' | 'asc';
 }) {
   return tokens?.sort((a, b) => {
-    const aFiat = new BigNumber(map[a.$key]?.fiatValue ?? 0);
-    const bFiat = new BigNumber(map[b.$key]?.fiatValue ?? 0);
+    const aFiat = new BigNumber(map[a.$key]?.fiatValue ?? -1);
+    const bFiat = new BigNumber(map[b.$key]?.fiatValue ?? -1);
 
     if (sortDirection === 'desc') {
-      return new BigNumber(bFiat.isNaN() ? 0 : bFiat).comparedTo(
-        new BigNumber(aFiat.isNaN() ? 0 : aFiat),
+      return new BigNumber(bFiat.isNaN() ? -1 : bFiat).comparedTo(
+        new BigNumber(aFiat.isNaN() ? -1 : aFiat),
       );
     }
 
-    return new BigNumber(aFiat.isNaN() ? 0 : aFiat).comparedTo(
-      new BigNumber(bFiat.isNaN() ? 0 : bFiat),
+    return new BigNumber(aFiat.isNaN() ? -1 : aFiat).comparedTo(
+      new BigNumber(bFiat.isNaN() ? -1 : bFiat),
     );
   });
 }
@@ -455,6 +460,20 @@ export function mergeDeriveTokenList({
   return newTokens;
 }
 
+export function normalizeTokenContractAddress({
+  networkId,
+  contractAddress,
+}: {
+  networkId: string;
+  contractAddress: string | undefined;
+}): string | undefined {
+  const impl = networkUtils.getNetworkImpl({ networkId });
+  if (caseSensitiveNetworkImpl.includes(impl)) {
+    return contractAddress;
+  }
+  return contractAddress?.toLowerCase();
+}
+
 export function equalTokenNoCaseSensitive({
   token1,
   token2,
@@ -466,14 +485,15 @@ export function equalTokenNoCaseSensitive({
     return false;
   }
   if (token1?.networkId !== token2?.networkId) return false;
-  const impl = networkUtils.getNetworkImpl({ networkId: token1.networkId });
-  if (caseSensitiveNetworkImpl.includes(impl)) {
-    return token1?.contractAddress === token2?.contractAddress;
-  }
-  return (
-    token1?.contractAddress?.toLowerCase() ===
-    token2?.contractAddress?.toLowerCase()
-  );
+  const token1ContractAddress = normalizeTokenContractAddress({
+    networkId: token1.networkId,
+    contractAddress: token1.contractAddress,
+  });
+  const token2ContractAddress = normalizeTokenContractAddress({
+    networkId: token2.networkId,
+    contractAddress: token2.contractAddress,
+  });
+  return token1ContractAddress === token2ContractAddress;
 }
 
 export const checkWrappedTokenPair = ({
@@ -707,6 +727,15 @@ export function getTokenPriceChangeStyle({
   };
 }
 
+export function buildTokenListMapKey(params: {
+  networkId: string;
+  accountAddress: string;
+  tokenAddress: string;
+}) {
+  const { networkId, accountAddress, tokenAddress } = params;
+  return `${networkId}_${accountAddress}_${tokenAddress}`;
+}
+
 export function buildAggregateTokenMapKeyForAggregateConfig(params: {
   networkId: string;
   tokenAddress: string;
@@ -737,7 +766,6 @@ export function buildAggregateTokenListData(params: {
   >;
   aggregateTokenMap: Record<string, ITokenFiat>;
   aggregateTokenConfigMapRawData: Record<string, IAggregateToken>;
-  aggregateTokenSymbolMapRawData: Record<string, boolean>;
   networkName: string;
 }) {
   const {
@@ -748,14 +776,12 @@ export function buildAggregateTokenListData(params: {
     aggregateTokenMap,
     token,
     aggregateTokenConfigMapRawData,
-    aggregateTokenSymbolMapRawData,
     networkName,
   } = params;
 
   const newAggregateTokenListMap = { ...aggregateTokenListMap };
   const newAggregateTokenMap = { ...aggregateTokenMap };
   let isAggregateToken = false;
-  let isSameSymbolWithAggregateToken = false;
 
   const aggregateToken =
     aggregateTokenConfigMapRawData[
@@ -805,13 +831,8 @@ export function buildAggregateTokenListData(params: {
     };
   }
 
-  if (aggregateTokenSymbolMapRawData[token.symbol]) {
-    isSameSymbolWithAggregateToken = true;
-  }
-
   return {
     isAggregateToken,
-    isSameSymbolWithAggregateToken,
     aggregateTokenListMap: newAggregateTokenListMap,
     aggregateTokenMap: newAggregateTokenMap,
   };
@@ -857,21 +878,152 @@ export function sortTokensCommon({
     map: tokenListMap,
   });
 
-  const index = sortedTokens.findIndex((t) =>
-    new BigNumber(tokenListMap[t.$key]?.fiatValue ?? 0).isZero(),
+  const negativeIndex = sortedTokens.findIndex((t) =>
+    new BigNumber(tokenListMap[t.$key]?.fiatValue ?? -1).isNegative(),
   );
 
-  // sort zero fiat value tokens by order
-  if (index > -1) {
-    const tokensWithBalance = sortedTokens.slice(0, index);
-    let tokensWithZeroBalance = sortedTokens.slice(index);
+  const zeroIndex = sortedTokens.findIndex((t) =>
+    new BigNumber(tokenListMap[t.$key]?.fiatValue ?? -1).isZero(),
+  );
+
+  // sort zero/none fiat value tokens by order
+  if (negativeIndex > -1 || zeroIndex > -1) {
+    let tokensWithNonZeroBalance: IAccountToken[] = [];
+    let tokensWithZeroBalance: IAccountToken[] = [];
+    let tokensWithoutBalance: IAccountToken[] = [];
+
+    if (negativeIndex > -1) {
+      const tokensWithBalance = sortedTokens.slice(0, negativeIndex);
+      tokensWithoutBalance = sortedTokens.slice(negativeIndex);
+      if (zeroIndex > -1) {
+        tokensWithNonZeroBalance = tokensWithBalance.slice(0, zeroIndex);
+        tokensWithZeroBalance = tokensWithBalance.slice(zeroIndex);
+      } else {
+        tokensWithNonZeroBalance = tokensWithBalance;
+      }
+    } else if (zeroIndex > -1) {
+      tokensWithNonZeroBalance = sortedTokens.slice(0, zeroIndex);
+      tokensWithZeroBalance = sortedTokens.slice(zeroIndex);
+    }
 
     tokensWithZeroBalance = sortTokensByOrder({
       tokens: tokensWithZeroBalance,
     });
 
-    sortedTokens = [...tokensWithBalance, ...tokensWithZeroBalance];
+    tokensWithoutBalance = sortTokensByOrder({
+      tokens: tokensWithoutBalance,
+    });
+
+    sortedTokens = [
+      ...tokensWithNonZeroBalance,
+      ...tokensWithZeroBalance,
+      ...tokensWithoutBalance,
+    ];
   }
 
   return sortedTokens;
+}
+
+export function checkIsOnlyOneTokenHasBalance({
+  aggregateTokenList,
+  allAggregateTokenList,
+  tokenMap,
+}: {
+  tokenMap: Record<string, ITokenFiat>;
+  aggregateTokenList: IAccountToken[];
+  allAggregateTokenList: IAccountToken[];
+}) {
+  let tokenHasBalance: IAccountToken | undefined;
+  let tokenHasBalanceCount = 0;
+
+  if (
+    tokenMap &&
+    aggregateTokenList.length > 1 &&
+    allAggregateTokenList.length === 0
+  ) {
+    aggregateTokenList.forEach((t) => {
+      if (new BigNumber(tokenMap[t.$key]?.fiatValue ?? -1).gt(0)) {
+        tokenHasBalance = t;
+        tokenHasBalanceCount += 1;
+      }
+    });
+  }
+
+  return {
+    tokenHasBalance: tokenHasBalanceCount > 1 ? undefined : tokenHasBalance,
+    tokenHasBalanceCount,
+  };
+}
+
+export function filterAccountTokenListByLimit({
+  tokenList,
+  smallBalanceTokenList,
+  riskyTokenList,
+  limit,
+  tokenListMap,
+}: {
+  tokenList: IAccountToken[];
+  smallBalanceTokenList: IAccountToken[];
+  riskyTokenList: IAccountToken[];
+  limit: number;
+  tokenListMap: Record<string, ITokenFiat>;
+}) {
+  let filteredTokenList = tokenList;
+  let filteredSmallBalanceTokenList = smallBalanceTokenList;
+  let filteredRiskyTokenList = riskyTokenList;
+  let filteredTokenListMap: Record<string, ITokenFiat> = {};
+
+  const totalTokens =
+    tokenList.length + smallBalanceTokenList.length + riskyTokenList.length;
+  if (totalTokens > limit) {
+    const trimList = (
+      list: IAccountToken[],
+      removeCount: number,
+    ): [IAccountToken[], number] => {
+      if (removeCount <= 0 || list.length === 0) {
+        return [list, 0];
+      }
+      const remainingLength = Math.max(list.length - removeCount, 0);
+      const trimmedList = list.slice(0, remainingLength);
+      return [trimmedList, list.length - trimmedList.length];
+    };
+
+    let tokensToRemove = totalTokens - limit;
+    let removedCount = 0;
+
+    [filteredRiskyTokenList, removedCount] = trimList(
+      filteredRiskyTokenList,
+      tokensToRemove,
+    );
+    tokensToRemove -= removedCount;
+
+    [filteredSmallBalanceTokenList, removedCount] = trimList(
+      filteredSmallBalanceTokenList,
+      tokensToRemove,
+    );
+    tokensToRemove -= removedCount;
+
+    [filteredTokenList, removedCount] = trimList(
+      filteredTokenList,
+      tokensToRemove,
+    );
+
+    filteredTokenListMap = {};
+    const retainedTokens = [
+      ...filteredTokenList,
+      ...filteredSmallBalanceTokenList,
+      ...filteredRiskyTokenList,
+    ];
+    for (const token of retainedTokens) {
+      filteredTokenListMap[token.$key] = tokenListMap[token.$key] ?? {};
+    }
+  } else {
+    filteredTokenListMap = tokenListMap;
+  }
+  return {
+    filteredTokenList,
+    filteredSmallBalanceTokenList,
+    filteredRiskyTokenList,
+    filteredTokenListMap,
+  };
 }

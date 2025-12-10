@@ -8,10 +8,7 @@ import { ipcRenderer, nativeImage } from 'electron';
 
 import type { DesktopApiProxy } from '@onekeyhq/kit-bg/src/desktopApis/instance/desktopApiProxy';
 import desktopApiProxy from '@onekeyhq/kit-bg/src/desktopApis/instance/desktopApiProxy';
-import type {
-  IDesktopAppState,
-  IDesktopStoreUpdateSettings,
-} from '@onekeyhq/shared/types/desktop';
+import type { IDesktopAppState } from '@onekeyhq/shared/types/desktop';
 
 import { ipcMessageKeys } from './config';
 
@@ -102,13 +99,10 @@ ipcRenderer.on(
   (
     _,
     globals: {
-      preloadJsUrl: string;
+      sdkConnectSrc: string;
     },
   ) => {
-    // for DesktopWebView:
-    //    const { preloadJsUrl } = window.ONEKEY_DESKTOP_GLOBALS;
     globalThis.ONEKEY_DESKTOP_GLOBALS = globals;
-    // contextBridge.exposeInMainWorld('ONEKEY_DESKTOP_GLOBALS', globals);
   },
 );
 
@@ -132,8 +126,8 @@ const validChannels = [
   ipcMessageKeys.APP_LOCK_NOW,
   ipcMessageKeys.TOUCH_UPDATE_RES_SUCCESS,
   ipcMessageKeys.TOUCH_UPDATE_PROGRESS,
+  ipcMessageKeys.CLIENT_LOG_UPLOAD_PROGRESS,
   ipcMessageKeys.SHOW_ABOUT_WINDOW,
-  ipcMessageKeys.UPDATE_GET_PREVIOUS_UPDATE_BUILD_NUMBER,
 ];
 
 const getChannel = () => {

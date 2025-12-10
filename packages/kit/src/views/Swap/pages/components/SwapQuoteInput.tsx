@@ -1,14 +1,11 @@
 import { memo, useCallback, useEffect } from 'react';
 
-import BigNumber from 'bignumber.js';
-
 import { IconButton, Stack, YStack } from '@onekeyhq/components';
 import {
   useSwapActions,
   useSwapFromTokenAmountAtom,
   useSwapLimitPriceFromAmountAtom,
   useSwapLimitPriceToAmountAtom,
-  useSwapNativeTokenReserveGasAtom,
   useSwapQuoteCurrentSelectAtom,
   useSwapSelectFromTokenAtom,
   useSwapSelectToTokenAtom,
@@ -30,6 +27,7 @@ import {
 } from '@onekeyhq/shared/types/swap/types';
 
 import { useSwapFromAccountNetworkSync } from '../../hooks/useSwapAccount';
+import { useSwapLimitPriceCheck } from '../../hooks/useSwapPro';
 import { useSwapQuote } from '../../hooks/useSwapQuote';
 import {
   useSwapQuoteEventFetching,
@@ -42,11 +40,13 @@ interface ISwapQuoteInputProps {
   selectLoading?: boolean;
   onSelectToken: (type: ESwapDirectionType) => void;
   onSelectPercentageStage?: (stage: number) => void;
+  onBalanceMaxPress?: () => void;
 }
 
 const SwapQuoteInput = ({
   onSelectToken,
   selectLoading,
+  onBalanceMaxPress,
   onSelectPercentageStage,
 }: ISwapQuoteInputProps) => {
   const [fromInputAmount, setFromInputAmount] = useSwapFromTokenAmountAtom();
@@ -57,14 +57,8 @@ const SwapQuoteInput = ({
   const [toToken] = useSwapSelectToTokenAtom();
   const [swapTokenDetailLoading] = useSwapSelectTokenDetailFetchingAtom();
   const { alternationToken } = useSwapActions().current;
-  const [swapQuoteCurrentSelect] = useSwapQuoteCurrentSelectAtom();
   const [fromTokenBalance] = useSwapSelectedFromTokenBalanceAtom();
   const [toTokenBalance] = useSwapSelectedToTokenBalanceAtom();
-  const [swapLimitPriceFromAmount] = useSwapLimitPriceFromAmountAtom();
-  const [swapLimitPriceToAmount] = useSwapLimitPriceToAmountAtom();
-  const [swapTypeSwitchValue] = useSwapTypeSwitchAtom();
-  const [swapNativeTokenReserveGas] = useSwapNativeTokenReserveGasAtom();
-  useSwapQuote();
   useSwapFromAccountNetworkSync();
 
   const getTransform = useCallback(() => {
@@ -76,77 +70,7 @@ const SwapQuoteInput = ({
     };
   }, []);
 
-  useEffect(() => {
-    if (
-      swapTypeSwitchValue === ESwapTabSwitchType.LIMIT &&
-      swapLimitPriceFromAmount
-    ) {
-      setFromInputAmount({
-        value: swapLimitPriceFromAmount,
-        isInput: false,
-      });
-    }
-  }, [setFromInputAmount, swapLimitPriceFromAmount, swapTypeSwitchValue]);
-
-  useEffect(() => {
-    if (
-      swapTypeSwitchValue === ESwapTabSwitchType.LIMIT &&
-      swapLimitPriceToAmount
-    ) {
-      setToInputAmount({
-        value: swapLimitPriceToAmount,
-        isInput: false,
-      });
-    }
-  }, [setToInputAmount, swapLimitPriceToAmount, swapTypeSwitchValue]);
-
-  useEffect(() => {
-    if (
-      swapTypeSwitchValue !== ESwapTabSwitchType.LIMIT ||
-      checkWrappedTokenPair({
-        fromToken,
-        toToken,
-      })
-    ) {
-      let toAmount = '';
-      if (
-        equalTokenNoCaseSensitive({
-          token1: fromToken,
-          token2: swapQuoteCurrentSelect?.fromTokenInfo,
-        }) &&
-        equalTokenNoCaseSensitive({
-          token1: toToken,
-          token2: swapQuoteCurrentSelect?.toTokenInfo,
-        })
-      ) {
-        toAmount = swapQuoteCurrentSelect?.toAmount ?? '';
-      }
-      if (
-        checkWrappedTokenPair({
-          fromToken,
-          toToken,
-        })
-      ) {
-        toAmount = swapQuoteCurrentSelect?.isWrapped
-          ? swapQuoteCurrentSelect?.toAmount ?? ''
-          : '';
-      }
-      setToInputAmount({
-        value: toAmount,
-        isInput: false,
-      });
-    }
-  }, [
-    swapQuoteCurrentSelect?.toAmount,
-    swapQuoteCurrentSelect?.fromTokenInfo,
-    swapQuoteCurrentSelect?.toTokenInfo,
-    swapQuoteCurrentSelect?.isWrapped,
-    setToInputAmount,
-    setFromInputAmount,
-    swapTypeSwitchValue,
-    fromToken,
-    toToken,
-  ]);
+  useSwapLimitPriceCheck(fromToken, toToken);
 
   return (
     <YStack gap="$2">
@@ -165,24 +89,7 @@ const SwapQuoteInput = ({
         }}
         onSelectPercentageStage={onSelectPercentageStage}
         amountValue={fromInputAmount.value}
-        onBalanceMaxPress={() => {
-          let maxAmount = new BigNumber(fromTokenBalance ?? 0);
-          if (fromToken?.isNative) {
-            const reserveGas = swapNativeTokenReserveGas.find(
-              (item) => item.networkId === fromToken.networkId,
-            )?.reserveGas;
-            if (reserveGas) {
-              maxAmount = BigNumber.max(
-                0,
-                maxAmount.minus(new BigNumber(reserveGas)),
-              );
-            }
-          }
-          setFromInputAmount({
-            value: maxAmount.toFixed(),
-            isInput: true,
-          });
-        }}
+        onBalanceMaxPress={onBalanceMaxPress}
         onSelectToken={onSelectToken}
         balance={fromTokenBalance}
       />

@@ -10,10 +10,12 @@ import timerUtils from '@onekeyhq/shared/src/utils/timerUtils';
 import { EServiceEndpointEnum } from '@onekeyhq/shared/types/endpoint';
 import type { IMarketWatchListItemV2 } from '@onekeyhq/shared/types/market';
 import type {
+  IMarketAccountPortfolioResponse,
+  IMarketAccountTokenTransactionsResponse,
   IMarketBasicConfigResponse,
   IMarketChainsResponse,
   IMarketTokenBatchListResponse,
-  IMarketTokenDetail,
+  IMarketTokenDetailResponse,
   IMarketTokenHoldersResponse,
   IMarketTokenKLineResponse,
   IMarketTokenListResponse,
@@ -37,18 +39,16 @@ class ServiceMarketV2 extends ServiceBase {
     networkId: string,
   ) {
     const client = await this.getClient(EServiceEndpointEnum.Utility);
-    const response = await client.get<{
-      data: {
-        token: IMarketTokenDetail;
-      };
-    }>('/utility/v2/market/token/detail', {
-      params: {
-        tokenAddress,
-        networkId,
+    const response = await client.get<IMarketTokenDetailResponse>(
+      '/utility/v2/market/token/detail',
+      {
+        params: {
+          tokenAddress,
+          networkId,
+        },
       },
-    });
-    const { data } = response.data;
-    return data.token;
+    );
+    return response.data;
   }
 
   private memoizedFetchMarketChains = memoizee(
@@ -76,6 +76,11 @@ class ServiceMarketV2 extends ServiceBase {
       const client = await this.getClient(EServiceEndpointEnum.Utility);
       const response = await client.get<IMarketBasicConfigResponse>(
         '/utility/v2/market/basic-config',
+        {
+          params: {
+            configVersion: 2,
+          },
+        },
       );
       return response.data;
     },
@@ -170,12 +175,12 @@ class ServiceMarketV2 extends ServiceBase {
   async fetchMarketTokenTransactions({
     tokenAddress,
     networkId,
-    offset,
+    cursor,
     limit,
   }: {
     tokenAddress: string;
     networkId: string;
-    offset?: number;
+    cursor?: string;
     limit?: number;
   }) {
     const client = await this.getClient(EServiceEndpointEnum.Utility);
@@ -183,16 +188,59 @@ class ServiceMarketV2 extends ServiceBase {
       code: number;
       message: string;
       data: IMarketTokenTransactionsResponse;
-    }>('/utility/v2/market/token/transactions', {
+    }>('/utility/v3/market/token/transactions', {
       params: {
         tokenAddress,
         networkId,
-        ...(offset !== undefined && { offset }),
+        ...(cursor !== undefined && { cursor }),
         ...(limit !== undefined && { limit }),
       },
     });
     const { data } = response.data;
     return data;
+  }
+
+  @backgroundMethod()
+  async fetchMarketAccountTokenTransactions({
+    accountAddress,
+    tokenAddress,
+    networkId,
+    cursor,
+    timeFrom,
+    timeTo,
+  }: {
+    accountAddress: string;
+    tokenAddress: string;
+    networkId: string;
+    cursor?: string;
+    timeFrom?: number;
+    timeTo?: number;
+  }) {
+    try {
+      const client = await this.getClient(EServiceEndpointEnum.Utility);
+      const response = await client.get<{
+        code: number;
+        message: string;
+        data: IMarketAccountTokenTransactionsResponse;
+      }>('/utility/v2/market/account/token/transactions', {
+        params: {
+          accountAddress,
+          tokenAddress,
+          networkId,
+          ...(cursor !== undefined && { cursor }),
+          ...(timeFrom !== undefined && { timeFrom }),
+          ...(timeTo !== undefined && { timeTo }),
+        },
+      });
+      const { data } = response.data;
+      return data;
+    } catch (error) {
+      console.error(
+        '[ServiceMarketV2] fetchMarketAccountTokenTransactions error:',
+        error,
+      );
+      return { list: [] };
+    }
   }
 
   @backgroundMethod()
@@ -300,10 +348,12 @@ class ServiceMarketV2 extends ServiceBase {
     watchList,
     skipSaveLocalSyncItem,
     skipEventEmit,
+    callerName,
   }: {
     watchList: IMarketWatchListItemV2[];
     skipSaveLocalSyncItem?: boolean;
     skipEventEmit?: boolean;
+    callerName: string;
   }) {
     const currentData =
       await this.backgroundApi.simpleDb.marketWatchListV2.getRawData();
@@ -319,6 +369,7 @@ class ServiceMarketV2 extends ServiceBase {
       fn: () =>
         this.backgroundApi.simpleDb.marketWatchListV2.addMarketWatchListV2({
           watchList: newWatchList,
+          callerName,
         }),
     });
   }
@@ -328,10 +379,12 @@ class ServiceMarketV2 extends ServiceBase {
     items,
     skipSaveLocalSyncItem,
     skipEventEmit,
+    callerName,
   }: {
     items: Array<{ chainId: string; contractAddress: string }>;
     skipSaveLocalSyncItem?: boolean;
     skipEventEmit?: boolean;
+    callerName: string;
   }) {
     return this.withMarketWatchListV2CloudSync({
       watchList: items,
@@ -341,6 +394,7 @@ class ServiceMarketV2 extends ServiceBase {
       fn: () =>
         this.backgroundApi.simpleDb.marketWatchListV2.removeMarketWatchListV2({
           items,
+          callerName,
         }),
     });
   }
@@ -348,6 +402,22 @@ class ServiceMarketV2 extends ServiceBase {
   @backgroundMethod()
   async getMarketWatchListV2() {
     return this.backgroundApi.simpleDb.marketWatchListV2.getMarketWatchListV2();
+  }
+
+  @backgroundMethod()
+  async getMarketWatchListItemV2({
+    chainId,
+    contractAddress,
+  }: {
+    chainId: string;
+    contractAddress: string;
+  }): Promise<IMarketWatchListItemV2 | undefined> {
+    return this.backgroundApi.simpleDb.marketWatchListV2.getMarketWatchListItemV2(
+      {
+        chainId,
+        contractAddress,
+      },
+    );
   }
 
   async getMarketWatchListWithFillingSortIndexV2() {
@@ -359,6 +429,7 @@ class ServiceMarketV2 extends ServiceBase {
       const newList = sortUtils.fillingMissingSortIndex({ items: items.data });
       await this.backgroundApi.simpleDb.marketWatchListV2.addMarketWatchListV2({
         watchList: newList.items,
+        callerName: 'getMarketWatchListWithFillingSortIndexV2',
       });
     }
     return this.getMarketWatchListV2();
@@ -406,6 +477,43 @@ class ServiceMarketV2 extends ServiceBase {
       item.contractAddress,
       item.chainId,
     );
+  }
+
+  @backgroundMethod()
+  async fetchMarketAccountPortfolio({
+    accountAddress,
+    networkId,
+    tokenAddress,
+  }: {
+    accountAddress: string;
+    networkId: string;
+    tokenAddress: string;
+  }) {
+    try {
+      const client = await this.getClient(EServiceEndpointEnum.Utility);
+
+      const response = await client.get<{
+        code: number;
+        message: string;
+        data: IMarketAccountPortfolioResponse;
+      }>('/utility/v2/market/account/portfolio', {
+        params: {
+          networkId,
+          accountAddress,
+          tokenAddress,
+        },
+      });
+
+      const { data } = response.data;
+      return data;
+    } catch (error) {
+      console.error(
+        '[ServiceMarketV2] fetchMarketAccountPortfolio error:',
+        error,
+      );
+      // Return empty list on error instead of throwing
+      return { list: [] };
+    }
   }
 }
 

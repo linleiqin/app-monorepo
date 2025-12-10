@@ -14,12 +14,11 @@ import appGlobals from '@onekeyhq/shared/src/appGlobals';
 import LazyLoad from '@onekeyhq/shared/src/lazyLoad';
 import platformEnv from '@onekeyhq/shared/src/platformEnv';
 import { useDebugComponentRemountLog } from '@onekeyhq/shared/src/utils/debug/debugUtils';
-import type { IJPushRemotePushMessageInfo } from '@onekeyhq/shared/types/notification';
 
 import { GlobalJotaiReady } from '../components/GlobalJotaiReady';
+import SupabaseAuthProvider from '../components/OneKeyAuth/supabase/SupabaseAuthProvider';
 import PasswordVerifyPromptMount from '../components/Password/container/PasswordVerifyPromptMount';
 import { SystemLocaleTracker } from '../components/SystemLocaleTracker';
-import { PrivyProviderLazy } from '../views/Prime/components/PrivyProviderLazy';
 
 import { Container } from './Container';
 import { ColdStartByNotification } from './Container/ColdStartByNotification';
@@ -64,7 +63,7 @@ export function KitProvider(props: any = {}) {
   const content = (
     <SafeAreaProvider>
       <GlobalJotaiReady>
-        <PrivyProviderLazy>
+        <SupabaseAuthProvider>
           <KeyboardProvider>
             <GestureHandlerRootView style={flexStyle}>
               <ThemeProvider>
@@ -82,7 +81,7 @@ export function KitProvider(props: any = {}) {
               </ThemeProvider>
             </GestureHandlerRootView>
           </KeyboardProvider>
-        </PrivyProviderLazy>
+        </SupabaseAuthProvider>
       </GlobalJotaiReady>
     </SafeAreaProvider>
   );

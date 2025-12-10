@@ -41,10 +41,18 @@ declare global {
   };
 
   var $$appGlobals: IAppGlobals;
+  var $onekeyIsInBackground: boolean | undefined;
   var $onekeySystemDiskIsFull: boolean | undefined;
   var $indexedDBIsMigratedToBucket:
     | ICheckCurrentDBIsMigratedToBucketResult
     | undefined;
+  var $$onekeyStartupTimeAt: number | undefined;
+  var $$onekeyJsReadyAt: number | undefined;
+  var $$onekeyUIVisibleAt: number | undefined;
+  var $$onekeyJsReadyFromPerformanceNow: number | undefined;
+  var $$onekeyAppWillMountFromPerformanceNow: number | undefined;
+  var $$onekeyUIVisibleFromPerformanceNow: number | undefined;
+  var nativePerformanceNow: () => number;
 
   // eslint-disable-next-line
   // var onekey: WindowOneKey;

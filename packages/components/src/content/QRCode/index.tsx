@@ -13,8 +13,11 @@ import Svg, {
   Rect,
   Stop,
 } from 'react-native-svg';
-import { Theme, getTokenValue } from 'tamagui';
 
+import {
+  TamaguiTheme as Theme,
+  getTokenValue,
+} from '@onekeyhq/components/src/shared/tamagui';
 import { type IAirGapUrJson, airGapUrUtils } from '@onekeyhq/qr-wallet-sdk';
 import { OneKeyLocalError } from '@onekeyhq/shared/src/errors';
 
@@ -275,6 +278,7 @@ export interface IQRCodeProps extends Omit<IBasicQRCodeProps, 'value'> {
   value?: string;
   valueUr?: IAirGapUrJson;
   interval?: number;
+  padding?: number;
 }
 
 export function QRCode({
@@ -282,6 +286,7 @@ export function QRCode({
   valueUr,
   interval = 500,
   drawType,
+  padding = 10,
   ...props
 }: IQRCodeProps) {
   const [partValue, setPartValue] = useState<string>(value || '');
@@ -318,8 +323,8 @@ export function QRCode({
   return (
     <Theme name="light">
       <Stack
-        width={props.size + 10}
-        height={props.size + 10}
+        width={props.size + padding}
+        height={props.size + padding}
         bg="$bgApp"
         jc="center"
         ai="center"

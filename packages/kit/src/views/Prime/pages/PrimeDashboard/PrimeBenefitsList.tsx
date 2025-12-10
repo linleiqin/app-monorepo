@@ -11,17 +11,23 @@ import {
   YStack,
 } from '@onekeyhq/components';
 import { ListItem } from '@onekeyhq/kit/src/components/ListItem';
+import { useOneKeyAuth } from '@onekeyhq/kit/src/components/OneKeyAuth/useOneKeyAuth';
 import useAppNavigation from '@onekeyhq/kit/src/hooks/useAppNavigation';
+import { useActiveAccount } from '@onekeyhq/kit/src/states/jotai/contexts/accountSelector';
+import {
+  EAppEventBusNames,
+  appEventBus,
+} from '@onekeyhq/shared/src/eventBus/appEventBus';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import { defaultLogger } from '@onekeyhq/shared/src/logger/logger';
 import platformEnv from '@onekeyhq/shared/src/platformEnv';
+import { EModalApprovalManagementRoutes } from '@onekeyhq/shared/src/routes/approvalManagement';
 import { EModalBulkCopyAddressesRoutes } from '@onekeyhq/shared/src/routes/bulkCopyAddresses';
 import { EModalRoutes } from '@onekeyhq/shared/src/routes/modal';
 import { EPrimeFeatures, EPrimePages } from '@onekeyhq/shared/src/routes/prime';
 import networkUtils from '@onekeyhq/shared/src/utils/networkUtils';
 import type { IPrimeServerUserInfo } from '@onekeyhq/shared/types/prime/primeTypes';
 
-import { usePrimeAuthV2 } from '../../hooks/usePrimeAuthV2';
 import { usePrimeRequirements } from '../../hooks/usePrimeRequirements';
 
 import type { ISubscriptionPeriod } from '../../hooks/usePrimePaymentTypes';
@@ -83,7 +89,10 @@ export function PrimeBenefitsList({
   const intl = useIntl();
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { ensureOneKeyIDLoggedIn } = usePrimeRequirements();
-  const { isPrimeSubscriptionActive } = usePrimeAuthV2();
+  const { isPrimeSubscriptionActive } = useOneKeyAuth();
+  const {
+    activeAccount: { wallet, account, network, indexedAccount },
+  } = useActiveAccount({ num: 0 });
 
   return (
     <Stack py="$2">
@@ -182,10 +191,14 @@ export function PrimeBenefitsList({
         })}
         onPress={() => {
           if (isPrimeSubscriptionActive) {
-            Toast.success({
-              title: intl.formatMessage({
-                id: ETranslations.global_bulk_revoke,
-              }),
+            navigation.navigate(EModalRoutes.ApprovalManagementModal, {
+              screen: EModalApprovalManagementRoutes.ApprovalList,
+              params: {
+                walletId: wallet?.id ?? '',
+                accountId: account?.id ?? '',
+                networkId: network?.id ?? '',
+                indexedAccountId: indexedAccount?.id ?? '',
+              },
             });
           } else {
             defaultLogger.prime.subscription.primeEntryClick({

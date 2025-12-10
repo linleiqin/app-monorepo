@@ -40,6 +40,7 @@ export function MarketRecommendList({
 }: IMarketRecommendListProps) {
   const intl = useIntl();
   const actions = useWatchListV2Action();
+  const { gtMd } = useMedia();
 
   const defaultTokens = useMemo(
     () => recommendedTokens?.slice(0, maxSize) || [],
@@ -106,8 +107,6 @@ export function MarketRecommendList({
     }
   }, [actions, selectedTokens, defaultTokens, showAddButton, enableSelection]);
 
-  const { gtMd } = useMedia();
-
   const confirmButton = useMemo(
     () =>
       showAddButton && enableSelection ? (
@@ -136,17 +135,18 @@ export function MarketRecommendList({
   );
 
   const stackPaddingBottom = useMemo(() => {
-    if (platformEnv.isNativeAndroid) return 100;
+    if (platformEnv.isNativeAndroid) return 80;
     if (platformEnv.isExtension) return 50;
+    if (platformEnv.isWeb && !gtMd) return 50;
     return 0;
-  }, []);
+  }, [gtMd]);
 
   if (!recommendedTokens?.length) {
     return null;
   }
 
   return (
-    <Stack flex={1} paddingBottom={stackPaddingBottom}>
+    <Stack flex={1} width="100%" paddingBottom={stackPaddingBottom}>
       <ScrollView
         contentContainerStyle={{ ai: 'center' }}
         px="$5"
@@ -161,7 +161,7 @@ export function MarketRecommendList({
               }
             >
               {intl.formatMessage({
-                id: ETranslations.market_empty_watchlist_title,
+                id: ETranslations.market_favorites_empty,
               })}
             </SizableText>
             <SizableText
@@ -173,7 +173,7 @@ export function MarketRecommendList({
               pt="$2"
             >
               {intl.formatMessage({
-                id: ETranslations.market_empty_watchlist_desc,
+                id: ETranslations.market_favorites_empty_desc,
               })}
             </SizableText>
           </>

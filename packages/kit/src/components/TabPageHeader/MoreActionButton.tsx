@@ -21,12 +21,13 @@ import {
   Stack,
   XStack,
   YStack,
-  useIsHorizontalLayout,
+  useIsWebHorizontalLayout,
   useMedia,
   usePopoverContext,
 } from '@onekeyhq/components';
 import GiftExpandOnDark from '@onekeyhq/kit/assets/animations/gift-expand-on-dark.json';
 import GiftExpandOnLight from '@onekeyhq/kit/assets/animations/gift-expand-on-light.json';
+import { useOneKeyAuth } from '@onekeyhq/kit/src/components/OneKeyAuth/useOneKeyAuth';
 import useAppNavigation from '@onekeyhq/kit/src/hooks/useAppNavigation';
 import { useShowAddressBook } from '@onekeyhq/kit/src/hooks/useShowAddressBook';
 import { useActiveAccount } from '@onekeyhq/kit/src/states/jotai/contexts/accountSelector';
@@ -54,7 +55,6 @@ import networkUtils from '@onekeyhq/shared/src/utils/networkUtils';
 import { EAccountSelectorSceneName } from '@onekeyhq/shared/types';
 
 import backgroundApiProxy from '../../background/instance/backgroundApiProxy';
-import { useLoginOneKeyId } from '../../hooks/useLoginOneKeyId';
 import { useOnLock } from '../../hooks/useOnLock';
 import { usePromiseResult } from '../../hooks/usePromiseResult';
 import { useReferFriends } from '../../hooks/useReferFriends';
@@ -62,12 +62,14 @@ import { useThemeVariant } from '../../hooks/useThemeVariant';
 import { HomeFirmwareUpdateReminder } from '../../views/FirmwareUpdate/components/HomeFirmwareUpdateReminder';
 import { WalletXfpStatusReminder } from '../../views/Home/components/WalletXfpStatusReminder/WalletXfpStatusReminder';
 import { PrimeHeaderIconButtonLazy } from '../../views/Prime/components/PrimeHeaderIconButton';
-import { usePrimeAuthV2 } from '../../views/Prime/hooks/usePrimeAuthV2';
 import { usePrimeAvailable } from '../../views/Prime/hooks/usePrimeAvailable';
 import useScanQrCode from '../../views/ScanQrCode/hooks/useScanQrCode';
 import { AccountSelectorProviderMirror } from '../AccountSelector';
 import { UpdateReminder } from '../UpdateReminder';
-import { useAppUpdateInfo } from '../UpdateReminder/hooks';
+import {
+  isShowAppUpdateUIWhenUpdating,
+  useAppUpdateInfo,
+} from '../UpdateReminder/hooks';
 
 import type { GestureResponderEvent } from 'react-native';
 
@@ -93,7 +95,7 @@ function MoreActionProvider({ children }: PropsWithChildren) {
 
 function MoreActionContentHeader() {
   const intl = useIntl();
-  const { user } = usePrimeAuthV2();
+  const { user } = useOneKeyAuth();
 
   const { closePopover } = usePopoverContext();
   const { isPrimeAvailable } = usePrimeAvailable();
@@ -101,7 +103,7 @@ function MoreActionContentHeader() {
     activeAccount: { network },
   } = useActiveAccount({ num: 0 });
 
-  const { loginOneKeyId } = useLoginOneKeyId();
+  const { loginOneKeyId } = useOneKeyAuth();
 
   const handleLogin = useCallback(async () => {
     await closePopover?.();
@@ -282,8 +284,8 @@ function MoreActionContentGridItem({
     }
   }, [closePopover, onPress, trackID]);
 
-  const { user } = usePrimeAuthV2();
-  const isPrimeUser = user?.primeSubscription?.isActive && user?.privyUserId;
+  const { user } = useOneKeyAuth();
+  const isPrimeUser = user?.primeSubscription?.isActive && user?.onekeyUserId;
 
   if (isPrimeFeature && !isPrimeAvailable) {
     return null;
@@ -425,7 +427,7 @@ function MoreActionContentGrid() {
   });
   const { gtMd } = useMedia();
   const toMyOneKeyModal = useToMyOneKeyModal();
-  const { user } = usePrimeAuthV2();
+  const { user } = useOneKeyAuth();
 
   const handleDeviceManagement = useCallback(async () => {
     await toMyOneKeyModal();
@@ -444,7 +446,7 @@ function MoreActionContentGrid() {
 
   const checkIsPrimeUser = useCallback(
     (showFeature: EPrimeFeatures) => {
-      if (user?.primeSubscription?.isActive && user?.privyUserId) {
+      if (user?.primeSubscription?.isActive && user?.onekeyUserId) {
         return true;
       }
       navigation.pushFullModal(EModalRoutes.PrimeModal, {
@@ -497,7 +499,7 @@ function MoreActionContentGrid() {
 
   const scanQrCode = useScanQrCode();
 
-  const isPrimeUser = user?.primeSubscription?.isActive && user?.privyUserId;
+  const isPrimeUser = user?.primeSubscription?.isActive && user?.onekeyUserId;
 
   const handleScan = useCallback(async () => {
     await scanQrCode.start({
@@ -623,7 +625,7 @@ function MoreActionContentGrid() {
 }
 
 const useIsShowRedDot = () => {
-  const isHorizontal = useIsHorizontalLayout();
+  const isHorizontal = useIsWebHorizontalLayout();
   const [{ firstTimeGuideOpened, badge: notificationBadges }] =
     useNotificationsAtom();
   if (isHorizontal) {
@@ -688,16 +690,26 @@ const useIsShowWalletXfpStatus = () => {
 // This component may trigger multiple update checks simultaneously
 // Deduplicate or throttle API requests.
 // to prevent unnecessary API calls and improve performance
-const useIsShowUpgradeDot = () => {
+const useIsShowAppUpdateDot = () => {
   const appUpdateInfo = useAppUpdateInfo(true);
   const isAppNeedUpdate = appUpdateInfo.isNeedUpdate;
+  const isShowAppUpdateUI = useMemo(() => {
+    return isShowAppUpdateUIWhenUpdating({
+      updateStrategy: appUpdateInfo.data.updateStrategy,
+      updateStatus: appUpdateInfo.data.status,
+    });
+  }, [appUpdateInfo.data.updateStrategy, appUpdateInfo.data.status]);
   const isNeedUpgradeFirmware = useIsNeedUpgradeFirmware();
   const isShowWalletXfpStatus = useIsShowWalletXfpStatus();
-  return isAppNeedUpdate || isNeedUpgradeFirmware || isShowWalletXfpStatus;
+  return (
+    (isShowAppUpdateUI && isAppNeedUpdate) ||
+    isNeedUpgradeFirmware ||
+    isShowWalletXfpStatus
+  );
 };
 
 function UpdateReminders() {
-  const isShowUpgradeComponents = useIsShowUpgradeDot();
+  const isShowUpgradeComponents = useIsShowAppUpdateDot();
   return isShowUpgradeComponents ? (
     <YStack gap="$2">
       <UpdateReminder />
@@ -767,7 +779,7 @@ function Dot({ color }: { color: IStackStyle['bg'] }) {
 function MoreButtonWithDot({ onPress }: { onPress?: IButtonProps['onPress'] }) {
   const intl = useIntl();
   const isShowRedDot = useIsShowRedDot();
-  const isShowUpgradeDot = useIsShowUpgradeDot();
+  const isShowUpgradeDot = useIsShowAppUpdateDot();
   const dot = useMemo(() => {
     if (isShowUpgradeDot) {
       return <Dot color="$blue8" />;

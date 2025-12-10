@@ -23,6 +23,7 @@ import { DiscoveryBrowserProviderMirror } from '@onekeyhq/kit/src/views/Discover
 import { EJotaiContextStoreNames } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import { isGoogleSearchItem } from '@onekeyhq/shared/src/consts/discovery';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
+import platformEnv from '@onekeyhq/shared/src/platformEnv';
 import { ETabRoutes } from '@onekeyhq/shared/src/routes';
 import type {
   EUniversalSearchPages,
@@ -39,6 +40,7 @@ import backgroundApiProxy from '../../../background/instance/backgroundApiProxy'
 import { AccountSelectorProviderMirror } from '../../../components/AccountSelector';
 import { ListItem } from '../../../components/ListItem';
 import useListenTabFocusState from '../../../hooks/useListenTabFocusState';
+import { usePromiseResult } from '../../../hooks/usePromiseResult';
 import { useActiveAccount } from '../../../states/jotai/contexts/accountSelector';
 import {
   useAggregateTokensListMapAtom,
@@ -67,24 +69,29 @@ interface IUniversalSection {
   showMore?: boolean;
 }
 
-const getSearchTypes = () => [
-  EUniversalSearchType.Address,
-  EUniversalSearchType.MarketToken,
-  EUniversalSearchType.V2MarketToken,
-  EUniversalSearchType.AccountAssets,
-  EUniversalSearchType.Dapp,
-];
+const getSearchTypes = () => {
+  return [
+    EUniversalSearchType.Address,
+    EUniversalSearchType.MarketToken,
+    EUniversalSearchType.V2MarketToken,
+    // Hide AccountAssets search in WebDapp mode
+    !platformEnv.isWebDappMode && EUniversalSearchType.AccountAssets,
+    EUniversalSearchType.Dapp,
+  ].filter(Boolean);
+};
 
 const getTabIndexForSearchType = (searchType: EUniversalSearchType): number => {
-  const baseTabMapping = {
+  const tabMapping: Record<EUniversalSearchType, number> = {
     [EUniversalSearchType.Address]: 1, // Wallets tab
-    [EUniversalSearchType.MarketToken]: 3, // Tokens tab
     [EUniversalSearchType.V2MarketToken]: 2, // Market tab
-    [EUniversalSearchType.AccountAssets]: 4, // My Assets tab
-    [EUniversalSearchType.Dapp]: 5, // DApps tab
+    [EUniversalSearchType.MarketToken]: 3, // Tokens tab
+    // In WebDapp mode, My Assets tab is hidden
+    [EUniversalSearchType.AccountAssets]: platformEnv.isWebDappMode ? 0 : 4,
+    // DApps tab index changes based on whether My Assets tab is shown
+    [EUniversalSearchType.Dapp]: platformEnv.isWebDappMode ? 4 : 5,
   };
 
-  return baseTabMapping[searchType];
+  return tabMapping[searchType];
 };
 
 const SkeletonItem = () => (
@@ -126,6 +133,12 @@ export function UniversalSearch({
   const [allTokenListMap] = useAllTokenListMapAtom();
   const [aggregateTokenListMap] = useAggregateTokensListMapAtom();
 
+  const { result: allAggregateTokenInfo } = usePromiseResult(
+    async () => backgroundApiProxy.serviceToken.getAllAggregateTokenInfo(),
+    [],
+  );
+  const { allAggregateTokenMap } = allAggregateTokenInfo ?? {};
+
   const [sections, setSections] = useState<IUniversalSection[]>([]);
   const [searchStatus, setSearchStatus] = useState<ESearchStatus>(
     ESearchStatus.init,
@@ -154,9 +167,11 @@ export function UniversalSearch({
       intl.formatMessage({
         id: ETranslations.global_universal_search_tabs_tokens,
       }),
-      intl.formatMessage({
-        id: ETranslations.global_universal_search_tabs_my_assets,
-      }),
+      // Include My Assets tab only when not in WebDapp mode
+      !platformEnv.isWebDappMode &&
+        intl.formatMessage({
+          id: ETranslations.global_universal_search_tabs_my_assets,
+        }),
       intl.formatMessage({
         id: ETranslations.global_universal_search_tabs_dapps,
       }),
@@ -450,7 +465,12 @@ export function UniversalSearch({
             />
           );
         case EUniversalSearchType.AccountAssets:
-          return <UniversalSearchAccountAssetItem item={item} />;
+          return (
+            <UniversalSearchAccountAssetItem
+              item={item}
+              allAggregateTokenMap={allAggregateTokenMap}
+            />
+          );
         case EUniversalSearchType.Dapp:
           return (
             <UniversalSearchDappItem
@@ -462,7 +482,7 @@ export function UniversalSearch({
           return null;
       }
     },
-    [activeAccount?.network?.id, searchStatus],
+    [activeAccount?.network?.id, searchStatus, allAggregateTokenMap],
   );
 
   const keyExtractor = useCallback(
@@ -555,6 +575,7 @@ export function UniversalSearch({
         return (
           <>
             <Tabs.TabBar
+              scrollable
               tabNames={tabTitles}
               onTabPress={handleTabPress}
               focusedTab={focusedTab}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import { noop } from 'lodash';
 import { useIntl } from 'react-intl';
@@ -13,7 +13,9 @@ import {
   useCurrentTabScrollY,
   useMedia,
 } from '@onekeyhq/components';
-import { useTabsScrollContext } from '@onekeyhq/components/src/composite/Tabs/context';
+import { useCurrency } from '@onekeyhq/kit/src/components/Currency';
+import { useRouteIsFocused } from '@onekeyhq/kit/src/hooks/useRouteIsFocused';
+import { useTokenDetail } from '@onekeyhq/kit/src/views/Market/MarketDetailV2/hooks';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import platformEnv from '@onekeyhq/shared/src/platformEnv';
 import type { IMarketTokenTransaction } from '@onekeyhq/shared/types/marketV2';
@@ -50,15 +52,20 @@ const useScrollEnd = platformEnv.isNative
     }
   : () => {};
 
-const SCROLL_THRESHOLD = 50;
-
 export function TransactionsHistory({
   tokenAddress,
   networkId,
   onScrollEnd,
 }: ITransactionsHistoryProps) {
-  const intl = useIntl();
+  const { websocketConfig } = useTokenDetail();
+  const isVisible = useRouteIsFocused();
   const { gtXl } = useMedia();
+  const currencyInfo = useCurrency();
+
+  const normalMode =
+    !platformEnv.isNative && !gtXl && !(websocketConfig?.txs ?? false);
+
+  const intl = useIntl();
   const {
     transactions,
     isRefreshing,
@@ -69,31 +76,22 @@ export function TransactionsHistory({
   } = useMarketTransactions({
     tokenAddress,
     networkId,
+    normalMode,
   });
 
   // Subscribe to real-time transaction updates
+  // Only enable if websocket.txs is enabled and other conditions are met
   useTransactionsWebSocket({
     networkId,
     tokenAddress,
-    enabled: true,
+    enabled: !normalMode && isVisible,
+    currency: currencyInfo.id,
     onNewTransaction: addNewTransaction,
   });
 
-  const { scrollTop } = useTabsScrollContext() as {
-    scrollTop: number;
-  };
-
-  const [listKey, setListKey] = useState(0);
-
-  useEffect(() => {
-    if (transactions.length > 0) {
-      const shouldResetList = scrollTop < SCROLL_THRESHOLD;
-
-      if (shouldResetList) {
-        setListKey((prev) => prev + 1);
-      }
-    }
-  }, [transactions.length, scrollTop]);
+  const listKey = useMemo(() => {
+    return `${networkId}-${tokenAddress}`;
+  }, [networkId, tokenAddress]);
 
   const renderItem: FlatListProps<IMarketTokenTransaction>['renderItem'] =
     useCallback(
@@ -150,7 +148,7 @@ export function TransactionsHistory({
         ) : null
       }
       contentContainerStyle={{
-        paddingBottom: platformEnv.isNativeAndroid ? 48 : 16,
+        paddingBottom: platformEnv.isNativeAndroid ? 84 : 16,
       }}
     />
   );

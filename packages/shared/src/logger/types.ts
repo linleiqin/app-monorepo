@@ -14,6 +14,7 @@ export type ILogLevel = 'debug' | 'info' | 'warn' | 'error';
 export enum EScopeName {
   notification = 'notification',
   app = 'app',
+  approval = 'approval',
   account = 'account',
   cloudBackup = 'cloudBackup',
   demo = 'demo',
@@ -35,6 +36,10 @@ export enum EScopeName {
   dex = 'dex',
   perp = 'perp',
   prime = 'prime',
+  cloudSync = 'cloudSync',
+  ipTable = 'ipTable',
+  networkDoctor = 'networkDoctor',
+  onboarding = 'onboarding',
 }
 export interface IScope {
   getName: () => EScopeName;
@@ -62,3 +67,38 @@ export interface IScene {
   getName: () => string;
 }
 export const NO_LOG_OUTPUT = '$$_NO_LOG_OUTPUT_8888888';
+
+export type ILogBundle =
+  | {
+      type: 'text';
+      fileName: string;
+      mimeType: string;
+      blob: Blob;
+      content: string;
+    }
+  | {
+      type: 'file';
+      fileName: string;
+      mimeType: string;
+      filePath: string;
+    };
+
+export type ILogDigest = {
+  sizeBytes: number;
+  sha256: string;
+  bundle: ILogBundle;
+};
+
+export type ILogUploadResponse = {
+  objectKey: string;
+  uploadedBytes: number;
+  durationMs: number;
+};
+
+export enum ELogUploadStage {
+  Collecting = 'collecting',
+  Uploading = 'uploading',
+  Success = 'success',
+  Fallback = 'fallback',
+  Error = 'error',
+}

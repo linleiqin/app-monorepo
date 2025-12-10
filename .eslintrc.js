@@ -31,7 +31,8 @@ const jsRules = {
   'react-hooks/exhaustive-deps': [
     'error',
     {
-      'additionalHooks': '(usePromiseResult|useAsyncCall|useUpdateEffect)',
+      'additionalHooks':
+        '(usePromiseResult|useAsyncCall|useUpdateEffect|useDeepCompareEffect)',
     },
   ],
   'global-require': 'off',
@@ -72,6 +73,10 @@ const restrictedImportsPatterns = [
     group: ['**/localDbInstance', '**/localDbInstance.native'],
     message:
       'import localDbInstance directly is not allowd, use localDb instead',
+  },
+  {
+    group: ['@onekeyhq/desktop/app/i18n'],
+    message: 'import ETranslations from "@onekeyhq/shared/src/locale" instead',
   },
   {
     group: ['**/v4localDbInstance.native'],

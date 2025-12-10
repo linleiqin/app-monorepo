@@ -2,7 +2,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useRoute } from '@react-navigation/core';
-import { isEmpty } from 'lodash';
+import { isEmpty, uniqBy } from 'lodash';
 import { useIntl } from 'react-intl';
 
 import type {
@@ -10,6 +10,7 @@ import type {
   IListViewProps,
   ISectionListProps,
   IStackProps,
+  ITabContainerRef,
 } from '@onekeyhq/components';
 import {
   ActionList,
@@ -24,6 +25,7 @@ import {
   Spinner,
   Stack,
   Tabs,
+  Toast,
   XStack,
   useClipboard,
   useMedia,
@@ -32,6 +34,10 @@ import { HeaderIconButton } from '@onekeyhq/components/src/layouts/Navigation/He
 import backgroundApiProxy from '@onekeyhq/kit/src/background/instance/backgroundApiProxy';
 import { AccountSelectorProviderMirror } from '@onekeyhq/kit/src/components/AccountSelector';
 import { NetworkAvatar } from '@onekeyhq/kit/src/components/NetworkAvatar';
+import {
+  TabletModalContainer,
+  useTabletModalPageWidth,
+} from '@onekeyhq/kit/src/components/TabletHomeContainer';
 import { Token } from '@onekeyhq/kit/src/components/Token';
 import { useAccountData } from '@onekeyhq/kit/src/hooks/useAccountData';
 import { usePromiseResult } from '@onekeyhq/kit/src/hooks/usePromiseResult';
@@ -40,16 +46,26 @@ import type {
   IAccountDeriveInfo,
   IAccountDeriveTypes,
 } from '@onekeyhq/kit-bg/src/vaults/types';
+import {
+  EAppEventBusNames,
+  appEventBus,
+} from '@onekeyhq/shared/src/eventBus/appEventBus';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import type {
   EModalAssetDetailRoutes,
   IModalAssetDetailsParamList,
 } from '@onekeyhq/shared/src/routes/assetDetails';
 import accountUtils from '@onekeyhq/shared/src/utils/accountUtils';
+import { isEnabledNetworksInAllNetworks } from '@onekeyhq/shared/src/utils/networkUtils';
 import { waitAsync } from '@onekeyhq/shared/src/utils/promiseUtils';
+import {
+  buildTokenListMapKey,
+  sortTokensCommon,
+} from '@onekeyhq/shared/src/utils/tokenUtils';
 import { EAccountSelectorSceneName } from '@onekeyhq/shared/types';
 import type { IAccountHistoryTx } from '@onekeyhq/shared/types/history';
 import type {
+  IAccountToken,
   IFetchTokenDetailItem,
   IToken,
 } from '@onekeyhq/shared/types/token';
@@ -82,6 +98,11 @@ export type IProps = {
   ListHeaderComponent?: ISectionListProps<any>['ListHeaderComponent'];
   deriveInfo?: IAccountDeriveInfo;
   deriveType?: IAccountDeriveTypes;
+  allNetworksState?: {
+    disabledNetworks: Record<string, boolean>;
+    enabledNetworks: Record<string, boolean>;
+  };
+  refreshAllNetworkState?: () => void;
 } & IStackProps;
 function TokenDetailsView() {
   const intl = useIntl();
@@ -103,22 +124,166 @@ function TokenDetailsView() {
     accountId,
     networkId,
     walletId,
-    tokens,
+    tokenInfo,
     isAllNetworks,
     indexedAccountId,
-    isAggregateToken,
     tokenMap,
+    aggregateTokens: aggregateTokensParam,
+    accountAddress,
   } = route.params;
 
   const { gtMd } = useMedia();
 
-  const tabsRef = useRef<{
-    switchTab: (tabName: string) => void;
-  } | null>(null);
+  const tabsRef = useRef<ITabContainerRef | null>(null);
 
   const [activeTabIndex, setActiveTabIndex] = useState(0);
 
   const { vaultSettings, network } = useAccountData({ networkId });
+
+  const {
+    result: { tokens, lastActiveTabName },
+    isLoading: isLoadingTokens,
+  } = usePromiseResult(
+    async () => {
+      if (tokenInfo.isAggregateToken) {
+        const aggregateTokenRawData =
+          await backgroundApiProxy.simpleDb.aggregateToken.getRawData();
+
+        const allAggregateTokenMap =
+          aggregateTokenRawData?.allAggregateTokenMap ?? {};
+        const _lastActiveTabName =
+          aggregateTokenRawData?.tokenDetails?.[
+            indexedAccountId ?? accountId
+          ]?.[tokenInfo.$key]?.lastActiveTabName;
+        const aggregateTokens: IAccountToken[] = [];
+
+        const { unavailableItems } =
+          await backgroundApiProxy.serviceNetwork.getChainSelectorNetworksCompatibleWithAccountId(
+            { accountId, walletId },
+          );
+
+        let tokenAccountId;
+        let tokenAccountAddress;
+
+        if (accountUtils.isOthersWallet({ walletId })) {
+          tokenAccountId = accountId;
+          tokenAccountAddress = accountAddress;
+        }
+
+        for (const aggregateToken of allAggregateTokenMap?.[tokenInfo.$key]
+          ?.tokens ?? []) {
+          if (
+            aggregateToken.networkId &&
+            !unavailableItems.find(
+              (item) => item.id === aggregateToken.networkId,
+            )
+          ) {
+            const [deriveType, tokenNetwork] = await Promise.all([
+              backgroundApiProxy.serviceNetwork.getGlobalDeriveTypeOfNetwork({
+                networkId: aggregateToken.networkId ?? '',
+              }),
+              backgroundApiProxy.serviceNetwork.getNetworkSafe({
+                networkId: aggregateToken.networkId ?? '',
+              }),
+            ]);
+            if (!accountUtils.isOthersWallet({ walletId })) {
+              try {
+                const { accounts } =
+                  await backgroundApiProxy.serviceAccount.getAccountsByIndexedAccounts(
+                    {
+                      indexedAccountIds: [indexedAccountId ?? ''],
+                      networkId: aggregateToken.networkId ?? '',
+                      deriveType: deriveType ?? 'default',
+                    },
+                  );
+                tokenAccountId = accounts[0]?.id ?? '';
+                tokenAccountAddress = accounts[0]?.address ?? '';
+              } catch {
+                tokenAccountId = undefined;
+                tokenAccountAddress = undefined;
+              }
+            }
+
+            const originalToken = aggregateTokensParam?.find(
+              (t) =>
+                t.address === aggregateToken.address &&
+                t.networkId === aggregateToken.networkId,
+            );
+
+            if (originalToken) {
+              aggregateTokens.push({
+                ...originalToken,
+                accountId: originalToken.accountId ?? tokenAccountId ?? '',
+              });
+            } else {
+              aggregateTokens.push({
+                ...aggregateToken,
+                accountId: tokenAccountId ?? '',
+                networkName: tokenNetwork?.name ?? '',
+                $key: buildTokenListMapKey({
+                  networkId: aggregateToken.networkId ?? '',
+                  accountAddress: tokenAccountAddress ?? '',
+                  tokenAddress: aggregateToken.address ?? '',
+                }),
+              });
+            }
+          }
+        }
+
+        return {
+          tokens: uniqBy(
+            sortTokensCommon({
+              tokens: aggregateTokens,
+              tokenListMap: tokenMap ?? {},
+            }),
+            (token) => token.$key,
+          ),
+          lastActiveTabName: _lastActiveTabName,
+        };
+      }
+
+      return {
+        tokens: [tokenInfo],
+        lastActiveTabName: undefined,
+      };
+    },
+    [
+      tokenInfo,
+      accountId,
+      walletId,
+      tokenMap,
+      aggregateTokensParam,
+      indexedAccountId,
+      accountAddress,
+    ],
+    {
+      watchLoading: true,
+      initResult: {
+        tokens: [],
+        lastActiveTabName: undefined,
+      },
+    },
+  );
+
+  const { result: allNetworksState, run: refreshAllNetworkState } =
+    usePromiseResult(
+      async () => {
+        if (isAllNetworks) {
+          return backgroundApiProxy.serviceAllNetwork.getAllNetworksState();
+        }
+        return {
+          disabledNetworks: {},
+          enabledNetworks: {},
+        };
+      },
+      [isAllNetworks],
+      {
+        initResult: {
+          disabledNetworks: {},
+          enabledNetworks: {},
+        },
+      },
+    );
 
   const renderAggregateTokens = useCallback(
     ({ closePopover }: { closePopover: () => void }) => {
@@ -231,7 +396,11 @@ function TokenDetailsView() {
   const headerRight = useCallback(() => {
     const sections: IActionListSection[] = [];
 
-    if (isAggregateToken && tokens.length > 1) {
+    if (
+      tokenInfo.isAggregateToken &&
+      tokens.length > 1 &&
+      !tokenInfo.isNative
+    ) {
       return (
         <Popover
           title={intl.formatMessage({
@@ -251,7 +420,7 @@ function TokenDetailsView() {
       );
     }
 
-    if (!tokens[0]?.isNative) {
+    if (!tokenInfo?.isNative) {
       sections.push({
         items: [
           {
@@ -259,12 +428,12 @@ function TokenDetailsView() {
               id: ETranslations.global_copy_token_contract,
             }),
             icon: 'Copy3Outline',
-            onPress: () => copyText(tokens[0]?.address ?? ''),
+            onPress: () => copyText(tokenInfo?.address ?? ''),
           },
         ],
       });
 
-      if (tokens[0]?.address) {
+      if (tokenInfo?.address) {
         sections[0].items.push({
           label: intl.formatMessage({
             id: ETranslations.global_view_in_blockchain_explorer,
@@ -272,8 +441,8 @@ function TokenDetailsView() {
           icon: 'OpenOutline',
           onPress: () =>
             openTokenDetailsUrl({
-              networkId: tokens[0].networkId ?? '',
-              tokenAddress: tokens[0]?.address,
+              networkId: tokenInfo.networkId ?? '',
+              tokenAddress: tokenInfo?.address,
             }),
         });
       }
@@ -286,12 +455,21 @@ function TokenDetailsView() {
         sections={sections}
       />
     );
-  }, [isAggregateToken, tokens, intl, renderAggregateTokens, copyText]);
+  }, [
+    tokenInfo.isAggregateToken,
+    tokenInfo?.isNative,
+    tokenInfo?.address,
+    tokenInfo.networkId,
+    tokens.length,
+    intl,
+    renderAggregateTokens,
+    copyText,
+  ]);
 
   const { result, isLoading } = usePromiseResult(
     async () => {
       if (
-        !tokens[0].networkId ||
+        !tokenInfo.networkId ||
         !indexedAccountId ||
         !vaultSettings?.mergeDeriveAssetsEnabled
       )
@@ -299,14 +477,14 @@ function TokenDetailsView() {
       const r =
         await backgroundApiProxy.serviceAccount.getNetworkAccountsInSameIndexedAccountIdWithDeriveTypes(
           {
-            networkId: tokens[0].networkId ?? '',
+            networkId: tokenInfo.networkId ?? '',
             indexedAccountId,
           },
         );
       await waitAsync(600);
       return r;
     },
-    [indexedAccountId, tokens, vaultSettings?.mergeDeriveAssetsEnabled],
+    [indexedAccountId, tokenInfo, vaultSettings?.mergeDeriveAssetsEnabled],
     {
       watchLoading: true,
     },
@@ -342,6 +520,8 @@ function TokenDetailsView() {
             isAllNetworks={isAllNetworks}
             listViewContentContainerStyle={listViewContentContainerStyle}
             indexedAccountId={indexedAccountId}
+            allNetworksState={allNetworksState}
+            refreshAllNetworkState={refreshAllNetworkState}
           />
         </Tabs.Tab>
       ));
@@ -362,11 +542,11 @@ function TokenDetailsView() {
               inTabList
               isTabView
               accountId={item.account?.id ?? ''}
-              networkId={tokens[0].networkId ?? ''}
+              networkId={tokenInfo.networkId ?? ''}
               walletId={walletId}
               deriveInfo={item.deriveInfo}
               deriveType={item.deriveType}
-              tokenInfo={tokens[0]}
+              tokenInfo={tokenInfo}
               isAllNetworks={isAllNetworks}
               listViewContentContainerStyle={listViewContentContainerStyle}
               indexedAccountId={indexedAccountId}
@@ -376,12 +556,12 @@ function TokenDetailsView() {
       }
 
       return [
-        <Tabs.Tab key={String(tokens[0].$key)} name="">
+        <Tabs.Tab key={String(tokenInfo.$key)} name="">
           <TokenDetailsViews
-            accountId={tokens[0].accountId ?? ''}
-            networkId={tokens[0].networkId ?? ''}
+            accountId={tokenInfo.accountId ?? ''}
+            networkId={tokenInfo.networkId ?? ''}
             walletId={walletId}
-            tokenInfo={tokens[0]}
+            tokenInfo={tokenInfo}
             isAllNetworks={isAllNetworks}
             listViewContentContainerStyle={listViewContentContainerStyle}
             indexedAccountId={indexedAccountId}
@@ -395,16 +575,72 @@ function TokenDetailsView() {
     tokens,
     networkId,
     walletId,
-    vaultSettings?.mergeDeriveAssetsEnabled,
     isAllNetworks,
     listViewContentContainerStyle,
     indexedAccountId,
+    allNetworksState,
+    refreshAllNetworkState,
+    vaultSettings?.mergeDeriveAssetsEnabled,
+    tokenInfo,
     result?.networkAccounts,
     intl,
   ]);
 
+  const pageWidth = useTabletModalPageWidth();
+
+  const handleTabIndexChange = useCallback(
+    async (index: number) => {
+      if (isAllNetworks && tokens.length > 1 && tokens[index]) {
+        const activeToken = tokens[index];
+
+        await backgroundApiProxy.serviceToken.updateLastActiveTabNameInTokenDetails(
+          {
+            accountId: indexedAccountId ?? accountId,
+            aggregateTokenId: tokenInfo.$key,
+            lastActiveTabName: activeToken.networkName ?? '',
+          },
+        );
+
+        if (
+          activeToken.accountId &&
+          activeToken.networkId &&
+          !isEnabledNetworksInAllNetworks({
+            networkId: activeToken.networkId,
+            disabledNetworks: allNetworksState.disabledNetworks,
+            enabledNetworks: allNetworksState.enabledNetworks,
+            isTestnet: false,
+          })
+        ) {
+          await backgroundApiProxy.serviceAllNetwork.updateAllNetworksState({
+            enabledNetworks: { [activeToken.networkId]: true },
+          });
+          appEventBus.emit(EAppEventBusNames.AccountDataUpdate, undefined);
+          Toast.success({
+            title: intl.formatMessage({
+              id: ETranslations.network_also_enabled,
+            }),
+          });
+          void refreshAllNetworkState();
+        }
+      }
+
+      setActiveTabIndex(index);
+    },
+    [
+      isAllNetworks,
+      tokens,
+      indexedAccountId,
+      accountId,
+      tokenInfo.$key,
+      allNetworksState.disabledNetworks,
+      allNetworksState.enabledNetworks,
+      intl,
+      refreshAllNetworkState,
+    ],
+  );
+
   const tokenDetailsViewElement = useMemo(() => {
-    if (isLoading)
+    if (isLoading || isLoadingTokens)
       return (
         <Stack
           flex={1}
@@ -423,10 +659,10 @@ function TokenDetailsView() {
       if (tabs && !isEmpty(tabs) && tabs.length > 1) {
         return (
           <Tabs.Container
+            width={pageWidth}
             ref={tabsRef as any}
-            onIndexChange={(index) => {
-              setActiveTabIndex(index);
-            }}
+            onIndexChange={handleTabIndexChange}
+            initialTabName={lastActiveTabName}
             renderTabBar={(props) => (
               <Tabs.TabBar
                 {...props}
@@ -435,7 +671,7 @@ function TokenDetailsView() {
                   <TokenDetailsTabToolbar
                     tokens={tokens}
                     onSelected={(token) => {
-                      tabsRef.current?.switchTab(token.networkName ?? '');
+                      tabsRef.current?.jumpToTab(token.networkName ?? '');
                     }}
                   />
                 )}
@@ -451,10 +687,10 @@ function TokenDetailsView() {
 
     return (
       <TokenDetailsViews
-        accountId={tokens[0].accountId ?? accountId}
-        networkId={tokens[0].networkId ?? networkId}
+        accountId={tokenInfo.accountId ?? accountId}
+        networkId={tokenInfo.networkId ?? networkId}
         walletId={walletId}
-        tokenInfo={tokens[0]}
+        tokenInfo={tokenInfo}
         isAllNetworks={isAllNetworks}
         indexedAccountId={indexedAccountId}
         listViewContentContainerStyle={listViewContentContainerStyle}
@@ -462,15 +698,20 @@ function TokenDetailsView() {
     );
   }, [
     isLoading,
+    isLoadingTokens,
     walletId,
-    accountId,
+    vaultSettings?.mergeDeriveAssetsEnabled,
     tokens,
+    tokenInfo,
+    accountId,
     networkId,
     isAllNetworks,
     indexedAccountId,
     listViewContentContainerStyle,
     tabs,
-    vaultSettings?.mergeDeriveAssetsEnabled,
+    pageWidth,
+    handleTabIndexChange,
+    lastActiveTabName,
   ]);
 
   const headerTitle = useCallback(() => {
@@ -478,26 +719,42 @@ function TokenDetailsView() {
       <XStack alignItems="center" gap="$2">
         <Token
           size="sm"
-          tokenImageUri={tokens[0].logoURI}
+          tokenImageUri={tokenInfo.logoURI}
           networkImageUri={
             tokens.length <= 1 && !gtMd ? network?.logoURI : undefined
           }
           networkId={networkId}
         />
         <SizableText size="$headingLg" numberOfLines={1}>
-          {tokens[0].commonSymbol ?? tokens[0].symbol ?? tokens[0].name ?? ''}
+          {tokenInfo.commonSymbol ?? tokenInfo.symbol ?? tokenInfo.name ?? ''}
         </SizableText>
-        {tokens.length <= 1 && gtMd ? (
+        {!isLoadingTokens &&
+        !isLoading &&
+        (tokens?.length <= 1 || !tokenInfo.isAggregateToken) &&
+        gtMd ? (
           <Badge badgeSize="sm">
-            <Badge.Text>{tokens[0].networkName ?? ''}</Badge.Text>
+            <Badge.Text>{tokenInfo.networkName ?? ''}</Badge.Text>
           </Badge>
         ) : null}
       </XStack>
     );
-  }, [tokens, gtMd, network?.logoURI, networkId]);
+  }, [
+    tokenInfo.logoURI,
+    tokenInfo.commonSymbol,
+    tokenInfo.symbol,
+    tokenInfo.name,
+    tokenInfo.isAggregateToken,
+    tokenInfo.networkName,
+    tokens.length,
+    gtMd,
+    network?.logoURI,
+    networkId,
+    isLoadingTokens,
+    isLoading,
+  ]);
 
   useEffect(() => {
-    if (tokens && tokenMap) {
+    if (tokens?.length > 1 && tokenMap) {
       const details = tokens
         .map((token) => {
           const tokenFiat = tokenMap[token.$key];
@@ -537,6 +794,10 @@ export default function TokenDetailsModal() {
 
   const [tokenDetails, setTokenDetails] = useState<
     ITokenDetailsContextValue['tokenDetails']
+  >({});
+
+  const [tokenAccountMap, setTokenAccountMap] = useState<
+    Record<string, string>
   >({});
 
   const [isLoadingTokenDetails, setIsLoadingTokenDetails] = useState<
@@ -621,6 +882,8 @@ export default function TokenDetailsModal() {
       tokenDetails,
       updateTokenDetails,
       batchUpdateTokenDetails,
+      tokenAccountMap,
+      setTokenAccountMap,
     }),
     [
       tokenMetadata,
@@ -630,18 +893,22 @@ export default function TokenDetailsModal() {
       tokenDetails,
       updateTokenDetails,
       batchUpdateTokenDetails,
+      tokenAccountMap,
+      setTokenAccountMap,
     ],
   );
   return (
-    <AccountSelectorProviderMirror
-      config={{
-        sceneName: EAccountSelectorSceneName.home,
-      }}
-      enabledNum={[num]}
-    >
-      <TokenDetailsContext.Provider value={contextValue}>
-        <TokenDetails />
-      </TokenDetailsContext.Provider>
-    </AccountSelectorProviderMirror>
+    <TabletModalContainer>
+      <AccountSelectorProviderMirror
+        config={{
+          sceneName: EAccountSelectorSceneName.home,
+        }}
+        enabledNum={[num]}
+      >
+        <TokenDetailsContext.Provider value={contextValue}>
+          <TokenDetails />
+        </TokenDetailsContext.Provider>
+      </AccountSelectorProviderMirror>
+    </TabletModalContainer>
   );
 }

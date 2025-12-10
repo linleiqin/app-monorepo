@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
-import { getFontSize } from 'tamagui';
+import { getFontSize } from '@onekeyhq/components/src/shared/tamagui';
+import type { VariableVal } from '@onekeyhq/components/src/shared/tamagui';
 
 import { hasNativeHeaderView } from '../Navigator/CommonConfig';
 
@@ -12,19 +13,20 @@ import type {
   IStackNavigationOptions,
 } from '../ScreenProps';
 import type { HeaderBackButtonProps } from '@react-navigation/elements';
-import type { VariableVal } from '@tamagui/core';
 
 export type IOnekeyStackHeaderProps = {
   navigation?: IStackHeaderProps['navigation'];
   isModelScreen?: boolean;
   isRootScreen?: boolean;
   isFlowModelScreen?: boolean;
+  isOnboardingScreen?: boolean;
 };
 
 export function makeHeaderScreenOptions({
   navigation: currentNavigation,
   isModelScreen = false,
   isRootScreen = false,
+  isOnboardingScreen = false,
   bgColor,
   titleColor,
 }: IOnekeyStackHeaderProps & {
@@ -57,6 +59,7 @@ export function makeHeaderScreenOptions({
           onPress={currentNavigation?.goBack}
           isModelScreen={isModelScreen}
           isRootScreen={isRootScreen}
+          isOnboardingScreen={isOnboardingScreen}
           {...props}
           canGoBack={isCanGoBack}
         />
@@ -74,6 +77,7 @@ export function makeHeaderScreenOptions({
         navigation={navigation}
         isModelScreen={isModelScreen}
         isRootScreen={isRootScreen}
+        isOnboardingScreen={isOnboardingScreen}
       />
     ),
   };

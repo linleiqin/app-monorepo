@@ -16,17 +16,16 @@ import {
 import { ListItem } from '@onekeyhq/kit/src/components/ListItem';
 import { useMarketWatchListV2Atom } from '@onekeyhq/kit/src/states/jotai/contexts/marketV2/atoms';
 import { useUniversalSearchActions } from '@onekeyhq/kit/src/states/jotai/contexts/universalSearch';
+import { CommunityRecognizedBadge } from '@onekeyhq/kit/src/views/Market/components/CommunityRecognizedBadge';
+import { useToDetailPage } from '@onekeyhq/kit/src/views/Market/MarketHomeV2/components/MarketTokenList/hooks/useToMarketDetailPage';
 import { ETranslations } from '@onekeyhq/shared/src/locale/enum/translations';
 import { defaultLogger } from '@onekeyhq/shared/src/logger/logger';
 import {
+  ECopyFrom,
   EEnterWay,
   EWatchlistFrom,
 } from '@onekeyhq/shared/src/logger/scopes/dex';
-import {
-  ERootRoutes,
-  ETabMarketRoutes,
-  ETabRoutes,
-} from '@onekeyhq/shared/src/routes';
+import platformEnv from '@onekeyhq/shared/src/platformEnv';
 import accountUtils from '@onekeyhq/shared/src/utils/accountUtils';
 import type { IUniversalSearchV2MarketToken } from '@onekeyhq/shared/types/search';
 import { ESearchStatus } from '@onekeyhq/shared/types/search';
@@ -57,7 +56,13 @@ function ContractAddress({ address }: { address: string }) {
         size="small"
         iconSize="$4"
         icon="Copy3Outline"
-        onPress={() => copyText(address)}
+        onPress={() => {
+          defaultLogger.dex.actions.dexCopyCA({
+            copyFrom: ECopyFrom.Search,
+            copiedContent: address,
+          });
+          copyText(address);
+        }}
       />
     </XStack>
   );
@@ -135,6 +140,10 @@ export function UniversalSearchV2MarketTokenItem({
   // Ensure market watch list atom is initialized
   const [{ isMounted }] = useMarketWatchListV2Atom();
   const universalSearchActions = useUniversalSearchActions();
+  const toMarketDetailPage = useToDetailPage({
+    useRootNavigation: true,
+    from: EEnterWay.Search,
+  });
   const {
     logoUrl,
     price,
@@ -145,24 +154,27 @@ export function UniversalSearchV2MarketTokenItem({
     liquidity,
     volume_24h: volume24h,
     isNative,
+    communityRecognized,
   } = item.payload;
+
+  // Hide favorite button in extension popup and side panel
+  const shouldShowFavoriteButton = useMemo(
+    () =>
+      !platformEnv.isExtensionUiPopup && !platformEnv.isExtensionUiSidePanel,
+    [],
+  );
 
   const handlePress = useCallback(() => {
     rootNavigationRef.current?.goBack();
     setTimeout(async () => {
-      rootNavigationRef.current?.navigate(ERootRoutes.Main, {
-        screen: ETabRoutes.Market,
-        params: {
-          screen: ETabMarketRoutes.MarketDetailV2,
-          params: {
-            tokenAddress: address,
-            networkId: network,
-            symbol,
-            isNative,
-            from: EEnterWay.Search,
-          },
-        },
+      // Use toMarketDetailPage hook for navigation
+      void toMarketDetailPage({
+        tokenAddress: address,
+        networkId: network,
+        symbol,
+        isNative,
       });
+
       defaultLogger.market.token.searchToken({
         tokenSymbol: symbol,
         from:
@@ -189,6 +201,7 @@ export function UniversalSearchV2MarketTokenItem({
     searchStatus,
     universalSearchActions,
     item.type,
+    toMarketDetailPage,
   ]);
 
   if (!isMounted) {
@@ -202,12 +215,17 @@ export function UniversalSearchV2MarketTokenItem({
       renderAvatar={
         <MarketTokenIcon uri={logoUrl} size="lg" networkId={network} />
       }
-      title={symbol}
-      subtitle={<ContractAddress address={address} />}
-      subtitleProps={{
-        numberOfLines: 1,
-      }}
     >
+      <ListItem.Text
+        flex={1}
+        primary={
+          <XStack alignItems="center" gap="$1">
+            <SizableText size="$bodyLgMedium">{symbol}</SizableText>
+            {communityRecognized ? <CommunityRecognizedBadge /> : null}
+          </XStack>
+        }
+        secondary={<ContractAddress address={address} />}
+      />
       <XStack alignItems="center">
         <YStack alignItems="flex-end">
           <BaseMarketTokenPrice
@@ -218,15 +236,17 @@ export function UniversalSearchV2MarketTokenItem({
           />
           <MarketTokenLiquidity liquidity={liquidity} volume24h={volume24h} />
         </YStack>
-        <MarketStarV2
-          chainId={network}
-          contractAddress={address}
-          ml="$3"
-          from={EWatchlistFrom.Search}
-          tokenSymbol={symbol}
-          size="medium"
-          isNative={isNative}
-        />
+        {shouldShowFavoriteButton ? (
+          <MarketStarV2
+            chainId={network}
+            contractAddress={address}
+            ml="$3"
+            from={EWatchlistFrom.Search}
+            tokenSymbol={symbol}
+            size="medium"
+            isNative={isNative}
+          />
+        ) : null}
       </XStack>
     </ListItem>
   );

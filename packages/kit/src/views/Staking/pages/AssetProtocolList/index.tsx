@@ -26,8 +26,11 @@ import { useRouteIsFocused as useIsFocused } from '@onekeyhq/kit/src/hooks/useRo
 import { useSettingsPersistAtom } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import { defaultLogger } from '@onekeyhq/shared/src/logger/logger';
-import type { IModalStakingParamList } from '@onekeyhq/shared/src/routes';
-import { EModalStakingRoutes } from '@onekeyhq/shared/src/routes';
+import type {
+  EModalStakingRoutes,
+  IModalStakingParamList,
+} from '@onekeyhq/shared/src/routes';
+import { ETabEarnRoutes } from '@onekeyhq/shared/src/routes';
 import earnUtils from '@onekeyhq/shared/src/utils/earnUtils';
 import type { IStakeProtocolListItem } from '@onekeyhq/shared/types/staking';
 
@@ -155,26 +158,18 @@ function AssetProtocolListContent({
         network: item.network.networkId,
         stakeProvider: item.provider.name,
       });
-      const networkId = item.network.networkId;
-      const earnAccount =
-        await backgroundApiProxy.serviceStaking.getEarnAccount({
-          accountId: accountId || '',
-          indexedAccountId,
-          networkId,
-        });
-      appNavigation.navigate(EModalStakingRoutes.ProtocolDetailsV2, {
-        accountId: earnAccount?.accountId || accountId,
+      appNavigation.push(ETabEarnRoutes.EarnProtocolDetails, {
         networkId: item.network.networkId,
-        indexedAccountId:
-          earnAccount?.account.indexedAccountId || indexedAccountId,
         symbol,
         provider: item.provider.name,
-        vault: earnUtils.useVaultProvider({ providerName: item.provider.name })
+        vault: earnUtils.isVaultBasedProvider({
+          providerName: item.provider.name,
+        })
           ? item.provider.vault
           : undefined,
       });
     },
-    [appNavigation, accountId, indexedAccountId, symbol],
+    [appNavigation, symbol],
   );
   const [
     {

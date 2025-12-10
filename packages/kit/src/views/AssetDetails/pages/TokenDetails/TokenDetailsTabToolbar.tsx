@@ -1,13 +1,17 @@
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 
+import BigNumber from 'bignumber.js';
+import { isNil } from 'lodash';
 import { useIntl } from 'react-intl';
 
 import {
+  Icon,
   IconButton,
   LinearGradient,
   Popover,
   SizableText,
   Stack,
+  Tooltip,
   XStack,
   useMedia,
 } from '@onekeyhq/components';
@@ -17,6 +21,7 @@ import NumberSizeableTextWrapper from '@onekeyhq/kit/src/components/NumberSizeab
 import { useThemeVariant } from '@onekeyhq/kit/src/hooks/useThemeVariant';
 import { useSettingsPersistAtom } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
+import { sortTokensByOrder } from '@onekeyhq/shared/src/utils/tokenUtils';
 import type { IAccountToken } from '@onekeyhq/shared/types/token';
 
 import { useTokenDetailsContext } from './TokenDetailsContext';
@@ -31,8 +36,85 @@ function TokenDetailsTabToolbar(props: IProps) {
   const { tokens, onSelected } = props;
   const themeVariant = useThemeVariant();
   const intl = useIntl();
-  const { tokenDetails } = useTokenDetailsContext();
+  const { tokenDetails, tokenAccountMap } = useTokenDetailsContext();
   const [settings] = useSettingsPersistAtom();
+
+  const sortedTokensByFiatValue = useMemo(() => {
+    let sortedTokens = tokens?.sort((a, b) => {
+      const aKey = `${
+        a.accountId ||
+        tokenAccountMap[`${a.networkId || ''}_${a.address}`] ||
+        ''
+      }_${a.networkId || ''}`;
+      const bKey = `${
+        b.accountId ||
+        tokenAccountMap[`${b.networkId || ''}_${b.address}`] ||
+        ''
+      }_${b.networkId || ''}`;
+      const aFiat = new BigNumber(tokenDetails[aKey]?.data?.fiatValue ?? -1);
+      const bFiat = new BigNumber(tokenDetails[bKey]?.data?.fiatValue ?? -1);
+
+      return new BigNumber(bFiat.isNaN() ? -1 : bFiat).comparedTo(
+        new BigNumber(aFiat.isNaN() ? -1 : aFiat),
+      );
+    });
+    const negativeIndex = sortedTokens.findIndex((t) => {
+      const key = `${
+        t.accountId ||
+        tokenAccountMap[`${t.networkId || ''}_${t.address}`] ||
+        ''
+      }_${t.networkId || ''}`;
+      return new BigNumber(
+        tokenDetails[key]?.data?.fiatValue ?? -1,
+      ).isNegative();
+    });
+
+    const zeroIndex = sortedTokens.findIndex((t) => {
+      const key = `${
+        t.accountId ||
+        tokenAccountMap[`${t.networkId || ''}_${t.address}`] ||
+        ''
+      }_${t.networkId || ''}`;
+      return new BigNumber(tokenDetails[key]?.data?.fiatValue ?? -1).isZero();
+    });
+
+    if (negativeIndex > -1 || zeroIndex > -1) {
+      let tokensWithNonZeroBalance: IAccountToken[] = [];
+      let tokensWithZeroBalance: IAccountToken[] = [];
+      let tokensWithoutBalance: IAccountToken[] = [];
+
+      if (negativeIndex > -1) {
+        const tokensWithBalance = sortedTokens.slice(0, negativeIndex);
+        tokensWithoutBalance = sortedTokens.slice(negativeIndex);
+        if (zeroIndex > -1) {
+          tokensWithNonZeroBalance = tokensWithBalance.slice(0, zeroIndex);
+          tokensWithZeroBalance = tokensWithBalance.slice(zeroIndex);
+        } else {
+          tokensWithNonZeroBalance = tokensWithBalance;
+        }
+      } else if (zeroIndex > -1) {
+        tokensWithNonZeroBalance = sortedTokens.slice(0, zeroIndex);
+        tokensWithZeroBalance = sortedTokens.slice(zeroIndex);
+      }
+
+      tokensWithZeroBalance = sortTokensByOrder({
+        tokens: tokensWithZeroBalance,
+      });
+
+      tokensWithoutBalance = sortTokensByOrder({
+        tokens: tokensWithoutBalance,
+      });
+
+      sortedTokens = [
+        ...tokensWithNonZeroBalance,
+        ...tokensWithZeroBalance,
+        ...tokensWithoutBalance,
+      ];
+    }
+
+    return sortedTokens;
+  }, [tokens, tokenAccountMap, tokenDetails]);
+
   const renderContent = useCallback(
     ({ closePopover }: { closePopover: () => void }) => {
       return (
@@ -43,10 +125,12 @@ function TokenDetailsTabToolbar(props: IProps) {
             py: '$1.5',
           }}
         >
-          {tokens.map((token) => {
-            const tokenDetailKey = `${token.accountId ?? ''}_${
-              token.networkId ?? ''
-            }`;
+          {sortedTokensByFiatValue?.map((token) => {
+            const tokenDetailKey = `${
+              token.accountId ||
+              tokenAccountMap[`${token.networkId || ''}_${token.address}`] ||
+              ''
+            }_${token.networkId || ''}`;
             const tokenDetail = tokenDetails[tokenDetailKey]?.data;
 
             return (
@@ -80,32 +164,55 @@ function TokenDetailsTabToolbar(props: IProps) {
                 >
                   {token.networkName}
                 </SizableText>
-                <ListItem.Text
-                  align="right"
-                  primary={
-                    <NumberSizeableTextWrapper
-                      hideValue
-                      size="$bodyLg"
-                      $gtMd={{
-                        size: '$bodyMd',
-                      }}
-                      color="$textSubdued"
-                      formatter="value"
-                      formatterOptions={{
-                        currency: settings.currencyInfo.symbol,
-                      }}
-                    >
-                      {tokenDetail?.fiatValue ?? '-'}
-                    </NumberSizeableTextWrapper>
-                  }
-                />
+                {isNil(tokenDetail?.fiatValue) ? (
+                  <Tooltip
+                    renderTrigger={
+                      <Icon
+                        name="RefreshCcwOutline"
+                        size="$4"
+                        color="$iconSubdued"
+                      />
+                    }
+                    renderContent={intl.formatMessage({
+                      id: ETranslations.network_enable_or_create_address,
+                    })}
+                  />
+                ) : (
+                  <ListItem.Text
+                    align="right"
+                    primary={
+                      <NumberSizeableTextWrapper
+                        hideValue
+                        size="$bodyLg"
+                        $gtMd={{
+                          size: '$bodyMd',
+                        }}
+                        color="$textSubdued"
+                        formatter="value"
+                        formatterOptions={{
+                          currency: settings.currencyInfo.symbol,
+                        }}
+                      >
+                        {tokenDetail?.fiatValue}
+                      </NumberSizeableTextWrapper>
+                    }
+                  />
+                )}
               </ListItem>
             );
           })}
         </Stack>
       );
     },
-    [tokens, tokenDetails, gtMd, settings.currencyInfo.symbol, onSelected],
+    [
+      sortedTokensByFiatValue,
+      tokenAccountMap,
+      tokenDetails,
+      gtMd,
+      settings.currencyInfo.symbol,
+      intl,
+      onSelected,
+    ],
   );
 
   if (tokens.length <= 1) {

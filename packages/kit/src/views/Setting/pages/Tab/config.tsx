@@ -9,10 +9,14 @@ import type {
   ISizableTextProps,
   IStackStyle,
 } from '@onekeyhq/components';
-import { Dialog, SizableText, Stack, useClipboard } from '@onekeyhq/components';
+import { Dialog } from '@onekeyhq/components';
 import backgroundApiProxy from '@onekeyhq/kit/src/background/instance/backgroundApiProxy';
+import { useOneKeyAuth } from '@onekeyhq/kit/src/components/OneKeyAuth/useOneKeyAuth';
 import PasswordUpdateContainer from '@onekeyhq/kit/src/components/Password/container/PasswordUpdateContainer';
-import { useAppUpdateInfo } from '@onekeyhq/kit/src/components/UpdateReminder/hooks';
+import {
+  isShowAppUpdateUIWhenUpdating,
+  useAppUpdateInfo,
+} from '@onekeyhq/kit/src/components/UpdateReminder/hooks';
 import type useAppNavigation from '@onekeyhq/kit/src/hooks/useAppNavigation';
 import { useBiometricAuthInfo } from '@onekeyhq/kit/src/hooks/useBiometricAuthInfo';
 import { useHelpLink } from '@onekeyhq/kit/src/hooks/useHelpLink';
@@ -22,6 +26,7 @@ import {
   usePasswordBiologyAuthInfoAtom,
   usePasswordPersistAtom,
   usePasswordWebAuthInfoAtom,
+  usePerpsCommonConfigPersistAtom,
   useSettingsPersistAtom,
 } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import {
@@ -49,12 +54,13 @@ import { openUrlExternal } from '@onekeyhq/shared/src/utils/openUrlUtils';
 import { EHardwareTransportType } from '@onekeyhq/shared/types';
 import { EReasonForNeedPassword } from '@onekeyhq/shared/types/setting';
 
-import { usePrimeAuthV2 } from '../../../Prime/hooks/usePrimeAuthV2';
+import { useCloudBackup } from '../../../Onboardingv2/hooks/useCloudBackup';
 import { usePrimeAvailable } from '../../../Prime/hooks/usePrimeAvailable';
 import { showApiEndpointDialog } from '../../components/ApiEndpointDialog';
 
 import {
   AutoLockListItem,
+  BTCFreshAddressListItem,
   BiologyAuthListItem,
   CleanDataListItem,
   ClearAppCacheListItem,
@@ -66,7 +72,7 @@ import {
   ThemeListItem,
 } from './CustomElement';
 import { DevSettingsSection } from './DevSettingsSection';
-import { exportLogs } from './exportLogs';
+import { showExportLogsDialog } from './exportLogs/showExportLogsDialog';
 import { SubSearchSettings } from './SubSettings';
 
 import type { RouteProp } from '@react-navigation/native';
@@ -116,6 +122,12 @@ export type ISettingsConfig = (
 )[];
 export const useSettingsConfig: () => ISettingsConfig = () => {
   const appUpdateInfo = useAppUpdateInfo();
+  const isShowAppUpdateUI = useMemo(() => {
+    return isShowAppUpdateUIWhenUpdating({
+      updateStrategy: appUpdateInfo.data.updateStrategy,
+      updateStatus: appUpdateInfo.data.status,
+    });
+  }, [appUpdateInfo.data.updateStrategy, appUpdateInfo.data.status]);
   const intl = useIntl();
   const onPressAddressBook = useShowAddressBook({
     useNewModal: false,
@@ -124,15 +136,19 @@ export const useSettingsConfig: () => ISettingsConfig = () => {
   const [{ isSupport: biologyAuthIsSupport }] =
     usePasswordBiologyAuthInfoAtom();
   const [{ isSupport: webAuthIsSupport }] = usePasswordWebAuthInfoAtom();
-  const { copyText } = useClipboard();
   const biometricAuthInfo = useBiometricAuthInfo();
   const userAgreementUrl = useHelpLink({ path: 'articles/11461297' });
   const privacyPolicyUrl = useHelpLink({ path: 'articles/11461298' });
   const helpCenterUrl = useHelpLink({ path: '' });
   const [devSettings] = useDevSettingsPersistAtom();
   const { isPrimeAvailable } = usePrimeAvailable();
-  const { isLoggedIn } = usePrimeAuthV2();
+  const { isLoggedIn } = useOneKeyAuth();
+  const [{ perpConfigCommon }] = usePerpsCommonConfigPersistAtom();
   const [settings] = useSettingsPersistAtom();
+
+  const { cloudBackupFeatureInfo, goToPageBackupList, startBackup } =
+    useCloudBackup();
+
   return useMemo(
     () => [
       {
@@ -141,18 +157,17 @@ export const useSettingsConfig: () => ISettingsConfig = () => {
         title: intl.formatMessage({ id: ETranslations.global_backup }),
         configs: [
           [
-            platformEnv.isNative
+            cloudBackupFeatureInfo?.supportCloudBackup
               ? {
-                  icon: 'RepeatOutline',
-                  title: intl.formatMessage({
-                    id: platformEnv.isNativeAndroid
-                      ? ETranslations.settings_google_drive_backup
-                      : ETranslations.settings_icloud_backup,
-                  }),
+                  icon: cloudBackupFeatureInfo?.icon,
+                  title: cloudBackupFeatureInfo?.title,
                   onPress: (navigation) => {
-                    navigation?.pushModal(EModalRoutes.CloudBackupModal, {
-                      screen: ECloudBackupRoutes.CloudBackupHome,
-                    });
+                    navigation?.popStack();
+                    void startBackup({ alwaysGoToBackupDetail: true });
+                    // void goToPageBackupList();
+                    // navigation?.pushModal(EModalRoutes.CloudBackupModal, {
+                    //   screen: ECloudBackupRoutes.CloudBackupHome,
+                    // });
                   },
                 }
               : null,
@@ -177,34 +192,38 @@ export const useSettingsConfig: () => ISettingsConfig = () => {
               : undefined,
           ],
           [
-            {
-              // OneKey Transfer
-              icon: 'MultipleDevicesOutline',
-              title: intl.formatMessage({
-                id: ETranslations.transfer_transfer,
-              }),
-              subtitle: intl.formatMessage({
-                id: ETranslations.prime_transfer_description,
-              }),
-              onPress: (navigation) => {
-                navigation?.pushModal(EModalRoutes.PrimeModal, {
-                  screen: EPrimePages.PrimeTransfer,
-                });
-              },
-            },
+            !platformEnv.isWebDappMode
+              ? {
+                  // OneKey Transfer
+                  icon: 'MultipleDevicesOutline',
+                  title: intl.formatMessage({
+                    id: ETranslations.transfer_transfer,
+                  }),
+                  subtitle: intl.formatMessage({
+                    id: ETranslations.prime_transfer_description,
+                  }),
+                  onPress: (navigation) => {
+                    navigation?.pushModal(EModalRoutes.PrimeModal, {
+                      screen: EPrimePages.PrimeTransfer,
+                    });
+                  },
+                }
+              : undefined,
           ],
           [
-            {
-              icon: 'SignatureOutline',
-              title: intl.formatMessage({
-                id: ETranslations.manual_backup,
-              }),
-              onPress: (navigation) => {
-                navigation?.pushModal(EModalRoutes.ManualBackupModal, {
-                  screen: EManualBackupRoutes.ManualBackupSelectWallet,
-                });
-              },
-            },
+            !platformEnv.isWebDappMode
+              ? {
+                  icon: 'SignatureOutline',
+                  title: intl.formatMessage({
+                    id: ETranslations.manual_backup,
+                  }),
+                  onPress: (navigation) => {
+                    navigation?.pushModal(EModalRoutes.ManualBackupModal, {
+                      screen: EManualBackupRoutes.ManualBackupSelectWallet,
+                    });
+                  },
+                }
+              : undefined,
             platformEnv.isNative
               ? {
                   icon: 'OnekeyLiteOutline',
@@ -364,15 +383,29 @@ export const useSettingsConfig: () => ISettingsConfig = () => {
             },
           ],
           [
-            !settings.perpConfigCommon.disablePerp
+            !perpConfigCommon.disablePerp && !perpConfigCommon.usePerpWeb
               ? {
-                  icon: 'LabOutline',
-                  title: 'Perp Config',
+                  icon: 'BrowserOutline',
+                  title: intl.formatMessage({
+                    id: ETranslations.perp_setting_interface,
+                  }),
                   onPress: (navigation) => {
                     navigation?.push(EModalSettingRoutes.SettingPerpUserConfig);
                   },
                 }
               : null,
+          ],
+          [
+            {
+              icon: 'FlashCardSolid',
+              title: intl.formatMessage({
+                id: ETranslations.settings_btc_multiple_addresses,
+              }),
+              subtitle: intl.formatMessage({
+                id: ETranslations.settings_btc_multiple_addresses_description,
+              }),
+              renderElement: <BTCFreshAddressListItem />,
+            },
           ],
         ],
       },
@@ -546,8 +579,7 @@ export const useSettingsConfig: () => ISettingsConfig = () => {
                 navigation?.push(EModalSettingRoutes.SettingCustomRPC);
               },
             },
-            platformEnv.isSupportWebUSB ||
-            (platformEnv.isSupportDesktopBle && platformEnv.isDev)
+            platformEnv.isDev
               ? {
                   icon: 'UsbOutline',
                   title: intl.formatMessage({
@@ -590,7 +622,7 @@ export const useSettingsConfig: () => ISettingsConfig = () => {
         title: intl.formatMessage({
           id: ETranslations.global_about,
         }),
-        showDot: !!appUpdateInfo.isNeedUpdate,
+        showDot: isShowAppUpdateUI && !!appUpdateInfo.isNeedUpdate,
         configs: [
           [
             {
@@ -688,50 +720,11 @@ export const useSettingsConfig: () => ISettingsConfig = () => {
               title: intl.formatMessage({
                 id: ETranslations.settings_export_state_logs,
               }),
-              onPress: (navigation) => {
-                Dialog.show({
-                  icon: 'FileDownloadOutline',
+              onPress: () => {
+                showExportLogsDialog({
                   title: intl.formatMessage({
-                    id: ETranslations.settings_export_state_logs,
+                    id: ETranslations.settings_upload_state_logs,
                   }),
-                  renderContent: (
-                    <Stack>
-                      <SizableText size="$bodyLg">
-                        {intl.formatMessage({
-                          id: ETranslations.settings_logs_do_not_include_sensitive_data,
-                        })}
-                      </SizableText>
-                      <Stack h="$5" />
-                      <SizableText size="$bodyLg">
-                        {intl.formatMessage(
-                          {
-                            id: ETranslations.settings_export_state_logs_desc,
-                          },
-                          {
-                            email: (
-                              <SizableText
-                                size="$bodyLg"
-                                textDecorationLine="underline"
-                                onPress={() => copyText('hi@onekey.so')}
-                              >
-                                hi@onekey.so
-                              </SizableText>
-                            ),
-                          },
-                        )}
-                      </SizableText>
-                    </Stack>
-                  ),
-                  confirmButtonProps: {
-                    variant: 'primary',
-                  },
-                  onConfirmText: intl.formatMessage({
-                    id: ETranslations.global_export,
-                  }),
-                  onConfirm: () => {
-                    const str = new Date().toISOString().replace(/[-:.]/g, '');
-                    void exportLogs(`OneKeyLogs-${str}`);
-                  },
                 });
               },
             },
@@ -763,13 +756,6 @@ export const useSettingsConfig: () => ISettingsConfig = () => {
                   }),
                   renderElement: <DevSettingsSection />,
                 },
-                {
-                  icon: 'ApiConnectionOutline',
-                  title: 'API Endpoint Management',
-                  onPress: () => {
-                    showApiEndpointDialog();
-                  },
-                },
               ],
             ],
           }
@@ -787,22 +773,27 @@ export const useSettingsConfig: () => ISettingsConfig = () => {
     ],
     [
       intl,
+      cloudBackupFeatureInfo?.supportCloudBackup,
+      cloudBackupFeatureInfo?.icon,
+      cloudBackupFeatureInfo?.title,
       isPrimeAvailable,
-      isLoggedIn,
+      perpConfigCommon.disablePerp,
+      perpConfigCommon.usePerpWeb,
       isPasswordSet,
       biologyAuthIsSupport,
       webAuthIsSupport,
       biometricAuthInfo.title,
       biometricAuthInfo.icon,
+      isLoggedIn,
+      settings.hardwareTransportType,
+      isShowAppUpdateUI,
       appUpdateInfo.isNeedUpdate,
       devSettings.enabled,
+      startBackup,
       onPressAddressBook,
       helpCenterUrl,
       userAgreementUrl,
       privacyPolicyUrl,
-      copyText,
-      settings.hardwareTransportType,
-      settings.perpConfigCommon.disablePerp,
     ],
   );
 };

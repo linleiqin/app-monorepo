@@ -25,6 +25,7 @@ import {
   checkRequestIsOneKeyDomain,
   getRequestHeaders,
 } from './Interceptor';
+import { REQUEST_TIMEOUT } from './requestConst';
 
 import type { IAxiosResponse } from '../appApiClient/appApiClient';
 import type { AxiosInstance, AxiosRequestConfig } from 'axios';
@@ -117,8 +118,11 @@ axios.interceptors.response.use(
           data?.message ||
           'OneKeyServer Unknown Error',
         code: data.code,
-        data,
-        requestId: `RequestId: ${config.headers[requestIdKey] as string}`,
+        data: {
+          ...data,
+          requestUrl: url,
+        },
+        requestId: config.headers[requestIdKey] as string,
       });
     }
     if (isEnableLogNetwork(config.url)) {
@@ -193,6 +197,9 @@ axios.interceptors.response.use(
       const title = appLocale.intl.formatMessage({
         id: ETranslations.global_network_error,
       });
+      // if (process.env.NODE_ENV !== 'production') {
+      //   title += error?.config?.url || '';
+      // }
       throw new OneKeyError({
         name: error.name,
         message: title,
@@ -207,7 +214,7 @@ axios.interceptors.response.use(
 const orgCreate = axios.create;
 axios.create = function (config?: AxiosRequestConfig): AxiosInstance {
   const defaultConfig: AxiosRequestConfig = {
-    timeout: 30_000,
+    timeout: REQUEST_TIMEOUT,
   };
   const mergedConfig = {
     ...defaultConfig,

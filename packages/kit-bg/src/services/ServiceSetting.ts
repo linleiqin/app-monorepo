@@ -1,5 +1,5 @@
 import { consts } from '@onekeyfe/cross-inpage-provider-core';
-import { flatten, groupBy, isEqual } from 'lodash';
+import { flatten, groupBy, isEqual, uniqBy } from 'lodash';
 import semver from 'semver';
 
 import {
@@ -12,14 +12,17 @@ import {
   backgroundClass,
   backgroundMethod,
 } from '@onekeyhq/shared/src/background/backgroundDecorators';
-import { getNetworkIdsMap } from '@onekeyhq/shared/src/config/networkIds';
+import {
+  getListedNetworkMap,
+  getNetworkIdsMap,
+} from '@onekeyhq/shared/src/config/networkIds';
 import {
   IMPL_BTC,
   IMPL_EVM,
   IMPL_LTC,
 } from '@onekeyhq/shared/src/engine/engineConsts';
 import { OneKeyLocalError } from '@onekeyhq/shared/src/errors';
-import type { ILocaleSymbol } from '@onekeyhq/shared/src/locale';
+import type { ETranslations, ILocaleSymbol } from '@onekeyhq/shared/src/locale';
 import { appLocale } from '@onekeyhq/shared/src/locale/appLocale';
 import {
   getDefaultLocale,
@@ -28,19 +31,33 @@ import {
 import systemLocaleUtils from '@onekeyhq/shared/src/locale/systemLocale';
 import { defaultLogger } from '@onekeyhq/shared/src/logger/logger';
 import platformEnv from '@onekeyhq/shared/src/platformEnv';
+import accountUtils from '@onekeyhq/shared/src/utils/accountUtils';
 import { memoizee } from '@onekeyhq/shared/src/utils/cacheUtils';
 import deviceUtils from '@onekeyhq/shared/src/utils/deviceUtils';
 import networkUtils from '@onekeyhq/shared/src/utils/networkUtils';
 import resetUtils from '@onekeyhq/shared/src/utils/resetUtils';
 import timerUtils from '@onekeyhq/shared/src/utils/timerUtils';
+import {
+  buildAggregateTokenListMapKeyForTokenList,
+  buildAggregateTokenMapKeyForAggregateConfig,
+  buildHomeDefaultTokenMapKey,
+} from '@onekeyhq/shared/src/utils/tokenUtils';
 import type {
   EHardwareTransportType,
   IServerNetwork,
 } from '@onekeyhq/shared/types';
 import type { EAlignPrimaryAccountMode } from '@onekeyhq/shared/types/dappConnection';
 import { EServiceEndpointEnum } from '@onekeyhq/shared/types/endpoint';
-import { type IClearCacheOnAppState } from '@onekeyhq/shared/types/setting';
+import type {
+  IClearCacheOnAppState,
+  IFetchWalletConfigResp,
+} from '@onekeyhq/shared/types/setting';
 import { ESwapTxHistoryStatus } from '@onekeyhq/shared/types/swap/types';
+import type {
+  IAccountToken,
+  IAggregateToken,
+  IHomeDefaultToken,
+} from '@onekeyhq/shared/types/token';
 
 import {
   currencyPersistAtom,
@@ -53,6 +70,7 @@ import {
 
 import ServiceBase from './ServiceBase';
 
+import type { ISimpleDBAppStatus } from '../dbs/simple/entity/SimpleDbEntityAppStatus';
 import type ProviderApiPrivate from '../providers/ProviderApiPrivate';
 import type { IDesktopBluetoothAtom } from '../states/jotai/atoms';
 
@@ -68,6 +86,8 @@ class ServiceSetting extends ServiceBase {
   constructor({ backgroundApi }: { backgroundApi: any }) {
     super({ backgroundApi });
   }
+
+  _fetchWalletConfigControllers: AbortController[] = [];
 
   @backgroundMethod()
   async refreshLocaleMessages() {
@@ -252,6 +272,7 @@ class ServiceSetting extends ServiceBase {
     }
     if (values.appUpdateCache) {
       await this.backgroundApi.serviceAppUpdate.clearCache();
+      await this.backgroundApi.simpleDb.ipTable.clearRawData();
     }
     if (values.browserHistory) {
       // clear Browser History, Bookmarks, Pins
@@ -336,7 +357,9 @@ class ServiceSetting extends ServiceBase {
       }
     }
 
-    topped.sort((a, b) => toppedImpl[a.impl] ?? 0 - toppedImpl[b.impl] ?? 0);
+    topped.sort(
+      (a, b) => (toppedImpl[a.impl] ?? 0) - (toppedImpl[b.impl] ?? 0),
+    );
 
     networks = [...topped, ...bottomed];
 
@@ -578,6 +601,224 @@ class ServiceSetting extends ServiceBase {
   @backgroundMethod()
   public async setDesktopBluetoothAtom(value: IDesktopBluetoothAtom) {
     await desktopBluetoothAtom.set(value);
+  }
+
+  @backgroundMethod()
+  public async setEnableBTCFreshAddress(value: boolean) {
+    await settingsPersistAtom.set((prev) => ({
+      ...prev,
+      enableBTCFreshAddress: value,
+    }));
+  }
+
+  @backgroundMethod()
+  public async getEnableBTCFreshAddress() {
+    const { enableBTCFreshAddress } = await settingsPersistAtom.get();
+    return enableBTCFreshAddress ?? false;
+  }
+
+  @backgroundMethod()
+  public async migrateBTCFreshAddressSetting() {
+    const appStatus = await this.backgroundApi.simpleDb.appStatus.getRawData();
+    if (appStatus?.btcFreshAddressSettingMigrated) {
+      return;
+    }
+
+    const { wallets } = await this.backgroundApi.serviceAccount.getAllWallets();
+
+    const hasHdOrHwWallet =
+      wallets?.some((wallet) => {
+        const walletId = wallet?.id;
+        return (
+          accountUtils.isHdWallet({ walletId }) ||
+          accountUtils.isHwWallet({ walletId })
+        );
+      }) ?? false;
+
+    if (hasHdOrHwWallet) {
+      const { enableBTCFreshAddress } = await settingsPersistAtom.get();
+      if (enableBTCFreshAddress ?? true) {
+        await settingsPersistAtom.set((prev) => ({
+          ...prev,
+          enableBTCFreshAddress: false,
+        }));
+      }
+    }
+
+    await this.backgroundApi.simpleDb.appStatus.setRawData(
+      (v): ISimpleDBAppStatus => ({
+        ...v,
+        btcFreshAddressSettingMigrated: true,
+      }),
+    );
+  }
+
+  @backgroundMethod()
+  public async abortFetchWalletConfig() {
+    this._fetchWalletConfigControllers.forEach((controller) =>
+      controller.abort(),
+    );
+    this._fetchWalletConfigControllers = [];
+  }
+
+  @backgroundMethod()
+  public async setSelectedBrowserTab(tab: ETranslations) {
+    await settingsPersistAtom.set((prev) => ({
+      ...prev,
+      selectedBrowserTab: tab,
+    }));
+  }
+
+  @backgroundMethod()
+  public async fetchWalletConfig() {
+    const controller = new AbortController();
+    this._fetchWalletConfigControllers.push(controller);
+    try {
+      const client = await this.getClient(EServiceEndpointEnum.Wallet);
+      const resp = await client.get<IFetchWalletConfigResp>(
+        '/wallet/v1/wallet/config',
+      );
+      return resp.data.data;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  @backgroundMethod()
+  public async syncWalletConfig() {
+    await this.abortFetchWalletConfig();
+    const resp = await this.fetchWalletConfig();
+
+    if (!resp) {
+      return;
+    }
+    const {
+      tokens = {},
+      meta: {
+        homeDefaults = [],
+        approvalAlertResurfaceDays = 30,
+        approvalResurfaceDays = 14,
+      } = {},
+    } = resp;
+    const allAggregateTokenMap: Record<
+      string,
+      {
+        tokens: IAccountToken[];
+      }
+    > = {};
+
+    const aggregateTokenConfigMap: Record<string, IAggregateToken> = {};
+    const homeDefaultTokenMap: Record<string, IHomeDefaultToken> = {};
+    const aggregateTokenSymbolMap: Record<string, boolean> = {};
+    const listedNetworkMap = getListedNetworkMap();
+    homeDefaults.forEach((homeDefault) => {
+      homeDefaultTokenMap[
+        buildHomeDefaultTokenMapKey({
+          networkId: homeDefault.networkId,
+          symbol: homeDefault.symbol,
+        })
+      ] = homeDefault;
+    });
+    Object.entries(tokens).forEach(
+      ([commonSymbol, { data, logoURI, name }]) => {
+        const filteredData = uniqBy(
+          data.filter((token) => !!listedNetworkMap[token.networkId]),
+          (token) => token.networkId,
+        );
+
+        if (filteredData.length > 1) {
+          aggregateTokenSymbolMap[commonSymbol] = true;
+
+          filteredData.forEach((token) => {
+            const aggregateTokenKey = buildAggregateTokenListMapKeyForTokenList(
+              {
+                commonSymbol,
+              },
+            );
+
+            if (allAggregateTokenMap[aggregateTokenKey]) {
+              allAggregateTokenMap[aggregateTokenKey].tokens.push({
+                ...token,
+                $key: buildAggregateTokenListMapKeyForTokenList({
+                  commonSymbol,
+                  networkId: token.networkId,
+                }),
+                name,
+                symbol: commonSymbol,
+                isNative: false,
+                logoURI,
+                commonSymbol,
+                address: token.address || token.assetType || '',
+              });
+            } else {
+              allAggregateTokenMap[aggregateTokenKey] = {
+                tokens: [
+                  {
+                    ...token,
+                    $key: buildAggregateTokenListMapKeyForTokenList({
+                      commonSymbol,
+                      networkId: token.networkId,
+                    }),
+                    name,
+                    symbol: commonSymbol,
+                    isNative: false,
+                    logoURI,
+                    commonSymbol,
+                    address: token.address || token.assetType || '',
+                  },
+                ],
+              };
+            }
+
+            aggregateTokenConfigMap[
+              buildAggregateTokenMapKeyForAggregateConfig({
+                networkId: token.networkId,
+                tokenAddress: token.address || token.assetType || '',
+              })
+            ] = {
+              ...token,
+              name,
+              logoURI,
+              commonSymbol,
+            };
+          });
+        }
+      },
+    );
+
+    const allAggregateTokens: IAccountToken[] = Object.keys(
+      allAggregateTokenMap,
+    ).map((key) => {
+      const aggregateToken = allAggregateTokenMap[key].tokens[0];
+      return {
+        $key: key,
+        isAggregateToken: true,
+        commonSymbol: aggregateToken.commonSymbol,
+        name: aggregateToken.name,
+        symbol: aggregateToken.symbol,
+        networkId: '',
+        address: key,
+        isNative: false,
+        decimals: 0,
+        logoURI: aggregateToken.logoURI,
+      };
+    });
+
+    await Promise.all([
+      this.backgroundApi.simpleDb.aggregateToken.updateAllAggregateInfo({
+        allAggregateTokens,
+        aggregateTokenConfigMap,
+        homeDefaultTokenMap,
+        allAggregateTokenMap,
+        aggregateTokenSymbolMap,
+      }),
+      this.backgroundApi.simpleDb.approval.updateApprovalResurfaceDaysConfig({
+        approvalResurfaceDays,
+        approvalAlertResurfaceDays,
+      }),
+    ]);
+
+    return aggregateTokenConfigMap;
   }
 }
 

@@ -2,9 +2,9 @@ import type { ComponentProps, ReactElement, ReactNode } from 'react';
 import { memo, useEffect, useMemo, useState } from 'react';
 
 import BigNumber from 'bignumber.js';
-import { uniqBy } from 'lodash';
 
 import {
+  type IYStackProps,
   ListView,
   SizableText,
   Stack,
@@ -44,6 +44,7 @@ import {
   useTokenListSortAtom,
   useTokenListStateAtom,
 } from '../../states/jotai/contexts/tokenList';
+import { useTokenManagement } from '../../views/AssetList/hooks/useTokenManagement';
 import useActiveTabDAppInfo from '../../views/DAppConnection/hooks/useActiveTabDAppInfo';
 import { PullToRefresh } from '../../views/Home/components/PullToRefresh';
 import { EmptySearch } from '../Empty';
@@ -57,19 +58,18 @@ import { TokenListItem } from './TokenListItem';
 import { TokenListViewContext } from './TokenListViewContext';
 
 type IProps = {
+  accountId: string;
+  networkId: string;
+  indexedAccountId: string | undefined;
   tableLayout?: boolean;
   onPressToken?: (token: IAccountToken) => void;
   withHeader?: boolean;
   withFooter?: boolean;
   withPrice?: boolean;
-  withBuyAndReceive?: boolean;
   withNetwork?: boolean;
   withSmallBalanceTokens?: boolean;
   withSwapAction?: boolean;
   inTabList?: boolean;
-  onReceiveToken?: () => void;
-  onBuyToken?: () => void;
-  isBuyTokenSupported?: boolean;
   onManageToken?: () => void;
   manageTokenEnabled?: boolean;
   isAllNetworks?: boolean;
@@ -94,7 +94,6 @@ type IProps = {
     | 'contentContainerStyle'
   >;
   showNetworkIcon?: boolean;
-  allAggregateTokens?: IAccountToken[];
   allAggregateTokenMap?: Record<
     string,
     {
@@ -104,6 +103,9 @@ type IProps = {
   hideZeroBalanceTokens?: boolean;
   homeDefaultTokenMap?: Record<string, IHomeDefaultToken>;
   keepDefaultZeroBalanceTokens?: boolean;
+  withAggregateBadge?: boolean;
+  emptyProps?: IYStackProps;
+  searchKeyLengthThreshold?: number;
 };
 
 function TokenListViewCmp(props: IProps) {
@@ -114,12 +116,8 @@ function TokenListViewCmp(props: IProps) {
     withFooter,
     withPrice,
     inTabList = false,
-    withBuyAndReceive,
     withNetwork,
     withSwapAction,
-    onReceiveToken,
-    onBuyToken,
-    isBuyTokenSupported,
     onManageToken,
     manageTokenEnabled,
     isAllNetworks,
@@ -135,11 +133,16 @@ function TokenListViewCmp(props: IProps) {
     listViewStyleProps,
     onRefresh,
     showNetworkIcon,
-    allAggregateTokens,
     allAggregateTokenMap,
     hideZeroBalanceTokens,
     homeDefaultTokenMap,
     keepDefaultZeroBalanceTokens = true,
+    withAggregateBadge,
+    emptyProps,
+    accountId,
+    networkId,
+    indexedAccountId,
+    searchKeyLengthThreshold,
   } = props;
 
   const [activeAccountTokenList] = useActiveAccountTokenListAtom();
@@ -150,6 +153,12 @@ function TokenListViewCmp(props: IProps) {
   const [tokenListState] = useTokenListStateAtom();
   const [searchKey] = useSearchKeyAtom();
   const [activeAccountTokenListState] = useActiveAccountTokenListStateAtom();
+
+  const { customTokens } = useTokenManagement({
+    accountId,
+    networkId,
+    indexedAccountId,
+  });
 
   const tokens = useMemo(() => {
     let resultTokens: IAccountToken[] = [];
@@ -167,14 +176,7 @@ function TokenListViewCmp(props: IProps) {
       resultTokens = tokenList.tokens;
     }
 
-    if (isAllNetworks && allAggregateTokenMap && allAggregateTokens) {
-      resultTokens = uniqBy(
-        [...resultTokens, ...allAggregateTokens],
-        (item) => item.$key,
-      );
-    }
-
-    if (isAllNetworks && hideZeroBalanceTokens) {
+    if (hideZeroBalanceTokens) {
       resultTokens = resultTokens.filter((item) => {
         const tokenBalance = new BigNumber(
           tokenListMap[item.$key]?.balance ??
@@ -186,15 +188,26 @@ function TokenListViewCmp(props: IProps) {
           return true;
         }
 
-        if (keepDefaultZeroBalanceTokens && homeDefaultTokenMap) {
+        if (keepDefaultZeroBalanceTokens) {
           if (
-            homeDefaultTokenMap[
+            homeDefaultTokenMap?.[
               buildHomeDefaultTokenMapKey({
                 networkId: item.networkId ?? '',
                 symbol: item.commonSymbol ?? item.symbol ?? '',
               })
             ] &&
             (item.isNative || item.isAggregateToken)
+          ) {
+            return true;
+          }
+
+          if (
+            customTokens?.find(
+              (t) =>
+                t.$key === item.$key ||
+                (t.address.toLowerCase() === item.address.toLowerCase() &&
+                  t.networkId === item.networkId),
+            )
           ) {
             return true;
           }
@@ -209,17 +222,15 @@ function TokenListViewCmp(props: IProps) {
     showActiveAccountTokenList,
     isTokenSelector,
     searchKey,
-    isAllNetworks,
-    allAggregateTokenMap,
-    allAggregateTokens,
     hideZeroBalanceTokens,
-    homeDefaultTokenMap,
-    keepDefaultZeroBalanceTokens,
     activeAccountTokenList.tokens,
     tokenList.tokens,
     smallBalanceTokenList.smallBalanceTokens,
     tokenListMap,
     aggregateTokenMap,
+    keepDefaultZeroBalanceTokens,
+    homeDefaultTokenMap,
+    customTokens,
   ]);
 
   const [searchTokenState] = useSearchTokenStateAtom();
@@ -237,6 +248,7 @@ function TokenListViewCmp(props: IProps) {
         ? tokenSelectorSearchTokenList.tokens
         : searchTokenList.tokens,
       aggregateTokenListMap: allAggregateTokenMap,
+      searchKeyLengthThreshold,
     });
 
     if (!isTokenSelector) {
@@ -284,6 +296,7 @@ function TokenListViewCmp(props: IProps) {
     sortDirection,
     tokenListMap,
     aggregateTokenMap,
+    searchKeyLengthThreshold,
   ]);
 
   const { result: extensionActiveTabDAppInfo } = useActiveTabDAppInfo();
@@ -403,26 +416,19 @@ function TokenListViewCmp(props: IProps) {
       <EmptySearch
         onManageToken={onManageToken}
         manageTokenEnabled={manageTokenEnabled}
+        {...emptyProps}
       />
     ) : (
-      <EmptyToken
-        withBuyAndReceive={withBuyAndReceive}
-        isBuyTokenSupported={isBuyTokenSupported}
-        onBuy={onBuyToken}
-        onReceive={onReceiveToken}
-      />
+      <EmptyToken {...emptyProps} />
     );
   }, [
     emptyAccountView,
-    isBuyTokenSupported,
     manageTokenEnabled,
-    onBuyToken,
     onManageToken,
-    onReceiveToken,
     searchKey,
     showSkeleton,
     tableLayout,
-    withBuyAndReceive,
+    emptyProps,
   ]);
 
   return (
@@ -450,20 +456,28 @@ function TokenListViewCmp(props: IProps) {
         ) : null
       }
       ListEmptyComponent={EmptyComponentElement}
-      renderItem={({ item }) => (
-        <TokenListItem
-          hideValue={hideValue}
-          token={item}
-          key={item.$key}
-          onPress={onPressToken}
-          tableLayout={tableLayout}
-          withPrice={withPrice}
-          isAllNetworks={isAllNetworks}
-          withNetwork={withNetwork}
-          isTokenSelector={isTokenSelector}
-          withSwapAction={withSwapAction}
-          showNetworkIcon={showNetworkIcon}
-        />
+      renderItem={({ item, index }) => (
+        <>
+          <TokenListItem
+            hideValue={hideValue}
+            token={item}
+            key={item.$key}
+            onPress={onPressToken}
+            tableLayout={tableLayout}
+            withPrice={withPrice}
+            isAllNetworks={isAllNetworks}
+            withNetwork={withNetwork}
+            isTokenSelector={isTokenSelector}
+            withSwapAction={withSwapAction}
+            showNetworkIcon={showNetworkIcon}
+            withAggregateBadge={withAggregateBadge}
+          />
+          {isTokenSelector &&
+          tokenSelectorSearchTokenState.isSearching &&
+          index === filteredTokens.length - 1 ? (
+            <ListLoading isTokenSelectorView={!tableLayout} />
+          ) : null}
+        </>
       )}
       ListFooterComponent={
         <Stack pb="$5">
@@ -471,9 +485,11 @@ function TokenListViewCmp(props: IProps) {
             <TokenListFooter
               tableLayout={tableLayout}
               hideZeroBalanceTokens={hideZeroBalanceTokens}
+              hasTokens={filteredTokens.length > 0}
+              manageTokenEnabled={manageTokenEnabled}
             />
           ) : null}
-          {footerTipText ? (
+          {!tokenSelectorSearchKey && footerTipText ? (
             <Stack jc="center" ai="center" pt="$3">
               <SizableText size="$bodySm" color="$textSubdued">
                 {footerTipText}

@@ -10,7 +10,7 @@ export * from './utils';
 export * from './type';
 
 const APP_VERSION = platformEnv.version ?? '1.0.0';
-const APP_BUNDLE_VERSION = platformEnv.bundleVersion ?? 1;
+const APP_BUNDLE_VERSION = platformEnv.bundleVersion ?? '1';
 
 interface IIsNeedUpdateParams {
   latestVersion?: string;
@@ -24,9 +24,12 @@ export const getUpdateFileType: (
   latestVersion,
   jsBundleVersion,
 }: IIsNeedUpdateParams) => {
+  if (!latestVersion || !jsBundleVersion) {
+    return EUpdateFileType.appShell;
+  }
   if (
     latestVersion &&
-    semver.eq(latestVersion, APP_VERSION) &&
+    semver.gte(latestVersion, APP_VERSION) &&
     jsBundleVersion &&
     jsBundleVersion !== APP_BUNDLE_VERSION
   ) {
@@ -35,17 +38,17 @@ export const getUpdateFileType: (
   return EUpdateFileType.appShell;
 };
 
-export const isVersionEqual = (appVersion?: string, bundleVersion?: string) => {
+export const gtVersion = (appVersion?: string, bundleVersion?: string) => {
   if (!appVersion) {
     return false;
   }
   if (bundleVersion) {
     return (
-      semver.eq(appVersion ?? '', APP_VERSION) &&
-      Number(bundleVersion) !== Number(APP_BUNDLE_VERSION)
+      semver.gte(appVersion ?? '', APP_VERSION) &&
+      Number(bundleVersion) > Number(APP_BUNDLE_VERSION)
     );
   }
-  return semver.eq(appVersion ?? '', APP_VERSION);
+  return semver.gt(appVersion ?? '', APP_VERSION);
 };
 
 export const isNeedUpdate: (params: IIsNeedUpdateParams) => {
@@ -56,7 +59,7 @@ export const isNeedUpdate: (params: IIsNeedUpdateParams) => {
   if (
     jsBundleVersion &&
     latestVersion &&
-    semver.eq(latestVersion, APP_VERSION)
+    semver.gte(latestVersion, APP_VERSION)
   ) {
     return {
       shouldUpdate: !!(
@@ -77,21 +80,60 @@ export const isNeedUpdate: (params: IIsNeedUpdateParams) => {
   };
 };
 
+const displayVersion = (
+  newVersion?: string,
+  latestVersion?: string,
+  bundleVersion?: string,
+) => {
+  if (!newVersion) {
+    return latestVersion;
+  }
+  return newVersion === latestVersion
+    ? `${newVersion}(${bundleVersion ?? 1})`
+    : newVersion;
+};
+
+export const displayWhatsNewVersion = (
+  appUpdateInfo: IAppUpdateInfo | undefined,
+) => {
+  if (!appUpdateInfo) {
+    return APP_VERSION;
+  }
+  return displayVersion(
+    APP_VERSION,
+    appUpdateInfo.previousAppVersion,
+    APP_BUNDLE_VERSION,
+  );
+};
+
+export const displayAppUpdateVersion = (
+  appUpdateInfo: IAppUpdateInfo | undefined,
+) => {
+  if (!appUpdateInfo) {
+    return APP_VERSION;
+  }
+  return displayVersion(
+    appUpdateInfo.latestVersion,
+    APP_VERSION,
+    appUpdateInfo.jsBundleVersion,
+  );
+};
+
 export const isFirstLaunchAfterUpdated = (appUpdateInfo: IAppUpdateInfo) => {
   // App shell version is equal to the latest version, check js bundle version
   if (
     appUpdateInfo.jsBundleVersion &&
     appUpdateInfo.latestVersion &&
-    semver.eq(appUpdateInfo.latestVersion, APP_VERSION)
+    semver.gte(APP_VERSION, appUpdateInfo.latestVersion)
   ) {
     return (
       appUpdateInfo.status !== EAppUpdateStatus.done &&
-      appUpdateInfo.jsBundleVersion === APP_BUNDLE_VERSION
+      Number(APP_BUNDLE_VERSION) >= Number(appUpdateInfo.jsBundleVersion)
     );
   }
   return (
     appUpdateInfo.status !== EAppUpdateStatus.done &&
     appUpdateInfo.latestVersion &&
-    semver.eq(APP_VERSION, appUpdateInfo.latestVersion)
+    semver.gte(APP_VERSION, appUpdateInfo.latestVersion)
   );
 };

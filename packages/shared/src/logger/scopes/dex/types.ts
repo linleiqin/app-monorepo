@@ -6,6 +6,9 @@ export enum EEnterWay {
   Search = 'Search',
   Link = 'Link',
   Others = 'Others',
+  ExtensionPopup = 'ExtensionPopup',
+  ExtensionSidePanel = 'ExtensionSidePanel',
+  SwapPro = 'SwapPro',
 }
 
 export enum EDexListName {
@@ -23,6 +26,7 @@ export enum ESortWay {
 export enum ECopyFrom {
   Homepage = 'Homepage',
   Detail = 'Detail',
+  Search = 'Search',
   Others = 'Others',
 }
 
@@ -64,6 +68,7 @@ export enum ERouter {
 
 export enum ETabSelect {
   Transactions = 'Transactions',
+  Portfolio = 'Portfolio',
   Holders = 'Holders',
 }
 

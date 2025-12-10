@@ -4,7 +4,6 @@ import { cloneDeep } from 'lodash';
 
 import type {
   IDialogLoadingProps,
-  IDialogShowProps,
   IQrcodeDrawType,
 } from '@onekeyhq/components';
 import type { ISubSettingConfig } from '@onekeyhq/kit/src/views/Setting/pages/Tab/config';
@@ -16,6 +15,8 @@ import type { IAirGapUrJson } from '@onekeyhq/qr-wallet-sdk';
 import { OneKeyLocalError } from '@onekeyhq/shared/src/errors/errors/localError';
 import type { IOneKeyHardwareErrorPayload } from '@onekeyhq/shared/src/errors/types/errorTypes';
 import type { ETranslations } from '@onekeyhq/shared/src/locale';
+import type { EEnterWay } from '@onekeyhq/shared/src/logger/scopes/dex';
+import type { ELogUploadStage } from '@onekeyhq/shared/src/logger/types';
 import type { IAvatarInfo } from '@onekeyhq/shared/src/utils/emojiUtils';
 
 import appGlobals from '../appGlobals';
@@ -40,6 +41,7 @@ import type {
 } from '../../types/swap/types';
 import type { IAccountToken, ITokenFiat } from '../../types/token';
 import type { IOneKeyError } from '../errors/types/errorTypes';
+import type { EModalRoutes, ETabRoutes } from '../routes';
 import type { IWalletConnectSession } from '../walletConnect/types';
 import type { FuseResult } from 'fuse.js';
 
@@ -74,6 +76,8 @@ export type IEventBusPayloadShowToast = {
   errorCode?: number;
   toastId?: string;
   i18nKey?: ETranslations;
+  requestId?: string;
+  diagnosticText?: string;
 };
 export interface IAppEventBusPayload {
   [EAppEventBusNames.ConfirmAccountSelected]: undefined;
@@ -240,6 +244,7 @@ export interface IAppEventBusPayload {
     networkId: string;
   };
   [EAppEventBusNames.AccountDataUpdate]: undefined;
+  [EAppEventBusNames.AccountValueUpdate]: undefined;
   [EAppEventBusNames.onDragBeginInListView]: undefined;
   [EAppEventBusNames.onDragEndInListView]: undefined;
   [EAppEventBusNames.SidePanel_BgToUI]: {
@@ -315,12 +320,13 @@ export interface IAppEventBusPayload {
     promiseId: number;
     walletId: string;
   };
+  [EAppEventBusNames.doubleConfirmTxFeeInfo]: {
+    promiseId: number;
+  };
   [EAppEventBusNames.HardwareFeaturesUpdate]: {
     deviceId: string;
   };
-  [EAppEventBusNames.UnlockApp]: {
-    jobId: string;
-  };
+  [EAppEventBusNames.UnlockApp]: undefined;
   [EAppEventBusNames.AddressBookUpdate]: undefined;
   [EAppEventBusNames.MarketWSDataUpdate]: {
     channel: string;
@@ -354,7 +360,6 @@ export interface IAppEventBusPayload {
     type: string;
     subType: ESubscriptionType;
     data: unknown;
-    metadata: Record<string, any>;
   };
   [EAppEventBusNames.HyperliquidConnectionChange]: {
     type: 'connection';
@@ -375,9 +380,38 @@ export interface IAppEventBusPayload {
   };
   [EAppEventBusNames.ShowNotificationViewDialog]: {
     payload: INotificationViewDialogPayload;
-    localParams: Record<string, string | undefined>;
   };
+  [EAppEventBusNames.ShowNotificationPageNavigation]: {
+    payload: {
+      screen: string;
+      params: Record<string, any>;
+    };
+  };
+  [EAppEventBusNames.ShowNotificationInDappPage]: string;
   [EAppEventBusNames.UpdateNotificationBadge]: undefined;
+  [EAppEventBusNames.BtcFreshAddressUpdated]: undefined;
+  [EAppEventBusNames.BtcFreshAddressConnectDappRejected]: undefined;
+  [EAppEventBusNames.ClientLogUploadProgress]: {
+    stage: ELogUploadStage;
+    progressPercent?: number;
+    retry?: number;
+    message?: string;
+  };
+  [EAppEventBusNames.SwitchDiscoveryTabInNative]: {
+    tab: ETranslations.global_browser | ETranslations.global_earn;
+    openUrl?: boolean;
+  };
+  [EAppEventBusNames.SwitchTabBar]: {
+    route: ETabRoutes;
+  };
+  [EAppEventBusNames.PushPageInTabletDetailView]: any;
+  [EAppEventBusNames.PushModalPageInTabletDetailView]: {
+    route: EModalRoutes;
+    params: any;
+  };
+  [EAppEventBusNames.MarketHomePageEnter]: {
+    from: EEnterWay;
+  };
 }
 
 export enum EEventBusBroadcastMethodNames {

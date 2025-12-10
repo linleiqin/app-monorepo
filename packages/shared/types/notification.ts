@@ -193,6 +193,7 @@ export enum ENotificationPushMessageMode {
   dialog = 2,
   openInBrowser = 3,
   openInApp = 4,
+  openInDapp = 5,
 }
 // /notification/v1/message/ack
 export type INotificationPushMessageAckParams = {
@@ -260,7 +261,7 @@ export type INativeNotificationCenterMessageInfo = {
 };
 export type INotificationPushMessageListItem = {
   msgId: string;
-  topicType: string;
+  topicType: ENotificationPushTopicTypes;
   body: INotificationPushMessageInfo;
   referId: string;
   readed: boolean | undefined;

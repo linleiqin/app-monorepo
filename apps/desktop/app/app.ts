@@ -33,18 +33,26 @@ import {
 } from '@onekeyhq/shared/src/consts/deeplinkConsts';
 import { OneKeyLocalError } from '@onekeyhq/shared/src/errors';
 import uriUtils from '@onekeyhq/shared/src/utils/uriUtils';
-import type {
-  IDesktopAppState,
-  IDesktopSubModuleInitParams,
-} from '@onekeyhq/shared/types/desktop';
+import type { IDesktopAppState } from '@onekeyhq/shared/types/desktop';
 
-import { checkFileSha512, getBundleIndexHtmlPath, getMetadata } from './bundle';
+import {
+  checkFileHash,
+  checkFileSha512,
+  getBundleDirPath,
+  getBundleIndexHtmlPath,
+  getDriveLetter,
+  getMetadata,
+} from './bundle';
 import { ipcMessageKeys } from './config';
-import { ETranslations, i18nText, initLocale } from './i18n';
+import { ElectronTranslations, i18nText, initLocale } from './i18n';
 import { registerShortcuts, unregisterShortcuts } from './libs/shortcuts';
 import * as store from './libs/store';
 import initProcess from './process';
-import { getResourcesPath, getStaticPath } from './resoucePath';
+import {
+  getAppStaticResourcesPath,
+  getResourcesPath,
+  getStaticPath,
+} from './resoucePath';
 import { initSentry } from './sentry';
 import { startServices } from './service';
 
@@ -57,8 +65,27 @@ initSentry();
 let disposeContextMenu: ReturnType<typeof contextMenu> | undefined;
 
 globalThis.$desktopMainAppFunctions = {
-  getBundleIndexHtmlPath: () => getBundleIndexHtmlPath(),
-  useJsBundle: () => !!getBundleIndexHtmlPath(),
+  getBundleIndexHtmlPath: () => {
+    const bundleData = store.getUpdateBundleData();
+    logger.info('bundleData >>>> ', bundleData);
+    if (!bundleData) {
+      return undefined;
+    }
+    return getBundleIndexHtmlPath({
+      appVersion: bundleData.appVersion,
+      bundleVersion: bundleData.bundleVersion,
+    });
+  },
+  useJsBundle: () => {
+    const bundleData = store.getUpdateBundleData();
+    if (!bundleData) {
+      return false;
+    }
+    return !!getBundleIndexHtmlPath({
+      appVersion: bundleData.appVersion,
+      bundleVersion: bundleData.bundleVersion,
+    });
+  },
 } as typeof globalThis.$desktopMainAppFunctions;
 
 // WARNING: This name cannot be changed as it affects Electron data storage.
@@ -68,10 +95,11 @@ const APP_TITLE_NAME = 'OneKey';
 app.name = APP_NAME;
 let mainWindow: BrowserWindow | null;
 
+const appStaticResourcesPath = getAppStaticResourcesPath();
 const staticPath = getStaticPath();
 const resourcesPath = getResourcesPath();
 // static path
-const preloadJsUrl = path.join(staticPath, 'preload.js');
+// const preloadJsUrl = path.join(staticPath, 'preload.js');
 // const preloadJsUrl = path.join(staticPath, 'preload-webview-test.js');
 
 const sdkConnectSrc = isDev
@@ -114,7 +142,7 @@ const initMenu = () => {
       submenu: [
         {
           role: isMac ? 'about' : undefined,
-          label: i18nText(ETranslations.menu_about_onekey_wallet),
+          label: i18nText(ElectronTranslations.menu_about_onekey_wallet),
           click: isMac
             ? undefined
             : () => {
@@ -128,7 +156,7 @@ const initMenu = () => {
         },
         { type: 'separator' },
         !process.mas && {
-          label: i18nText(ETranslations.menu_check_for_updates),
+          label: i18nText(ElectronTranslations.menu_check_for_updates),
           click: () => {
             showMainWindow();
             const safelyMainWindow = getSafelyMainWindow();
@@ -139,7 +167,7 @@ const initMenu = () => {
         },
         { type: 'separator' },
         {
-          label: i18nText(ETranslations.menu_preferences),
+          label: i18nText(ElectronTranslations.menu_preferences),
           accelerator: 'CmdOrCtrl+,',
           click: () => {
             const safelyMainWindow = getSafelyMainWindow();
@@ -154,7 +182,7 @@ const initMenu = () => {
         },
         { type: 'separator' },
         {
-          label: i18nText(ETranslations.menu_lock_now),
+          label: i18nText(ElectronTranslations.menu_lock_now),
           accelerator: 'CmdOrCtrl+Shift+L',
           click: () => {
             showMainWindow();
@@ -168,42 +196,42 @@ const initMenu = () => {
         isMac && {
           role: 'hide',
           accelerator: 'Alt+CmdOrCtrl+H',
-          label: i18nText(ETranslations.menu_hide_onekey_wallet),
+          label: i18nText(ElectronTranslations.menu_hide_onekey_wallet),
         },
         isMac && {
           role: 'unhide',
-          label: i18nText(ETranslations.menu_show_all),
+          label: i18nText(ElectronTranslations.menu_show_all),
         },
         { type: 'separator' },
         {
           role: 'quit',
           accelerator: 'CmdOrCtrl+Q',
-          label: i18nText(ETranslations.menu_quit_onekey_wallet),
+          label: i18nText(ElectronTranslations.menu_quit_onekey_wallet),
         },
       ].filter(Boolean),
     },
     {
-      label: i18nText(ETranslations.global_edit),
+      label: i18nText(ElectronTranslations.global_edit),
       submenu: [
-        { role: 'undo', label: i18nText(ETranslations.menu_undo) },
-        { role: 'redo', label: i18nText(ETranslations.menu_redo) },
+        { role: 'undo', label: i18nText(ElectronTranslations.menu_undo) },
+        { role: 'redo', label: i18nText(ElectronTranslations.menu_redo) },
         { type: 'separator' },
-        { role: 'cut', label: i18nText(ETranslations.menu_cut) },
-        { role: 'copy', label: i18nText(ETranslations.global_copy) },
-        { role: 'paste', label: i18nText(ETranslations.menu_paste) },
+        { role: 'cut', label: i18nText(ElectronTranslations.menu_cut) },
+        { role: 'copy', label: i18nText(ElectronTranslations.global_copy) },
+        { role: 'paste', label: i18nText(ElectronTranslations.menu_paste) },
         { type: 'separator' },
         {
           role: 'delete',
-          label: i18nText(ETranslations.global_delete),
+          label: i18nText(ElectronTranslations.global_delete),
         },
         {
           role: 'selectAll',
-          label: i18nText(ETranslations.menu_select_all),
+          label: i18nText(ElectronTranslations.menu_select_all),
         },
       ],
     },
     {
-      label: i18nText(ETranslations.menu_view),
+      label: i18nText(ElectronTranslations.menu_view),
       submenu: [
         ...(isDev || store.getDevTools()
           ? [
@@ -221,46 +249,52 @@ const initMenu = () => {
           : []),
         {
           role: 'resetZoom',
-          label: i18nText(ETranslations.menu_actual_size),
+          label: i18nText(ElectronTranslations.menu_actual_size),
           accelerator: 'CmdOrCtrl+0',
         },
         isMac
           ? {
               role: 'zoomIn',
-              label: i18nText(ETranslations.menu_zoom_in),
+              label: i18nText(ElectronTranslations.menu_zoom_in),
             }
           : {
               role: 'zoomIn',
-              label: i18nText(ETranslations.menu_zoom_in),
+              label: i18nText(ElectronTranslations.menu_zoom_in),
               accelerator: 'CmdOrCtrl+Shift+]',
             },
         {
           role: 'zoomOut',
-          label: i18nText(ETranslations.menu_zoom_out),
+          label: i18nText(ElectronTranslations.menu_zoom_out),
           accelerator: isMac ? 'CmdOrCtrl+-' : 'CmdOrCtrl+Shift+[',
         },
         { type: 'separator' },
         {
           role: 'togglefullscreen',
-          label: i18nText(ETranslations.menu_toggle_full_screen),
+          label: i18nText(ElectronTranslations.menu_toggle_full_screen),
         },
       ],
     },
     {
-      label: i18nText(ETranslations.menu_window),
+      label: i18nText(ElectronTranslations.menu_window),
       submenu: [
-        { role: 'minimize', label: i18nText(ETranslations.menu_minimize) },
-        isMac && { role: 'zoom', label: i18nText(ETranslations.menu_zoom) },
+        {
+          role: 'minimize',
+          label: i18nText(ElectronTranslations.menu_minimize),
+        },
+        isMac && {
+          role: 'zoom',
+          label: i18nText(ElectronTranslations.menu_zoom),
+        },
         ...(isMac
           ? [
               { type: 'separator' },
               {
                 role: 'front',
-                label: i18nText(ETranslations.menu_bring_all_to_front),
+                label: i18nText(ElectronTranslations.menu_bring_all_to_front),
               },
               { type: 'separator' },
               {
-                label: i18nText(ETranslations.menu_window),
+                label: i18nText(ElectronTranslations.menu_window),
                 click: () => {
                   showMainWindow();
                 },
@@ -271,17 +305,17 @@ const initMenu = () => {
     },
     {
       role: 'help',
-      label: i18nText(ETranslations.menu_help),
+      label: i18nText(ElectronTranslations.menu_help),
       submenu: [
         {
-          label: i18nText(ETranslations.menu_visit_help_center),
+          label: i18nText(ElectronTranslations.menu_visit_help_center),
           click: async () => {
             await shell.openExternal('https://help.onekey.so');
           },
         },
         { type: 'separator' },
         {
-          label: i18nText(ETranslations.menu_official_website),
+          label: i18nText(ElectronTranslations.menu_official_website),
           click: async () => {
             await shell.openExternal('https://onekey.so');
           },
@@ -312,12 +346,12 @@ const initMenu = () => {
     showLookUpSelection: false,
     showSelectAll: true,
     labels: {
-      cut: i18nText(ETranslations.menu_cut),
-      copy: i18nText(ETranslations.global_copy),
-      paste: i18nText(ETranslations.menu_paste),
-      selectAll: i18nText(ETranslations.menu_select_all),
-      copyImage: i18nText(ETranslations.menu__copy_image),
-      saveImageAs: i18nText(ETranslations.menu__save_image_as),
+      cut: i18nText(ElectronTranslations.menu_cut),
+      copy: i18nText(ElectronTranslations.global_copy),
+      paste: i18nText(ElectronTranslations.menu_paste),
+      selectAll: i18nText(ElectronTranslations.menu_select_all),
+      copyImage: i18nText(ElectronTranslations.menu__copy_image),
+      saveImageAs: i18nText(ElectronTranslations.menu__save_image_as),
     },
   });
 };
@@ -360,19 +394,23 @@ function handleDeepLinkUrl(
   };
 
   const sendEventData = () => {
-    isAppReady = true;
-
     const safelyMainWindow = getSafelyMainWindow();
     if (safelyMainWindow) {
       showMainWindow();
-      if (process.env.NODE_ENV !== 'production') {
+
+      // Cold startup: cache the deep link for later processing
+      if (!isAppReady) {
         safelyMainWindow?.webContents.send(
           ipcMessageKeys.OPEN_DEEP_LINK_URL,
           eventData,
         );
       }
+
+      // Hot startup: send directly to registered listener
       mainWindow?.webContents.send(ipcMessageKeys.EVENT_OPEN_URL, eventData);
     }
+
+    isAppReady = true;
   };
   if (isAppReady && mainWindow) {
     sendEventData();
@@ -420,7 +458,7 @@ const ratio = 16 / 9;
 const defaultSize = 1200;
 const minWidth = 1024;
 const minHeight = 800;
-function createMainWindow() {
+async function createMainWindow() {
   // https://github.com/electron/electron/issues/16168
   const { screen } = require('electron');
   // eslint-disable-next-line @typescript-eslint/no-unsafe-call
@@ -446,7 +484,7 @@ function createMainWindow() {
     title: APP_TITLE_NAME,
     titleBarStyle: 'hidden',
     titleBarOverlay: !isMac,
-    trafficLightPosition: { x: 20, y: 18 },
+    trafficLightPosition: { x: 6, y: 18 }, // OK-45416 After the Top nav is adjusted, adjust the parameter synchronously
     autoHideMenuBar: true,
     frame: true,
     resizable: true,
@@ -473,7 +511,7 @@ function createMainWindow() {
       nodeIntegrationInWorker: false,
       autoplayPolicy: 'user-gesture-required',
     },
-    icon: path.join(staticPath, 'images/icons/512x512.png'),
+    icon: path.join(appStaticResourcesPath, 'images/icons/512x512.png'),
     ...savedWinBounds,
   });
 
@@ -487,7 +525,9 @@ function createMainWindow() {
     return undefined;
   };
 
-  const bundleIndexHtmlPath = getBundleIndexHtmlPath();
+  const bundleData = store.getUpdateBundleData();
+  logger.info('bundleData >>>> ', bundleData);
+  const bundleIndexHtmlPath = getBundleIndexHtmlPath(bundleData);
   logger.info('bundleIndexHtmlPath >>>> ', bundleIndexHtmlPath);
 
   globalThis.$desktopMainAppFunctions = {
@@ -541,7 +581,7 @@ function createMainWindow() {
       {
         resourcesPath,
         staticPath: `file://${staticPath}`,
-        preloadJsUrl: `file://${preloadJsUrl}?timestamp=${Date.now()}`,
+        // preloadJsUrl: `file://${preloadJsUrl}?timestamp=${Date.now()}`,
         sdkConnectSrc,
       },
     );
@@ -586,11 +626,6 @@ function createMainWindow() {
     app.exit(0);
     disposeContextMenu?.();
   });
-
-  const subModuleInitParams: IDesktopSubModuleInitParams = {
-    APP_NAME,
-    getSafelyMainWindow,
-  };
 
   ipcMain.on(ipcMessageKeys.IS_DEV, (event) => {
     event.returnValue = isDev;
@@ -704,6 +739,15 @@ function createMainWindow() {
     ],
   };
 
+  // WebUSB permission handlers - Enable WebUSB support for hardware wallet connections
+
+  browserWindow.webContents.session.setDevicePermissionHandler((details) => {
+    if (details.deviceType === 'usb') {
+      return true;
+    }
+    return false;
+  });
+
   session.defaultSession.webRequest.onBeforeSendHeaders(
     filter,
     (details, callback) => {
@@ -724,33 +768,44 @@ function createMainWindow() {
     },
   );
 
-  if (!isDev) {
+  const PROTOCOL = 'file';
+  if (isDev) {
+    session.defaultSession.protocol.interceptFileProtocol(
+      PROTOCOL,
+      (request, callback) => {
+        console.log('request url', request);
+        const jsSdkPattern = '/static/js-sdk/';
+        const jsSdkIndex = request.url.indexOf(jsSdkPattern);
+
+        // resolve js-sdk files path in dev mode
+        if (jsSdkIndex > -1) {
+          const fileName = request.url.substring(
+            jsSdkIndex + jsSdkPattern.length,
+          );
+          callback({
+            path: path.join(staticPath, 'js-sdk', fileName),
+          });
+          return;
+        }
+        callback(request.url);
+      },
+    );
+  } else {
+    // Get Windows drive letter for security validation
+    const driveLetter = getDriveLetter();
+    logger.info('driveLetter >>>> ', driveLetter);
     const indexHtmlPath =
       globalThis.$desktopMainAppFunctions?.getBundleIndexHtmlPath?.();
     const useJsBundle = globalThis.$desktopMainAppFunctions?.useJsBundle?.();
-    const bundleDirPath = indexHtmlPath
-      ? path.dirname(indexHtmlPath)
-      : undefined;
-    const metadata = bundleDirPath ? getMetadata(bundleDirPath) : {};
-    const checkFileHash = (url: string) => {
-      if (!bundleDirPath) {
-        throw new OneKeyLocalError('Bundle directory path not found');
-      }
-      const key = url.replace(/^\/+/, '');
-      if (!key) {
-        throw new OneKeyLocalError(`File ${url} not found in metadata.json`);
-      }
-      const sha512 = metadata[key];
-      const filePath = path.join(bundleDirPath, key);
-      if (!sha512) {
-        throw new OneKeyLocalError(`File ${url} not found in metadata.json`);
-      }
-      if (!checkFileSha512(filePath, sha512)) {
-        throw new OneKeyLocalError(`File ${url} sha512 mismatch`);
-      }
-      return filePath;
-    };
-    const PROTOCOL = 'file';
+    const bundleDirPath = getBundleDirPath();
+    const metadata = bundleDirPath
+      ? await getMetadata({
+          bundleDir: bundleDirPath,
+          appVersion: bundleData.appVersion,
+          bundleVersion: bundleData.bundleVersion,
+          signature: bundleData.signature,
+        })
+      : {};
     session.defaultSession.protocol.interceptFileProtocol(
       PROTOCOL,
       (request, callback) => {
@@ -761,10 +816,17 @@ function createMainWindow() {
         // resolve iframe path
         if (isJsSdkFile && isIFrameHtml) {
           if (useJsBundle && indexHtmlPath && bundleDirPath) {
-            const key = path.join('static', 'js-sdk', 'iframe.html');
+            let key = path.join('static', 'js-sdk', 'iframe.html');
             const filePath = path.join(bundleDirPath, key);
+            if (isWin) {
+              key = key.replace(/\\/g, '/');
+            }
             const sha512 = metadata[key];
             if (!checkFileSha512(filePath, sha512)) {
+              logger.info(
+                'checkFileHash error in js-sdk:',
+                `${key}:  ${filePath} not matched ${sha512}`,
+              );
               throw new OneKeyLocalError(`File ${key} sha512 mismatch`);
             }
             callback(filePath);
@@ -787,12 +849,23 @@ function createMainWindow() {
         const url = request.url.substring(PROTOCOL.length + 1);
         if (useJsBundle && indexHtmlPath && bundleDirPath) {
           const decodedUrl = decodeURIComponent(url);
-          if (!decodedUrl.includes(bundleDirPath)) {
-            const filePath = checkFileHash(decodedUrl);
+          if (decodedUrl.includes(bundleDirPath)) {
+            const filePath = checkFileHash({
+              bundleDirPath,
+              metadata,
+              driveLetter,
+              url: decodedUrl.replace(bundleDirPath, ''),
+            });
             callback(filePath);
-            return;
+          } else {
+            const filePath = checkFileHash({
+              bundleDirPath,
+              metadata,
+              driveLetter,
+              url: decodedUrl,
+            });
+            callback(filePath);
           }
-          callback(indexHtmlPath);
         } else {
           callback(path.join(__dirname, '..', 'build', url));
         }
@@ -864,7 +937,7 @@ if (!singleInstance && !process.mas) {
     startServices();
 
     if (!mainWindow) {
-      mainWindow = createMainWindow();
+      mainWindow = await createMainWindow();
       initMenu();
     }
     void initChildProcess();
@@ -877,7 +950,7 @@ if (!singleInstance && !process.mas) {
 app.on('activate', async () => {
   await app.whenReady();
   if (!mainWindow) {
-    mainWindow = createMainWindow();
+    mainWindow = await createMainWindow();
   }
   showMainWindow();
 });

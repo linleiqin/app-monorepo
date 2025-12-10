@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { isNil } from 'lodash';
 import { StyleSheet } from 'react-native';
@@ -15,17 +15,16 @@ import {
   useMedia,
 } from '@onekeyhq/components';
 import backgroundApiProxy from '@onekeyhq/kit/src/background/instance/backgroundApiProxy';
-import useAppNavigation from '@onekeyhq/kit/src/hooks/useAppNavigation';
 import { usePromiseResult } from '@onekeyhq/kit/src/hooks/usePromiseResult';
 import { useThemeVariant } from '@onekeyhq/kit/src/hooks/useThemeVariant';
+import { useWalletBanner } from '@onekeyhq/kit/src/hooks/useWalletBanner';
+import {
+  useAccountOverviewActions,
+  useWalletTopBannersAtom,
+} from '@onekeyhq/kit/src/states/jotai/contexts/accountOverview';
 import { useActiveAccount } from '@onekeyhq/kit/src/states/jotai/contexts/accountSelector';
 import { defaultLogger } from '@onekeyhq/shared/src/logger/logger';
-import { openUrlExternal } from '@onekeyhq/shared/src/utils/openUrlUtils';
-import { EQRCodeHandlerNames } from '@onekeyhq/shared/types/qrCode';
 import type { IWalletBanner } from '@onekeyhq/shared/types/walletBanner';
-
-import { EarnNavigation } from '../../../Earn/earnUtils';
-import useParseQRCode from '../../../ScanQrCode/hooks/useParseQRCode';
 
 import type { GestureResponderEvent } from 'react-native';
 
@@ -36,25 +35,38 @@ function WalletBanner() {
     activeAccount: { account, network, wallet, indexedAccount },
   } = useActiveAccount({ num: 0 });
 
+  const closedBannerInitRef = useRef(false);
+
+  const bannersInitRef = useRef(false);
+
   const { gtSm } = useMedia();
   const themeVariant = useThemeVariant();
 
-  const navigation = useAppNavigation();
+  const [{ banners }] = useWalletTopBannersAtom();
+  const { updateWalletTopBanners } = useAccountOverviewActions().current;
 
-  const parseQRCode = useParseQRCode();
+  const { handleBannerOnPress } = useWalletBanner({
+    account,
+    network,
+    wallet,
+    indexedAccountId: indexedAccount?.id,
+  });
 
   const [closedForeverBanners, setClosedForeverBanners] = useState<
     Record<string, boolean>
   >({});
 
-  const { result: banners } = usePromiseResult(
+  const { result: latestBanners } = usePromiseResult(
     async () => {
       if (isNil(account?.id)) {
         return [];
       }
-      return backgroundApiProxy.serviceWalletBanner.fetchWalletBanner({
-        accountId: account.id,
-      });
+      const resp =
+        await backgroundApiProxy.serviceWalletBanner.fetchWalletBanner({
+          accountId: account.id,
+        });
+      bannersInitRef.current = true;
+      return resp;
     },
     [account?.id],
     {
@@ -62,19 +74,22 @@ function WalletBanner() {
     },
   );
 
-  const { result: filteredBanners } = usePromiseResult(
-    async () => {
-      if (banners.length === 0) {
-        return banners;
-      }
+  usePromiseResult(async () => {
+    if (!closedBannerInitRef.current || !bannersInitRef.current) return;
 
-      return banners.filter((banner) => !closedForeverBanners[banner.id]);
-    },
-    [banners, closedForeverBanners],
-    {
-      initResult: [],
-    },
-  );
+    const filteredBanners = latestBanners.filter((banner) => {
+      if (banner.position && banner.position !== 'home') {
+        return false;
+      }
+      return !closedForeverBanners[banner.id];
+    });
+    updateWalletTopBanners({
+      banners: filteredBanners,
+    });
+    await backgroundApiProxy.serviceWalletBanner.updateLocalTopBanners({
+      topBanners: filteredBanners,
+    });
+  }, [latestBanners, closedForeverBanners, updateWalletTopBanners]);
 
   const handleDismiss = useCallback(async (item: IWalletBanner) => {
     if (item.closeable) {
@@ -98,93 +113,36 @@ function WalletBanner() {
     }
   }, []);
 
-  const handleClick = useCallback(
-    async (item: IWalletBanner) => {
-      defaultLogger.wallet.walletBanner.walletBannerClicked({
-        bannerId: item.id,
-        type: 'jump',
-      });
-      if (item.hrefType === 'internal' && item.href.includes('/defi/staking')) {
-        const [path, query] = item.href.split('?');
-        const paths = path.split('/');
-        const provider = paths.pop();
-        const symbol = paths.pop();
-        const params = new URLSearchParams(query);
-        const networkId = params.get('networkId');
-        const vault = params.get('vault');
-        if (provider && symbol && networkId) {
-          const earnAccount =
-            await backgroundApiProxy.serviceStaking.getEarnAccount({
-              indexedAccountId: indexedAccount?.id,
-              accountId: account?.id ?? '',
-              networkId,
-            });
-          const navigationParams: {
-            accountId?: string;
-            networkId: string;
-            indexedAccountId?: string;
-            symbol: string;
-            provider: string;
-            vault?: string;
-          } = {
-            accountId: earnAccount?.accountId || account?.id || '',
-            indexedAccountId:
-              earnAccount?.account.indexedAccountId || indexedAccount?.id,
-            provider,
-            symbol,
-            networkId,
-          };
-          if (vault) {
-            navigationParams.vault = vault;
-          }
-          void EarnNavigation.pushDetailPageFromDeeplink(
-            navigation,
-            navigationParams,
-          );
-        }
-        return;
-      }
-
-      await parseQRCode.parse(item.href, {
-        handlers: [
-          EQRCodeHandlerNames.marketDetail,
-          EQRCodeHandlerNames.sendProtection,
-          EQRCodeHandlerNames.rewardCenter,
-        ],
-        qrWalletScene: false,
-        autoHandleResult: true,
-        defaultHandler: openUrlExternal,
-        account,
-        network,
-        wallet,
-      });
-    },
-    [account, indexedAccount?.id, navigation, network, parseQRCode, wallet],
-  );
-
-  useEffect(() => {
-    const fetchClosedForeverBanners = async () => {
-      const resp =
-        await backgroundApiProxy.serviceWalletBanner.getClosedForeverBanners();
-      setClosedForeverBanners({
-        ...closedBanners,
-        ...resp,
-      });
-    };
-    void fetchClosedForeverBanners();
-  }, []);
-
   const { gtMd } = useMedia();
 
   const handlePageChanged = useDebouncedCallback((index: number) => {
-    if (filteredBanners[index]) {
+    if (banners[index]) {
       defaultLogger.wallet.walletBanner.walletBannerViewed({
-        bannerId: filteredBanners[index].id,
+        bannerId: banners[index].id,
       });
     }
   }, 180);
 
-  if (filteredBanners.length === 0) {
+  const initLocalBanners = useCallback(async () => {
+    const walletBannerRawData =
+      await backgroundApiProxy.simpleDb.walletBanner.getRawData();
+    const localTopBanners = walletBannerRawData?.topBanners ?? [];
+    const localClosedForeverBanners = walletBannerRawData?.closedForever ?? {};
+    updateWalletTopBanners({
+      banners: localTopBanners,
+    });
+    closedBannerInitRef.current = true;
+    setClosedForeverBanners({
+      ...closedBanners,
+      ...localClosedForeverBanners,
+    });
+  }, [updateWalletTopBanners, setClosedForeverBanners]);
+
+  useEffect(() => {
+    void initLocalBanners();
+  }, [initLocalBanners]);
+
+  if (banners.length === 0) {
     return null;
   }
 
@@ -193,7 +151,7 @@ function WalletBanner() {
       <Carousel
         loop={false}
         marginRatio={gtMd ? 0.28 : 0}
-        data={filteredBanners}
+        data={banners}
         autoPlayInterval={3800}
         maxPageWidth={840}
         containerStyle={{
@@ -224,7 +182,7 @@ function WalletBanner() {
                   gap: '$3',
                   py: '$3',
                 }}
-                borderRadius="$2"
+                borderRadius="$3"
                 $platform-native={{
                   borderWidth: StyleSheet.hairlineWidth,
                   borderColor: '$borderSubdued',
@@ -258,7 +216,7 @@ function WalletBanner() {
                   outlineStyle: 'solid',
                   outlineOffset: -2,
                 }}
-                onPress={() => handleClick(item)}
+                onPress={() => handleBannerOnPress(item)}
               >
                 <Image
                   size="$12"

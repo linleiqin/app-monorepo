@@ -299,35 +299,43 @@ class ProviderApiEthereum extends ProviderApiBase {
   @providerApiMethod()
   async wallet_requestPermissions(
     request: IJsBridgeMessagePayload,
-    permissions: Record<string, unknown>,
+    _permissions: Record<string, unknown>,
   ) {
     defaultLogger.discovery.dapp.dappRequest({ request });
     await this.backgroundApi.serviceDApp.openConnectionModal(request);
     const accounts = await this.eth_accounts(request);
-    const result = Object.keys(permissions).map((permissionName) => {
-      if (permissionName === 'eth_accounts') {
-        return {
-          caveats: [
-            {
-              type: 'restrictReturnedAccounts',
-              value: [accounts[0]],
-            },
-          ],
-          date: Date.now(),
-          id: request.id?.toString() ?? generateUUID(),
-          invoker: request.origin,
-          parentCapability: permissionName,
-        };
-      }
+    const chainId = await this.eth_chainId(request);
 
-      return {
-        caveats: [],
-        date: Date.now(),
-        id: request.id?.toString() ?? generateUUID(),
-        invoker: request.origin,
-        parentCapability: permissionName,
-      };
-    });
+    const id = request.id?.toString() ?? generateUUID();
+    const date = Date.now();
+    const invoker = request.origin;
+
+    const result = [
+      {
+        caveats: [
+          {
+            type: 'restrictReturnedAccounts',
+            value: [accounts[0]],
+          },
+        ],
+        date,
+        id,
+        invoker,
+        parentCapability: 'eth_accounts',
+      },
+      {
+        caveats: [
+          {
+            type: 'restrictNetworkSwitching',
+            value: [chainId],
+          },
+        ],
+        date,
+        id,
+        invoker,
+        parentCapability: 'endowment:permitted-chains',
+      },
+    ];
 
     void this._getConnectedNetworkName(request);
     return result;
@@ -846,6 +854,28 @@ class ProviderApiEthereum extends ProviderApiBase {
     }
   }
 
+  /*
+    {
+      'method': 'wallet_addEthereumChain',
+      'params': [
+        {
+          'chainId': '0x64',
+          'chainName': 'Gnosis',
+          'nativeCurrency': {
+            'name': 'xDAI',
+            'symbol': 'XDAI',
+            'decimals': 18,
+          },
+          'rpcUrls': [
+            'https://rpc.gnosischain.com',
+            'wss://gnosis-rpc.publicnode.com',
+          ],
+          'blockExplorerUrls': ['https://gnosisscan.io'],
+        },
+        '0xca11fb665aba190ea0410c26b2729c2f4e116a6b',
+      ],
+    }
+  */
   @providerApiMethod()
   async wallet_addEthereumChain(
     request: IJsBridgeMessagePayload,

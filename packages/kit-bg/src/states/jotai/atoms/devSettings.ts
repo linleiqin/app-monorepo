@@ -52,6 +52,16 @@ export interface IDevSettings {
   showPerformanceMonitor?: boolean;
   // use local trading view URL for development
   useLocalTradingViewUrl?: boolean;
+  showPerpsRenderStats?: boolean;
+
+  usbCommunicationMode?: 'webusb' | 'bridge';
+
+  // IP Table control for different environments
+  // Production: disable IP Table (default false - IP Table enabled)
+  disableIpTableInProd?: boolean;
+  // Force IP Table strict mode: always use IP even if runtime.selections is empty
+  // Fallback to first available IP from config when no selection exists
+  forceIpTableStrict?: boolean;
 }
 
 export type IDevSettingsKeys = keyof IDevSettings;
@@ -82,9 +92,12 @@ export const {
       showPerformanceMonitor: true,
       autoNavigation: {
         enabled: false,
-        selectedTab: ETabRoutes.Discovery,
+        selectedTab: ETabRoutes.Home,
       },
       useLocalTradingViewUrl: false,
+      usbCommunicationMode: 'webusb',
+      disableIpTableInProd: false, // IP Table enabled by default
+      forceIpTableStrict: false, // Strict mode: disabled by default
     },
   },
 });
@@ -98,10 +111,15 @@ export type IFirmwareUpdateDevSettings = {
   usePreReleaseConfig: boolean;
   forceUpdateResEvenSameVersion: boolean;
   forceUpdateFirmware: boolean;
+  forceUpdateOnceFirmware: boolean;
   forceUpdateBle: boolean;
+  forceUpdateOnceBle: boolean;
   forceUpdateBootloader: boolean;
+  forceUpdateOnceBootloader: boolean;
+  updateDevDeviceBootloaderOnAppAllowed: boolean;
   showDeviceDebugLogs: boolean;
   showAutoCheckHardwareUpdatesToast: boolean;
+  forceUpdateBtcOnlyUniversalFirmware: boolean;
 };
 export type IFirmwareUpdateDevSettingsKeys = keyof IFirmwareUpdateDevSettings;
 export const {
@@ -119,10 +137,15 @@ export const {
     usePreReleaseConfig: false,
     forceUpdateResEvenSameVersion: false,
     forceUpdateFirmware: false,
+    forceUpdateOnceFirmware: false,
     forceUpdateBle: false,
+    forceUpdateOnceBle: false,
     forceUpdateBootloader: false,
+    forceUpdateOnceBootloader: false,
+    updateDevDeviceBootloaderOnAppAllowed: false,
     showDeviceDebugLogs: false,
     showAutoCheckHardwareUpdatesToast: false,
+    forceUpdateBtcOnlyUniversalFirmware: false,
   },
 });
 

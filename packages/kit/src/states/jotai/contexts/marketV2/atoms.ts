@@ -11,7 +11,10 @@ import {
   ESlippageSetting,
 } from '@onekeyhq/shared/src/logger/scopes/dex/types';
 import type { IMarketWatchListDataV2 } from '@onekeyhq/shared/types/market';
-import type { IMarketTokenDetail } from '@onekeyhq/shared/types/marketV2';
+import type {
+  IMarketTokenDetail,
+  IMarketTokenDetailWebsocket,
+} from '@onekeyhq/shared/types/marketV2';
 
 const {
   Provider: ProviderJotaiContextMarketV2,
@@ -36,20 +39,26 @@ export const { atom: tokenDetailAtom, use: useTokenDetailAtom } = contextAtom<
 export const { atom: tokenDetailLoadingAtom, use: useTokenDetailLoadingAtom } =
   contextAtom<boolean>(false);
 
+export const {
+  atom: tokenDetailWebsocketAtom,
+  use: useTokenDetailWebsocketAtom,
+} = contextAtom<IMarketTokenDetailWebsocket | undefined>(undefined);
+
 export const { atom: tokenAddressAtom, use: useTokenAddressAtom } =
   contextAtom<string>('');
 
 export const { atom: networkIdAtom, use: useNetworkIdAtom } =
   contextAtom<string>('');
 
+export const { atom: isNativeAtom, use: useIsNativeAtom } =
+  contextAtom<boolean>(false);
+
 export const { atom: showWatchlistOnlyAtom, use: useShowWatchlistOnlyAtom } =
   contextAtom<boolean>(false);
 
+// Empty string means not initialized yet, will be set by MarketHomeV2
 export const { atom: selectedNetworkIdAtom, use: useSelectedNetworkIdAtom } =
-  contextAtom<string>('sol--101');
-
-export const { atom: selectedMarketTabAtom, use: useSelectedMarketTabAtom } =
-  contextAtom<string>('trending');
+  contextAtom<string>('');
 
 // SwapPanel Analytics Atoms
 export interface ISwapAnalyticsState {

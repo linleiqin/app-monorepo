@@ -1,4 +1,4 @@
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 
 import { useIntl } from 'react-intl';
 
@@ -10,12 +10,14 @@ import { TradingFormInput } from './TradingFormInput';
 interface IPriceInputProps {
   value: string;
   onChange: (value: string) => void;
-  marketPrice?: string;
+  midPrice?: string;
   error?: string;
   disabled?: boolean;
-  onUseMarketPrice?: () => void;
+  onUseMidPrice?: () => void;
   szDecimals?: number;
   label?: string;
+  ifOnDialog?: boolean;
+  isMobile?: boolean;
 }
 
 export const PriceInput = memo(
@@ -24,9 +26,11 @@ export const PriceInput = memo(
     onChange,
     error,
     disabled = false,
-    onUseMarketPrice,
+    onUseMidPrice,
     szDecimals,
     label,
+    ifOnDialog = false,
+    isMobile = false,
   }: IPriceInputProps) => {
     const intl = useIntl();
     const handleInputChange = useCallback(
@@ -45,30 +49,41 @@ export const PriceInput = memo(
       [szDecimals],
     );
 
-    const actions = onUseMarketPrice
-      ? [
-          {
-            label: 'Mid',
-            onPress: onUseMarketPrice,
-            disabled: false,
-          },
-        ]
-      : undefined;
+    const actions = useMemo(
+      () =>
+        onUseMidPrice
+          ? [
+              {
+                label: 'Mid',
+                labelColor: '$green11',
+                onPress: onUseMidPrice,
+                disabled: false,
+              },
+            ]
+          : undefined,
+      [onUseMidPrice],
+    );
 
     return (
       <TradingFormInput
+        placeholder={intl.formatMessage({
+          id: ETranslations.perp_trade_price_place_holder,
+        })}
         value={value}
         onChange={handleInputChange}
         label={
           label ??
           intl.formatMessage({
-            id: ETranslations.perp_trade_limit_pirce,
+            id: ETranslations.perp_orderbook_price,
           })
         }
         disabled={disabled}
         error={error}
         validator={validator}
         actions={actions}
+        keyboardType="decimal-pad"
+        ifOnDialog={ifOnDialog}
+        isMobile={isMobile}
       />
     );
   },

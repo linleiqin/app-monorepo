@@ -10,21 +10,14 @@ import {
   Page,
   SizableText,
   Stepper,
-  Toast,
   XStack,
 } from '@onekeyhq/components';
 import useAppNavigation from '@onekeyhq/kit/src/hooks/useAppNavigation';
 import { EAppUpdateStatus } from '@onekeyhq/shared/src/appUpdate/type';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
-import {
-  AppUpdate,
-  useDownloadProgress,
-} from '@onekeyhq/shared/src/modules3rdParty/auto-update';
-import platformEnv from '@onekeyhq/shared/src/platformEnv';
-import type {
-  EAppUpdateRoutes,
-  IAppUpdatePagesParamList,
-} from '@onekeyhq/shared/src/routes';
+import { useDownloadProgress } from '@onekeyhq/shared/src/modules3rdParty/auto-update';
+import type { IAppUpdatePagesParamList } from '@onekeyhq/shared/src/routes';
+import { EAppUpdateRoutes, EModalRoutes } from '@onekeyhq/shared/src/routes';
 import { openUrlExternal } from '@onekeyhq/shared/src/utils/openUrlUtils';
 
 import { HyperlinkText } from '../../../components/HyperlinkText';
@@ -112,18 +105,24 @@ function DownloadVerify({
 
   const [installing, setIsInstalling] = useState(false);
 
+  const handleToManualInstall = useCallback(() => {
+    navigation.pushModal(EModalRoutes.AppUpdateModal, {
+      screen: EAppUpdateRoutes.ManualInstall,
+    });
+  }, [navigation]);
+
   const handleToUpdate = useCallback(async () => {
     setIsInstalling(true);
-    const timer = setTimeout(() => {
+    setTimeout(() => {
       setIsInstalling(false);
-    }, 3500);
+    }, 5500);
     await installPackage(
-      () => {
-        setIsInstalling(false);
-        clearTimeout(timer);
-      },
+      () => {},
       () => {
         showInCompleteDialog();
+        setTimeout(() => {
+          setIsInstalling(false);
+        }, 350);
       },
     );
   }, [installPackage, showInCompleteDialog]);
@@ -153,29 +152,47 @@ function DownloadVerify({
     [data.errorText, intl],
   );
   const fileUrl = useMemo(() => {
-    if (platformEnv.isNativeAndroid) {
+    if (data?.downloadUrl?.startsWith('https:')) {
       return data.downloadUrl;
     }
+    if (data.jsBundle?.downloadUrl?.startsWith('https:')) {
+      return data.jsBundle?.downloadUrl;
+    }
     return data.downloadedEvent?.downloadUrl || '';
-  }, [data.downloadUrl, data.downloadedEvent?.downloadUrl]);
+  }, [
+    data.downloadUrl,
+    data.downloadedEvent?.downloadUrl,
+    data.jsBundle?.downloadUrl,
+  ]);
+
+  const headerLeft = useCallback(() => {
+    return null;
+  }, []);
+
+  const headerParams = useMemo(() => {
+    const title = intl.formatMessage({
+      id: ETranslations.update_download_and_verify_text,
+    });
+    return isForceUpdate
+      ? {
+          title,
+          headerLeft,
+        }
+      : {
+          title,
+        };
+  }, [intl, isForceUpdate, headerLeft]);
+
   return (
     <Page scrollEnabled>
-      <Page.Header
-        title={intl.formatMessage({
-          id: ETranslations.update_download_and_verify_text,
-        })}
-      />
+      <Page.Header {...headerParams} />
       <Page.Body px="$5" py="$2.5">
         <Stepper stepIndex={stepIndex} hasError={hasError}>
           <Stepper.Item
             title={intl.formatMessage({
               id: ETranslations.update_download_package_label,
             })}
-            badgeText={
-              Number(percent) !== 100 && Number(percent) !== 0
-                ? `${percent}%`
-                : undefined
-            }
+            badgeText={Number(percent) > 0 ? `${percent}%` : undefined}
             renderDescription={({ status }) => {
               if (status === EStepItemStatus.Failed) {
                 return renderDownloadError();
@@ -366,16 +383,24 @@ function DownloadVerify({
       </Page.Body>
       <Page.Footer
         onConfirmText={intl.formatMessage({
-          id: ETranslations.global_secure_install,
+          id:
+            data.status === EAppUpdateStatus.manualInstall
+              ? ETranslations.update_manual_update
+              : ETranslations.global_install,
         })}
         confirmButtonProps={{
+          loading: installing,
           icon:
             data.status === EAppUpdateStatus.ready
               ? 'BadgeVerifiedSolid'
               : undefined,
           disabled: data.status !== EAppUpdateStatus.ready || installing,
         }}
-        onConfirm={handleToUpdate}
+        onConfirm={
+          data.status === EAppUpdateStatus.manualInstall
+            ? handleToManualInstall
+            : handleToUpdate
+        }
       />
     </Page>
   );

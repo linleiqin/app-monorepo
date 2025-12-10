@@ -17,6 +17,9 @@ import type { SimpleDbEntityBrowserClosedTabs } from '../entity/SimpleDbEntityBr
 import type { SimpleDbEntityBrowserHistory } from '../entity/SimpleDbEntityBrowserHistory';
 import type { SimpleDbEntityBrowserRiskWhiteList } from '../entity/SimpleDbEntityBrowserRiskWhiteList';
 import type { SimpleDbEntityBrowserTabs } from '../entity/SimpleDbEntityBrowserTabs';
+import type { SimpleDbEntityBTCFreshAddress } from '../entity/SimpleDbEntityBTCFreshAddress';
+import type { SimpleDbEntityBTCFreshAddressMeta } from '../entity/SimpleDbEntityBTCFreshAddressMeta';
+import type { SimpleDbEntityChainResource } from '../entity/SimpleDbEntityChainResource';
 import type { SimpleDbEntityChangeHistory } from '../entity/SimpleDbEntityChangeHistory';
 import type { SimpleDbEntityCustomNetwork } from '../entity/SimpleDbEntityCustomNetwork';
 import type { SimpleDbEntityCustomRpc } from '../entity/SimpleDbEntityCustomRPC';
@@ -29,6 +32,7 @@ import type { SimpleDbEntityEarnOrders } from '../entity/SimpleDbEntityEarnOrder
 import type { SimpleDbEntityFeeInfo } from '../entity/SimpleDbEntityFeeInfo';
 import type { SimpleDbEntityFloatingIconDomainBlockList } from '../entity/SimpleDbEntityFloatingIconDomainBlockList';
 import type { SimpleDbEntityFloatingIconSettings } from '../entity/SimpleDbEntityFloatingIconSettings';
+import type { SimpleDbEntityIpTable } from '../entity/SimpleDbEntityIpTable';
 import type { SimpleDbEntityLegacyWalletNames } from '../entity/SimpleDbEntityLegacyWalletNames';
 import type { SimpleDbEntityLightning } from '../entity/SimpleDbEntityLightning';
 import type { SimpleDbEntityLocalHistory } from '../entity/SimpleDbEntityLocalHistory';
@@ -53,6 +57,7 @@ import type { SimpleDbEntitySwapNetworksSort } from '../entity/SimpleDbEntitySwa
 import type { SimpleDbEntityUniversalSearch } from '../entity/SimpleDbEntityUniversalSearch';
 import type { SimpleDbEntityV4MigrationResult } from '../entity/SimpleDbEntityV4MigrationResult';
 import type { SimpleDbEntityWalletBanner } from '../entity/SimpleDbEntityWalletBanner';
+import type { SimpleDbEntityWalletStatus } from '../entity/SimpleDbEntityWalletStatus';
 
 export class SimpleDbProxy
   extends BackgroundServiceProxyBase
@@ -255,4 +260,22 @@ export class SimpleDbProxy
   aggregateToken = this._createProxyService(
     'aggregateToken',
   ) as SimpleDbEntityAggregateToken;
+
+  chainResource = this._createProxyService(
+    'chainResource',
+  ) as SimpleDbEntityChainResource;
+
+  btcFreshAddress = this._createProxyService(
+    'btcFreshAddress',
+  ) as SimpleDbEntityBTCFreshAddress;
+
+  btcFreshAddressMeta = this._createProxyService(
+    'btcFreshAddressMeta',
+  ) as SimpleDbEntityBTCFreshAddressMeta;
+
+  walletStatus = this._createProxyService(
+    'walletStatus',
+  ) as SimpleDbEntityWalletStatus;
+
+  ipTable = this._createProxyService('ipTable') as SimpleDbEntityIpTable;
 }

@@ -4,14 +4,19 @@ import { AccountScope } from './scopes/account';
 import { AccountSelectorScope } from './scopes/accountSelector';
 import { AddressInputScope } from './scopes/addressInput';
 import { AppScope } from './scopes/app';
+import { ApprovalScope } from './scopes/approval';
 import { CloudBackupScope } from './scopes/cloudBackup';
+import { CloudSyncScope } from './scopes/cloudSync';
 import { DemoScope } from './scopes/demo';
 import { DexScope } from './scopes/dex';
 import { DiscoveryScope } from './scopes/discovery';
 import { FiatCryptoScope } from './scopes/fiatCrypto';
 import { HardwareScope } from './scopes/hardware';
+import { IpTableScope } from './scopes/ipTable';
 import { MarketScope } from './scopes/market';
+import { NetworkDoctorScope } from './scopes/networkDoctor';
 import { NotificationScope } from './scopes/notification/notification';
+import { OnboardingScope } from './scopes/onboarding';
 import { PerpScope } from './scopes/perp';
 import { PrimeScope } from './scopes/prime';
 import { ReferralScope } from './scopes/referral';
@@ -32,9 +37,13 @@ export class DefaultLogger {
 
   cloudBackup = new CloudBackupScope();
 
+  cloudSync = new CloudSyncScope();
+
   accountSelector = new AccountSelectorScope();
 
   app = new AppScope();
+
+  approval = new ApprovalScope();
 
   demo = new DemoScope();
 
@@ -58,6 +67,10 @@ export class DefaultLogger {
 
   hardware = new HardwareScope();
 
+  ipTable = new IpTableScope();
+
+  networkDoctor = new NetworkDoctorScope();
+
   fiatCrypto = new FiatCryptoScope();
 
   notification = new NotificationScope();
@@ -79,6 +92,8 @@ export class DefaultLogger {
   dex = new DexScope();
 
   prime = new PrimeScope();
+
+  onboarding = new OnboardingScope();
 }
 
 const defaultLogger = new DefaultLogger();

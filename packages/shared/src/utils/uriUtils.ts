@@ -14,10 +14,31 @@ import type {
   EOneKeyDeepLinkPath,
   IEOneKeyDeepLinkParams,
 } from '../consts/deeplinkConsts';
-import type { IWalletKit, WalletKitTypes } from '@reown/walletkit';
+import type { WalletKitTypes } from '@reown/walletkit';
 
 const DOMAIN_REGEXP =
   /(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]/;
+
+// Match patterns like: onekey.so/invite/ABC123, www.example.com, etc.
+const URL_WITHOUT_PROTOCOL_REGEXP =
+  /^(?:www\.)?[a-zA-Z0-9-]+(?:\.[a-zA-Z]{2,})+(?:\/[^\s]*)?$/;
+
+export function isUrlWithoutProtocol(text: string): boolean {
+  return URL_WITHOUT_PROTOCOL_REGEXP.test(text);
+}
+
+export function ensureHttpsPrefix(url: string): string {
+  if (!url) return url;
+  // Already has protocol
+  if (/^https?:\/\//i.test(url)) {
+    return url;
+  }
+  // Looks like a URL without protocol, add https://
+  if (isUrlWithoutProtocol(url)) {
+    return `https://${url}`;
+  }
+  return url;
+}
 
 function getHostNameFromUrl({ url }: { url: string }): string {
   try {
@@ -100,6 +121,11 @@ export function checkOneKeyCardGoogleOauthUrl({
     'https://precard-762def0c-eacd-49b3-ad89-0bf807b37f57.onekeycn.com',
     'https://accounts.google.com',
   ].includes(origin);
+}
+
+export function needEraseElectronFeatureUrl({ url }: { url: string }): boolean {
+  const origin = getOriginFromUrl({ url });
+  return ['https://remix.ethereum.org'].includes(origin);
 }
 
 export function parseUrl(url: string): IUrlValue | null {
@@ -286,4 +312,6 @@ export default {
   safeGetWalletConnectOrigin,
   parseUrl,
   safeParseURL,
+  isUrlWithoutProtocol,
+  ensureHttpsPrefix,
 };

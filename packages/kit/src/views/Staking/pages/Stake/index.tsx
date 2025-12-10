@@ -67,11 +67,13 @@ function BasicStakePage() {
       amount,
       approveType,
       permitSignature,
+      unsignedMessage,
     }: IApproveConfirmFnParams) => {
       await handleStake({
         amount,
         approveType,
         permitSignature,
+        unsignedMessage,
         symbol,
         provider: providerName,
         stakingInfo: {
@@ -86,10 +88,10 @@ function BasicStakePage() {
         // TODO: remove term after babylon remove term
         term: undefined,
         feeRate: Number(btcFeeRate) > 0 ? Number(btcFeeRate) : undefined,
-        protocolVault: earnUtils.useVaultProvider({
+        protocolVault: earnUtils.isVaultBasedProvider({
           providerName,
         })
-          ? protocolInfo?.approve?.approveTarget || protocolInfo?.vault
+          ? protocolInfo?.vault
           : undefined,
         onSuccess: async (txs) => {
           appNavigation.pop();
@@ -131,7 +133,6 @@ function BasicStakePage() {
       symbol,
       providerName,
       protocolInfo?.providerDetail.logoURI,
-      protocolInfo?.approve?.approveTarget,
       protocolInfo?.vault,
       token,
       actionTag,
@@ -179,7 +180,9 @@ function BasicStakePage() {
   }, [estimateFeeUTXO]);
   const tokenSymbol = tokenInfo?.token.symbol || '';
   const balanceParsed = tokenInfo?.balanceParsed || '';
-  const decimals = tokenInfo?.token.decimals || 0;
+  const decimals =
+    protocolInfo?.protocolInputDecimals ?? tokenInfo?.token.decimals ?? 0;
+
   return (
     <Page scrollEnabled>
       <Page.Header
@@ -209,7 +212,11 @@ function BasicStakePage() {
           approveTarget={{
             accountId,
             networkId,
-            spenderAddress: protocolInfo?.approve?.approveTarget ?? '',
+            spenderAddress: earnUtils.isVaultBasedProvider({
+              providerName: protocolInfo?.provider || '',
+            })
+              ? protocolInfo?.vault ?? ''
+              : protocolInfo?.approve?.approveTarget ?? '',
             token: tokenInfo?.token,
           }}
         />

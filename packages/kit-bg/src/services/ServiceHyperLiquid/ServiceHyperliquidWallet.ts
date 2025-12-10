@@ -10,7 +10,7 @@ import {
   backgroundClass,
   backgroundMethod,
 } from '@onekeyhq/shared/src/background/backgroundDecorators';
-import { PERPS_CHAIN_ID } from '@onekeyhq/shared/src/consts/perp';
+import { PERPS_NETWORK_ID } from '@onekeyhq/shared/src/consts/perp';
 import { OneKeyLocalError } from '@onekeyhq/shared/src/errors';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import { appLocale } from '@onekeyhq/shared/src/locale/appLocale';
@@ -78,6 +78,12 @@ export class WalletHyperliquidOnekey implements IAbstractEthersV6Signer {
 
   backgroundApi: IBackgroundApi;
 
+  private _tempSignature?: {
+    value: Record<string, unknown>;
+    signatureHex: string;
+    signerAddress: string;
+  };
+
   constructor(accountId: string, backgroundApi: IBackgroundApi) {
     this.accountId = accountId;
     this.backgroundApi = backgroundApi;
@@ -129,7 +135,7 @@ export class WalletHyperliquidOnekey implements IAbstractEthersV6Signer {
     const result = await this.backgroundApi.serviceSend.signMessage({
       unsignedMessage,
       accountId: this.accountId,
-      networkId: PERPS_CHAIN_ID,
+      networkId: PERPS_NETWORK_ID,
     });
 
     if (!result || typeof result !== 'string') {
@@ -140,13 +146,24 @@ export class WalletHyperliquidOnekey implements IAbstractEthersV6Signer {
       });
     }
 
+    this._tempSignature = {
+      value,
+      signatureHex: result,
+      signerAddress: address,
+    };
     return result;
+  }
+
+  getTempSignatureAndClear() {
+    const temp = this._tempSignature;
+    this._tempSignature = undefined;
+    return temp;
   }
 
   async getAddress(): Promise<string> {
     const account = await this.backgroundApi.serviceAccount.getAccount({
       accountId: this.accountId,
-      networkId: PERPS_CHAIN_ID,
+      networkId: PERPS_NETWORK_ID,
     });
     return account.address;
   }

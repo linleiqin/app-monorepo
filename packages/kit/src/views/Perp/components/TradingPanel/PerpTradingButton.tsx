@@ -1,48 +1,69 @@
 import { useCallback, useMemo } from 'react';
 
+import { BigNumber } from 'bignumber.js';
 import { useIntl } from 'react-intl';
 
 import type { IButtonProps } from '@onekeyhq/components';
-import { Button, SizableText, Spinner } from '@onekeyhq/components';
+import {
+  Button,
+  SizableText,
+  Spinner,
+  Toast,
+  XStack,
+  YStack,
+} from '@onekeyhq/components';
 import backgroundApiProxy from '@onekeyhq/kit/src/background/instance/backgroundApiProxy';
 import { AccountSelectorCreateAddressButton } from '@onekeyhq/kit/src/components/AccountSelector/AccountSelectorCreateAddressButton';
-import {
-  useActiveAccount,
-  useSelectedAccount,
-} from '@onekeyhq/kit/src/states/jotai/contexts/accountSelector';
+import { useThemeVariant } from '@onekeyhq/kit/src/hooks/useThemeVariant';
+import { useSelectedAccount } from '@onekeyhq/kit/src/states/jotai/contexts/accountSelector';
 import type { ITradingFormData } from '@onekeyhq/kit/src/states/jotai/contexts/hyperliquid';
 import {
   usePerpsAccountLoadingInfoAtom,
-  usePerpsSelectedAccountAtom,
-  usePerpsSelectedAccountStatusAtom,
-  useSettingsPersistAtom,
+  usePerpsActiveAccountAtom,
+  usePerpsActiveAccountStatusAtom,
+  usePerpsCommonConfigPersistAtom,
+  usePerpsShouldShowEnableTradingButtonAtom,
 } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
+import { getNetworkIdsMap } from '@onekeyhq/shared/src/config/networkIds';
+import { ETranslations } from '@onekeyhq/shared/src/locale';
 
-import { showDepositWithdrawModal } from './modals/DepositWithdrawModal';
+import { useShowDepositWithdrawModal } from '../../hooks/useShowDepositWithdrawModal';
+import { useTradingPrice } from '../../hooks/useTradingPrice';
+import { PERP_TRADE_BUTTON_COLORS } from '../../utils/styleUtils';
+
+const sharedButtonProps = {
+  size: 'medium',
+  borderRadius: '$full',
+};
 
 export function PerpTradingButton({
   loading,
   handleShowConfirm,
   formData,
+  computedSize,
+  isMinimumOrderNotMet,
   isSubmitting,
   isNoEnoughMargin,
 }: {
   loading: boolean;
   handleShowConfirm: () => void;
   formData: ITradingFormData;
+  computedSize: BigNumber;
+  isMinimumOrderNotMet: boolean;
   isSubmitting: boolean;
   isNoEnoughMargin: boolean;
 }) {
   const intl = useIntl();
-  const { activeAccount } = useActiveAccount({ num: 0 });
   const { selectedAccount } = useSelectedAccount({ num: 0 });
-  const [{ perpConfigCommon }] = useSettingsPersistAtom();
-
-  const [perpsAccount] = usePerpsSelectedAccountAtom();
+  const [{ perpConfigCommon }] = usePerpsCommonConfigPersistAtom();
+  const [perpsAccount] = usePerpsActiveAccountAtom();
   const [perpsAccountLoading] = usePerpsAccountLoadingInfoAtom();
-  const [perpsAccountStatus] = usePerpsSelectedAccountStatusAtom();
-
-  const isAccountLoading = useMemo(() => {
+  const [perpsAccountStatus] = usePerpsActiveAccountStatusAtom();
+  const [shouldShowEnableTradingButton] =
+    usePerpsShouldShowEnableTradingButtonAtom();
+  const { midPrice } = useTradingPrice();
+  const themeVariant = useThemeVariant();
+  const isAccountLoading = useMemo<boolean>(() => {
     return (
       perpsAccountLoading.enableTradingLoading ||
       perpsAccountLoading.selectAccountLoading
@@ -51,144 +72,270 @@ export function PerpTradingButton({
     perpsAccountLoading.enableTradingLoading,
     perpsAccountLoading.selectAccountLoading,
   ]);
-
+  const { showDepositWithdrawModal } = useShowDepositWithdrawModal();
   const enableTrading = useCallback(async () => {
     const status = await backgroundApiProxy.serviceHyperliquid.enableTrading();
     if (
-      !status.details.activatedOk &&
+      status?.details?.activatedOk === false &&
       perpsAccount.accountAddress &&
       perpsAccount.accountId
     ) {
-      await showDepositWithdrawModal({
-        withdrawable: '0',
-        actionType: 'deposit',
-      });
+      await showDepositWithdrawModal('deposit');
     }
-  }, [perpsAccount.accountAddress, perpsAccount.accountId]);
+  }, [
+    perpsAccount.accountAddress,
+    perpsAccount.accountId,
+    showDepositWithdrawModal,
+  ]);
 
   const buttonDisabled = useMemo(() => {
     return (
-      !(Number(formData.size) > 0) ||
+      !computedSize.gt(0) ||
       !perpsAccountStatus.canTrade ||
       isSubmitting ||
       isNoEnoughMargin ||
       isAccountLoading ||
+      isMinimumOrderNotMet ||
       (perpsAccountStatus.canTrade &&
-        (perpConfigCommon?.disablePerpActionButton ||
+        (perpConfigCommon?.disablePerpActionPerp ||
           perpConfigCommon?.ipDisablePerp))
     );
   }, [
-    formData.size,
+    computedSize,
     perpsAccountStatus.canTrade,
     isSubmitting,
     isNoEnoughMargin,
     isAccountLoading,
-    perpConfigCommon?.disablePerpActionButton,
+    isMinimumOrderNotMet,
+    perpConfigCommon?.disablePerpActionPerp,
     perpConfigCommon?.ipDisablePerp,
   ]);
-
   const buttonText = useMemo(() => {
-    if (isSubmitting) return 'Placing...';
-    if (isNoEnoughMargin) return 'Not Enough Margin';
-    return 'Place order';
-  }, [isSubmitting, isNoEnoughMargin]);
+    if (isSubmitting)
+      return intl.formatMessage({
+        id: ETranslations.perp_trading_button_placing,
+      });
+    if (isNoEnoughMargin)
+      return intl.formatMessage({
+        id: ETranslations.perp_trading_button_no_enough_margin,
+      });
+    if (isMinimumOrderNotMet)
+      return intl.formatMessage(
+        {
+          id: ETranslations.perp_size_least,
+        },
+        {
+          num: '$10',
+        },
+      );
+    return intl.formatMessage({
+      id: ETranslations.perp_trade_button_place_order,
+    });
+  }, [isSubmitting, isNoEnoughMargin, isMinimumOrderNotMet, intl]);
 
+  const isLong = useMemo(() => formData.side === 'long', [formData.side]);
   const buttonStyles = useMemo(() => {
-    const isLong = formData.side === 'long';
-
+    const colors = PERP_TRADE_BUTTON_COLORS;
     const getBgColor = () => {
       if (isAccountLoading) return undefined;
-      return isLong ? '$buttonSuccess' : '$buttonCritical';
+
+      return themeVariant === 'light'
+        ? colors.light[isLong ? 'long' : 'short']
+        : colors.dark[isLong ? 'long' : 'short'];
     };
 
     const getHoverBgColor = () => {
       if (isAccountLoading) return undefined;
-      return isLong ? '$green7' : '$red7';
+      return themeVariant === 'light'
+        ? colors.light[isLong ? 'longHover' : 'shortHover']
+        : colors.dark[isLong ? 'longHover' : 'shortHover'];
     };
 
     const getPressBgColor = () => {
       if (isAccountLoading) return undefined;
-      return isLong ? '$green9' : '$red9';
+      return themeVariant === 'light'
+        ? colors.light[isLong ? 'longPress' : 'shortPress']
+        : colors.dark[isLong ? 'longPress' : 'shortPress'];
     };
 
     return {
       bg: getBgColor(),
       hoverBg: getHoverBgColor(),
       pressBg: getPressBgColor(),
-      textColor: buttonDisabled ? '$textDisabled' : '$textOnColor',
+      textColor: '$textOnColor',
     };
-  }, [formData.side, buttonDisabled, isAccountLoading]);
+  }, [isAccountLoading, isLong, themeVariant]);
 
   const createAddressButtonRender = useCallback((props: IButtonProps) => {
-    return <Button size="large" borderRadius="$3" {...props} />;
+    return <Button {...sharedButtonProps} {...props} />;
   }, []);
 
-  const accountNotSupportedButton = useMemo(() => {
-    return createAddressButtonRender({
-      children: 'Account not supported',
-      disabled: true,
-    });
-  }, [createAddressButtonRender]);
+  const getTpslErrorMessage = useCallback(
+    (type: 'TP' | 'SL', direction: 'higher' | 'lower') => ({
+      title: `${type} price must be ${direction} than current price. To close position immediately, use the position table or order form.`,
+    }),
+    [],
+  );
+
+  const validateTpslPrices = useCallback(async () => {
+    if (!formData.hasTpsl || !formData.price) return true;
+
+    const entryPrice = new BigNumber(
+      formData.type === 'limit' ? formData.price : midPrice || '0',
+    );
+    if (!entryPrice.isFinite() || entryPrice.isZero()) {
+      // entry price is invalid
+      return true;
+    }
+    const tpPrice = formData.tpTriggerPx
+      ? new BigNumber(formData.tpTriggerPx)
+      : null;
+    const slPrice = formData.slTriggerPx
+      ? new BigNumber(formData.slTriggerPx)
+      : null;
+
+    // Validate Take Profit
+    if (tpPrice) {
+      if (isLong && tpPrice.lte(entryPrice)) {
+        Toast.error(getTpslErrorMessage('TP', 'higher'));
+        return false;
+      }
+      if (!isLong && tpPrice.gte(entryPrice)) {
+        Toast.error(getTpslErrorMessage('TP', 'lower'));
+        return false;
+      }
+    }
+
+    // Validate Stop Loss
+    if (slPrice) {
+      if (isLong && slPrice.gte(entryPrice)) {
+        Toast.error(getTpslErrorMessage('SL', 'lower'));
+        return false;
+      }
+      if (!isLong && slPrice.lte(entryPrice)) {
+        Toast.error(getTpslErrorMessage('SL', 'higher'));
+        return false;
+      }
+    }
+
+    return true;
+  }, [
+    formData.hasTpsl,
+    formData.price,
+    formData.type,
+    formData.tpTriggerPx,
+    formData.slTriggerPx,
+    midPrice,
+    isLong,
+    getTpslErrorMessage,
+  ]);
+
+  const orderConfirm = useCallback(async () => {
+    // Validate TPSL prices before proceeding
+    if (!(await validateTpslPrices())) {
+      return;
+    }
+
+    handleShowConfirm();
+  }, [validateTpslPrices, handleShowConfirm]);
 
   if (loading || perpsAccountLoading?.selectAccountLoading) {
     return (
-      <Button size="large" borderRadius="$3" disabled>
+      <Button {...sharedButtonProps} disabled>
         <Spinner />
       </Button>
     );
   }
 
   if (!perpsAccount?.accountAddress) {
-    if (activeAccount.canCreateAddress) {
+    const canCreateAddress = perpsAccountStatus.canCreateAddress;
+    if (canCreateAddress) {
+      const createAddressAccount = {
+        ...selectedAccount,
+        deriveType: perpsAccount.deriveType,
+        indexedAccountId:
+          perpsAccount.indexedAccountId || selectedAccount.indexedAccountId,
+        // networkId: PERPS_NETWORK_ID,
+        networkId: getNetworkIdsMap().onekeyall,
+      };
       return (
         <AccountSelectorCreateAddressButton
           autoCreateAddress={false}
           num={0}
-          account={selectedAccount}
+          account={createAddressAccount}
           buttonRender={createAddressButtonRender}
         />
       );
     }
-    return accountNotSupportedButton;
+    return (
+      <Button {...sharedButtonProps} disabled>
+        {intl.formatMessage({
+          id: ETranslations.perp_trade_button_account_unsupported,
+        })}
+      </Button>
+    );
   }
 
-  if (
-    isAccountLoading ||
-    !perpsAccountStatus.canTrade ||
-    !perpsAccount?.accountAddress
-  ) {
+  if (shouldShowEnableTradingButton) {
     return (
-      <Button
-        size="large"
-        borderRadius="$3"
-        loading={isAccountLoading}
-        onPress={async () => {
-          await enableTrading();
-        }}
+      <YStack
+        gap="$3"
+        h={126}
+        justifyContent="flex-end"
+        flex={1}
+        pointerEvents="box-none"
       >
-        <SizableText>Enable trading</SizableText>
-      </Button>
+        <XStack
+          gap="$3"
+          p="$3"
+          borderRadius="$3"
+          bg="$bgSubdued"
+          pointerEvents="box-none"
+        >
+          <SizableText size="$bodySm" color="$text" pointerEvents="box-none">
+            {intl.formatMessage({
+              id: ETranslations.perp_enable_trading_desc,
+            })}
+          </SizableText>
+        </XStack>
+        <Button
+          {...sharedButtonProps}
+          variant="primary"
+          loading={isAccountLoading}
+          onPress={async () => {
+            await enableTrading();
+          }}
+          childrenAsText
+        >
+          <SizableText size="$bodyMdMedium" color="$textInverse">
+            {intl.formatMessage({
+              id: ETranslations.perp_trade_button_enable_trading,
+            })}
+          </SizableText>
+        </Button>
+      </YStack>
     );
   }
 
   return (
     <Button
+      {...sharedButtonProps}
       bg={buttonStyles.bg}
-      hoverStyle={{ bg: buttonStyles.hoverBg }}
-      pressStyle={{ bg: buttonStyles.pressBg }}
+      hoverStyle={
+        !buttonDisabled && !isSubmitting
+          ? { bg: buttonStyles.hoverBg }
+          : undefined
+      }
+      pressStyle={
+        !buttonDisabled && !isSubmitting
+          ? { bg: buttonStyles.pressBg }
+          : undefined
+      }
       loading={perpsAccountLoading?.enableTradingLoading || isSubmitting}
-      onPress={() => {
-        handleShowConfirm();
-      }}
+      onPress={orderConfirm}
       disabled={buttonDisabled}
-      size="medium"
-      borderRadius="$3"
     >
-      <SizableText
-        color={buttonStyles.textColor}
-        fontWeight="600"
-        size="$bodyLgMedium"
-      >
+      <SizableText color={buttonStyles.textColor} size="$bodyMdMedium">
         {buttonText}
       </SizableText>
     </Button>

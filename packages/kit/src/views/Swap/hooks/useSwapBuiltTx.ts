@@ -19,6 +19,7 @@ import type {
 } from '@onekeyhq/core/src/types';
 import {
   useInAppNotificationAtom,
+  useSettingsAtom,
   useSettingsPersistAtom,
 } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import type {
@@ -35,6 +36,8 @@ import { defaultLogger } from '@onekeyhq/shared/src/logger/logger';
 import { ESwapEventAPIStatus } from '@onekeyhq/shared/src/logger/scopes/swap/scenes/swapEstimateFee';
 import { EScanQrCodeModalPages } from '@onekeyhq/shared/src/routes';
 import accountUtils from '@onekeyhq/shared/src/utils/accountUtils';
+import { calculateFeeForSend } from '@onekeyhq/shared/src/utils/feeUtils';
+import type { INumberFormatProps } from '@onekeyhq/shared/src/utils/numberUtils';
 import {
   numberFormat,
   toBigIntHex,
@@ -58,6 +61,10 @@ import {
   ESigningScheme,
 } from '@onekeyhq/shared/types/message';
 import { ESendPreCheckTimingEnum } from '@onekeyhq/shared/types/send';
+import {
+  EInternalDappEnum,
+  type IStakeTx,
+} from '@onekeyhq/shared/types/staking';
 import type {
   ESwapCancelLimitOrderSource,
   IFetchBuildTxResponse,
@@ -90,18 +97,21 @@ import backgroundApiProxy from '../../../background/instance/backgroundApiProxy'
 import { useSignatureConfirm } from '../../../hooks/useSignatureConfirm';
 import {
   useSwapBuildTxFetchingAtom,
+  useSwapFromTokenAmountAtom,
   useSwapLimitExpirationTimeAtom,
   useSwapLimitPartiallyFillAtom,
   useSwapLimitPriceFromAmountAtom,
   useSwapLimitPriceToAmountAtom,
   useSwapQuoteCurrentSelectAtom,
+  useSwapQuoteEventTotalCountAtom,
+  useSwapQuoteListAtom,
   useSwapSelectFromTokenAtom,
   useSwapSelectToTokenAtom,
   useSwapStepNetFeeLevelAtom,
   useSwapStepsAtom,
+  useSwapToTokenAmountAtom,
   useSwapTypeSwitchAtom,
 } from '../../../states/jotai/contexts/swap';
-import { calculateFeeForSend } from '../../../utils/gasFee';
 
 import { useSwapAddressInfo } from './useSwapAccount';
 import {
@@ -109,6 +119,10 @@ import {
   useSwapSlippagePercentageModeInfo,
 } from './useSwapState';
 import { useSwapTxHistoryActions } from './useSwapTxHistory';
+
+const formatter: INumberFormatProps = {
+  formatter: 'balance',
+};
 
 /**
  * React hook that manages the full lifecycle of building, approving, signing, and sending swap transactions in a multi-step workflow.
@@ -137,6 +151,11 @@ export function useSwapBuildTx() {
   const [{ isFirstTimeSwap }, setPersistSettings] = useSettingsPersistAtom();
   const swapActionState = useSwapActionState();
   const [swapNetWorkFeeLevel] = useSwapStepNetFeeLevelAtom();
+  const [, setSwapFromTokenAmount] = useSwapFromTokenAmountAtom();
+  const [, setSwapToTokenAmount] = useSwapToTokenAmountAtom();
+  const [, setSwapQuoteResultList] = useSwapQuoteListAtom();
+  const [, setSwapQuoteEventTotalCount] = useSwapQuoteEventTotalCountAtom();
+  const [, setSettings] = useSettingsAtom();
   const { navigationToMessageConfirm, navigationToTxConfirm } =
     useSignatureConfirm({
       accountId: swapFromAddressInfo.accountInfo?.account?.id ?? '',
@@ -166,31 +185,31 @@ export function useSwapBuildTx() {
     [],
   );
 
-  // const clearQuoteData = useCallback(() => {
-  //   setSwapFromTokenAmount({
-  //     value: '',
-  //     isInput: false,
-  //   }); // send success, clear from token amount
-  //   setSwapToTokenAmount({
-  //     value: '',
-  //     isInput: false,
-  //   }); // send success, clear to token amount
-  //   setSwapQuoteResultList([]);
-  //   setSwapQuoteEventTotalCount({
-  //     count: 0,
-  //   });
-  //   setSettings((v) => ({
-  //     // reset account switch for reset swap receive address
-  //     ...v,
-  //     swapToAnotherAccountSwitchOn: false,
-  //   }));
-  // }, [
-  //   setSettings,
-  //   setSwapFromTokenAmount,
-  //   setSwapQuoteEventTotalCount,
-  //   setSwapQuoteResultList,
-  //   setSwapToTokenAmount,
-  // ]);
+  const clearQuoteData = useCallback(() => {
+    setSwapFromTokenAmount({
+      value: '',
+      isInput: false,
+    }); // send success, clear from token amount
+    setSwapToTokenAmount({
+      value: '',
+      isInput: false,
+    }); // send success, clear to token amount
+    setSwapQuoteResultList([]);
+    setSwapQuoteEventTotalCount({
+      count: 0,
+    });
+    setSettings((v) => ({
+      // reset account switch for reset swap receive address
+      ...v,
+      swapToAnotherAccountSwitchOn: false,
+    }));
+  }, [
+    setSettings,
+    setSwapFromTokenAmount,
+    setSwapQuoteEventTotalCount,
+    setSwapQuoteResultList,
+    setSwapToTokenAmount,
+  ]);
 
   const goBackQrCodeModal = useCallback(() => {
     if (
@@ -203,9 +222,15 @@ export function useSwapBuildTx() {
   }, []);
 
   const onBuildTxSuccess = useCallback(
-    async (txId: string, swapInfo: ISwapTxInfo, orderId?: string) => {
-      // clearQuoteData();
+    async (
+      txId: string,
+      swapInfo: ISwapTxInfo,
+      orderId?: string,
+      gasFeeFiatValue?: string,
+      gasFeeInNative?: string,
+    ) => {
       if (swapInfo) {
+        clearQuoteData();
         setSwapSteps(
           (prevSteps: {
             steps: ISwapStep[];
@@ -235,6 +260,8 @@ export function useSwapBuildTx() {
         await generateSwapHistoryItem({
           txId,
           swapTxInfo: swapInfo,
+          gasFeeFiatValue,
+          gasFeeInNative,
         });
         if (
           swapInfo.sender.token.networkId === swapInfo.receiver.token.networkId
@@ -247,6 +274,7 @@ export function useSwapBuildTx() {
       }
     },
     [
+      clearQuoteData,
       goBackQrCodeModal,
       generateSwapHistoryItem,
       setSwapSteps,
@@ -262,8 +290,8 @@ export function useSwapBuildTx() {
       orderId?: string;
       swapInfo: ISwapTxInfo;
     }) => {
-      // clearQuoteData();
       if (swapInfo) {
+        clearQuoteData();
         if (
           accountUtils.isQrAccount({
             accountId: swapFromAddressInfo.accountInfo?.account?.id ?? '',
@@ -295,6 +323,7 @@ export function useSwapBuildTx() {
       }
     },
     [
+      clearQuoteData,
       generateSwapHistoryItem,
       setSwapSteps,
       swapFromAddressInfo.accountInfo?.account?.id,
@@ -345,9 +374,7 @@ export function useSwapBuildTx() {
                     },
                     {
                       token: item.token.symbol,
-                      number: numberFormat(tokenAmountBN.toFixed(), {
-                        formatter: 'balance',
-                      }) as string,
+                      number: numberFormat(tokenAmountBN.toFixed(), formatter),
                     },
                   ),
                 });
@@ -393,6 +420,12 @@ export function useSwapBuildTx() {
         }
         let orderAccount: INetworkAccount | undefined;
         try {
+          const defaultDeriveType =
+            await backgroundApiProxy.serviceNetwork.getGlobalDeriveTypeOfNetwork(
+              {
+                networkId: item.networkId,
+              },
+            );
           orderAccount =
             await backgroundApiProxy.serviceAccount.getNetworkAccount({
               accountId: swapFromAddressInfo.accountInfo?.indexedAccount?.id
@@ -401,8 +434,7 @@ export function useSwapBuildTx() {
               indexedAccountId:
                 swapFromAddressInfo?.accountInfo?.indexedAccount?.id ?? '',
               networkId: item.networkId,
-              deriveType:
-                swapFromAddressInfo.accountInfo?.deriveType ?? 'default',
+              deriveType: defaultDeriveType ?? 'default',
             });
         } catch (e) {
           orderAccount = undefined;
@@ -433,7 +465,7 @@ export function useSwapBuildTx() {
               reject(
                 new Error(
                   `missing data: dataMessage: ${dataMessage ?? ''}, address: ${
-                    orderAccount?.address ?? ''
+                    orderAccount?.addressDetail.address ?? ''
                   }, networkId: ${item.networkId ?? ''}`,
                 ),
               );
@@ -537,7 +569,21 @@ export function useSwapBuildTx() {
           };
         },
       );
-
+      const { totalNative } = calculateFeeForSend({
+        feeInfo: gasInfo as IFeeInfoUnit,
+        nativeTokenPrice: gasInfo.common?.nativeTokenPrice ?? 0,
+      });
+      await backgroundApiProxy.serviceTransaction.verifyTransaction({
+        networkId,
+        accountId,
+        verifyTxTasks: ['feeInfo'],
+        verifyTxFeeInfoParams: {
+          feeAmount: totalNative,
+          feeTokenSymbol: gasInfo.common?.nativeSymbol ?? '',
+          doubleConfirm: true,
+        },
+        encodedTx: updatedUnsignedTxItem.encodedTx,
+      });
       const res = await backgroundApiProxy.serviceSend.signAndSendTransaction({
         networkId,
         accountId,
@@ -726,9 +772,16 @@ export function useSwapBuildTx() {
         const transactionSignedInfo = res[0].signedTx;
         const txId = transactionSignedInfo.txid;
         const { swapInfo } = transactionSignedInfo;
-
+        const transactionDecodedInfo = res[0].decodedTx;
+        const { totalFeeInNative, totalFeeFiatValue } = transactionDecodedInfo;
         if (swapInfo) {
-          void onBuildTxSuccess(txId, swapInfo, orderId);
+          void onBuildTxSuccess(
+            txId,
+            swapInfo,
+            orderId,
+            totalFeeFiatValue,
+            totalFeeInNative,
+          );
         }
       }
     },
@@ -1722,6 +1775,12 @@ export function useSwapBuildTx() {
                 fromTokenInfo: buildSwapRes.result.fromTokenInfo,
                 type: swapTypeSwitch,
               });
+          } else if (buildSwapRes.tronTxData) {
+            transferInfo = undefined;
+            encodedTx = buildSwapRes.tronTxData;
+          } else if (buildSwapRes.xrpTxData) {
+            transferInfo = undefined;
+            encodedTx = buildSwapRes.xrpTxData;
           } else if (buildSwapRes?.tx) {
             transferInfo = undefined;
             if (typeof buildSwapRes.tx !== 'string' && buildSwapRes.tx.data) {
@@ -1737,6 +1796,38 @@ export function useSwapBuildTx() {
               encodedTx = buildSwapRes.tx as string;
             }
             // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+          } else if (buildSwapRes.btcData || buildSwapRes.suiBase64Data) {
+            let inputTx: IStakeTx | undefined;
+            if (buildSwapRes.btcData) {
+              if (
+                buildSwapRes.btcData.addressType.includes(
+                  swapFromAddressInfo.accountInfo.deriveInfo?.addressEncoding ??
+                    '',
+                )
+              ) {
+                inputTx = {
+                  psbtHex: buildSwapRes.btcData.hexStr,
+                };
+              } else {
+                Toast.error({
+                  title: intl.formatMessage({
+                    id: ETranslations.feedback_derivation_path_restriction,
+                  }),
+                });
+              }
+            }
+            if (buildSwapRes.suiBase64Data) {
+              inputTx = buildSwapRes.suiBase64Data;
+            }
+            if (inputTx) {
+              encodedTx =
+                await backgroundApiProxy.serviceStaking.buildInternalDappTx({
+                  accountId: swapFromAddressInfo.accountInfo?.account?.id ?? '',
+                  networkId: swapFromAddressInfo.networkId ?? '',
+                  tx: inputTx,
+                  internalDappType: EInternalDappEnum.Swap,
+                });
+            }
           } else if (
             // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
             buildSwapRes?.ctx?.cowSwapOrderId ||
@@ -1837,12 +1928,14 @@ export function useSwapBuildTx() {
     },
     [
       checkOtherFee,
+      intl,
       isFirstTimeSwap,
       isModalPage,
       setSwapSteps,
       slippageItem,
       swapBuildFinish,
       swapFromAddressInfo.accountInfo?.account?.id,
+      swapFromAddressInfo.accountInfo?.deriveInfo?.addressEncoding,
       swapFromAddressInfo.accountInfo?.wallet?.type,
       swapFromAddressInfo.address,
       swapFromAddressInfo.networkId,
@@ -2653,7 +2746,7 @@ export function useSwapBuildTx() {
               feeInfo: gasInfo as IFeeInfoUnit,
               nativeTokenPrice: common?.nativeTokenPrice ?? 0,
             });
-            return feeResult.totalFiat;
+            return feeResult.totalFiatMinForDisplay;
           }),
         );
         const gasFeeFiatValueAll = gasFeeFiatValues.reduce((acc, curr) => {
@@ -2972,6 +3065,8 @@ export function useSwapBuildTx() {
                 error?.key !== 'global.cancel' &&
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
                 error?.code !== 803 &&
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+                error?.code !== -99_999 &&
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
                 !error?.message?.toLowerCase()?.includes('reject') &&
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access

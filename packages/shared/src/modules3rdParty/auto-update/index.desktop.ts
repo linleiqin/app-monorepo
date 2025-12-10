@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { useThrottledCallback } from 'use-debounce';
 
@@ -44,9 +44,35 @@ const withUpdateError = <T>(callback: () => Promise<T>): Promise<T> =>
       });
   });
 
-const downloadPackage: IDownloadPackage = async () => {
+const downloadPackage: IDownloadPackage = async ({
+  downloadedFile,
+  headers,
+  latestVersion,
+}) => {
+  const isDownloading =
+    await globalThis.desktopApiProxy.appUpdate.isDownloadingPackage();
+  if (isDownloading) {
+    return;
+  }
+  if (downloadedFile) {
+    const isFileExists =
+      await globalThis.desktopApiProxy.appUpdate.checkDownloadedFileExists(
+        downloadedFile,
+      );
+    if (isFileExists) {
+      return;
+    }
+  }
   const result = await withUpdateError(async () => {
-    await globalThis.desktopApiProxy.appUpdate.checkForUpdates();
+    const updateInfo =
+      await globalThis.desktopApiProxy.appUpdate.checkForUpdates(
+        false,
+        headers,
+        latestVersion || '',
+      );
+    if (!updateInfo) {
+      return null;
+    }
     return new Promise<IUpdateDownloadedEvent>((resolve) => {
       const onDownloadedSubscription = electronUpdateListeners.onDownloaded?.(
         (params) => {
@@ -105,13 +131,21 @@ export const useDownloadProgress: IUseDownloadProgress = () => {
     10,
   );
 
+  const updatedDownloaded = useCallback(() => {
+    defaultLogger.update.app.log('downloaded');
+    setPercent(100);
+  }, []);
+
   useEffect(() => {
     const onProgressUpdateSubscription =
       electronUpdateListeners.onProgressUpdate?.(updatePercent);
+    const updateDownloadedSubscription =
+      electronUpdateListeners.onDownloaded?.(updatedDownloaded);
     return () => {
       onProgressUpdateSubscription?.();
+      updateDownloadedSubscription?.();
     };
-  }, [updatePercent]);
+  }, [updatedDownloaded, updatePercent]);
   return percent;
 };
 
@@ -138,6 +172,8 @@ export const AppUpdate: IAppUpdate = {
 };
 
 export const BundleUpdate: IBundleUpdate = {
+  getWebEmbedPath: () => '',
+  getWebEmbedPathAsync: () => Promise.resolve(''),
   downloadBundle: (params) =>
     globalThis.desktopApiProxy.bundleUpdate.downloadBundle(params),
   verifyBundle: (params) =>
@@ -148,5 +184,41 @@ export const BundleUpdate: IBundleUpdate = {
     globalThis.desktopApiProxy.bundleUpdate.downloadBundleASC(params),
   installBundle: (params) =>
     globalThis.desktopApiProxy.bundleUpdate.installBundle(params),
+  getFallbackBundles: () =>
+    globalThis.desktopApiProxy.bundleUpdate.getFallbackUpdateBundleData(),
+  switchBundle: (params) =>
+    globalThis.desktopApiProxy.bundleUpdate.setCurrentUpdateBundleData(params),
   clearBundle: () => globalThis.desktopApiProxy.bundleUpdate.clearBundle(),
+  clearAllJSBundleData: () =>
+    globalThis.desktopApiProxy.bundleUpdate.clearAllJSBundleData(),
+  testVerification: () =>
+    globalThis.desktopApiProxy.bundleUpdate.testVerification(),
+  testDeleteJsBundle: (appVersion, bundleVersion) =>
+    globalThis.desktopApiProxy.bundleUpdate.testDeleteJsBundle(
+      appVersion,
+      bundleVersion,
+    ),
+  testDeleteJsRuntimeDir: (appVersion, bundleVersion) =>
+    globalThis.desktopApiProxy.bundleUpdate.testDeleteJsRuntimeDir(
+      appVersion,
+      bundleVersion,
+    ),
+  testDeleteMetadataJson: (appVersion, bundleVersion) =>
+    globalThis.desktopApiProxy.bundleUpdate.testDeleteMetadataJson(
+      appVersion,
+      bundleVersion,
+    ),
+  testWriteEmptyMetadataJson: (appVersion, bundleVersion) =>
+    globalThis.desktopApiProxy.bundleUpdate.testWriteEmptyMetadataJson(
+      appVersion,
+      bundleVersion,
+    ),
+  getNativeAppVersion: () =>
+    globalThis.desktopApiProxy.bundleUpdate.getNativeAppVersion(),
+  getNativeBuildNumber: () =>
+    globalThis.desktopApiProxy.bundleUpdate.getNativeBuildNumber(),
+  getJsBundlePath: () =>
+    globalThis.desktopApiProxy.bundleUpdate.getJsBundlePath(),
+  getSha256FromFilePath: (filePath) =>
+    globalThis.desktopApiProxy.bundleUpdate.getSha256FromFilePath(filePath),
 };
