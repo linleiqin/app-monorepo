@@ -95,6 +95,7 @@
 
 ### 构建与部署
 
+- [问题 61：yarn 和 pnpm 相关问题，如何选择？](#问题-61yarn-和-pnpm-相关问题如何选择)
 - [问题 71：请说明 React 应用的构建流程，包括 Webpack 和 Vite](#问题-71请说明-react-应用的构建流程包括-webpack-和-vite)
 - [问题 72：什么是代码分割（Code Splitting）？如何实现？](#问题-72什么是代码分割code-splitting如何实现)
 - [问题 73：请解释 React 应用的打包优化策略](#问题-73请解释-react-应用的打包优化策略)
@@ -2179,5 +2180,49 @@ Provider 模式是通过 Provider 组件提供数据，子组件通过 Consumer 
 - **耦合度（Coupling）**：是组件之间的依赖程度，依赖注入降低耦合度。
 
 - **自定义 Hooks（Custom Hooks）**：是封装依赖逻辑的 Hooks，组件使用 Hooks 获取依赖。
+
+---
+
+### 问题 61：yarn 和 pnpm 相关问题，如何选择？
+
+**答案：**
+
+yarn 和 pnpm 都是流行的 JavaScript 包管理器，它们各有优势和适用场景，选择时需要根据项目需求、团队习惯和性能要求来决定。
+
+yarn 的特点：yarn 是 Facebook 开发的包管理器，兼容 npm 的生态系统；yarn 使用 lockfile（yarn.lock）确保依赖版本一致性；yarn 支持工作区（workspaces）用于 monorepo 项目；yarn 2+（Berry）引入了 Plug'n'Play（PnP）模式，无需 node_modules 目录；yarn 的安装速度较快，缓存机制完善。
+
+pnpm 的特点：pnpm 使用硬链接和符号链接，节省磁盘空间；pnpm 通过内容寻址存储，避免重复安装相同版本的包；pnpm 严格隔离依赖，避免幽灵依赖（phantom dependencies）问题；pnpm 的安装速度通常比 npm 和 yarn 更快；pnpm 支持 monorepo，通过 workspace 协议管理内部依赖。
+
+性能对比：pnpm 在安装速度上通常优于 yarn，特别是在大型项目中；pnpm 的磁盘空间占用更少，因为使用硬链接共享依赖；yarn 的缓存机制也很完善，但 pnpm 的存储方式更高效。
+
+兼容性对比：yarn 与 npm 生态系统兼容性更好，大多数项目可以直接迁移；pnpm 的兼容性也很好，但某些工具可能需要额外配置；yarn 2+ 的 PnP 模式需要工具链支持，兼容性相对较差。
+
+Monorepo 支持：yarn workspaces 是成熟的 monorepo 解决方案，使用广泛；pnpm workspace 功能强大，支持 workspace 协议，依赖管理更严格；两者都支持 monorepo，但 pnpm 的依赖隔离更严格。
+
+选择建议：如果项目已经使用 yarn，且团队熟悉 yarn，可以继续使用；如果需要更好的性能和磁盘空间利用，可以选择 pnpm；如果项目是 monorepo，两者都支持，pnpm 的依赖隔离更严格；如果需要严格的依赖隔离，避免幽灵依赖，选择 pnpm；如果工具链对 PnP 支持不好，避免使用 yarn 2+ 的 PnP 模式。
+
+迁移考虑：从 npm 迁移到 yarn 或 pnpm 都比较简单，主要是删除 node_modules 和 lockfile；从 yarn 迁移到 pnpm 需要删除 yarn.lock，pnpm 会生成 pnpm-lock.yaml；迁移时需要注意某些工具可能需要配置才能识别 pnpm 的 node_modules 结构。
+
+在实际开发中，应该根据项目需求选择合适的包管理器。应该考虑团队的技术栈和习惯，选择团队熟悉的工具。应该关注性能和磁盘空间，特别是在大型项目中。应该理解不同包管理器的特点，做出明智的选择。
+
+**简洁回答：**
+
+yarn 和 pnpm 都是流行的包管理器。yarn 兼容性好，支持 workspaces，适合已有 yarn 项目；pnpm 性能更好，磁盘占用更少，依赖隔离更严格，适合新项目或需要严格依赖管理的项目。选择时考虑：项目现状、性能需求、团队习惯、monorepo 需求。如果需要更好的性能和严格的依赖隔离，选择 pnpm；如果项目已使用 yarn 且团队熟悉，可以继续使用 yarn。
+
+**关键字解释：**
+
+- **yarn**：是 Facebook 开发的 JavaScript 包管理器，兼容 npm，支持 workspaces 和 PnP 模式。
+
+- **pnpm**：是快速的、节省磁盘空间的包管理器，使用硬链接和符号链接，严格隔离依赖。
+
+- **硬链接（Hard Link）**：是文件系统的特性，允许多个文件名指向同一个文件，pnpm 使用硬链接共享依赖。
+
+- **幽灵依赖（Phantom Dependencies）**：是项目中使用了未在 package.json 中声明的依赖，pnpm 的严格隔离可以避免这个问题。
+
+- **workspace**：是 monorepo 中管理多个包的机制，yarn 和 pnpm 都支持。
+
+- **Plug'n'Play（PnP）**：是 yarn 2+ 的模式，无需 node_modules 目录，直接使用 zip 文件。
+
+- **lockfile**：是锁定依赖版本的文件，yarn 使用 yarn.lock，pnpm 使用 pnpm-lock.yaml。
 
 ---
