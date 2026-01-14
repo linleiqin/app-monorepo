@@ -316,6 +316,21 @@ export class PrimeLoginDialogCancelError extends OneKeyAppError {
   override name = EOneKeyErrorClassNames.PrimeLoginDialogCancelError;
 }
 
+export class PrimeSendEmailOTPCancelError extends OneKeyAppError {
+  constructor(props?: IOneKeyError | string) {
+    super(
+      normalizeErrorProps(props, {
+        defaultMessage: 'PrimeSendEmailOTPCancelError',
+        defaultKey: ETranslations.global_cancel,
+      }),
+    );
+  }
+
+  override className = EOneKeyErrorClassNames.PrimeSendEmailOTPCancelError;
+
+  override name = EOneKeyErrorClassNames.PrimeSendEmailOTPCancelError;
+}
+
 export class FailedToTransfer extends OneKeyAppError {
   constructor(props?: IOneKeyError) {
     super(
@@ -363,6 +378,21 @@ export class SecureQRCodeDialogCancel extends OneKeyAppError {
 
   override className: EOneKeyErrorClassNames =
     EOneKeyErrorClassNames.SecureQRCodeDialogCancel;
+}
+
+export class OAuthLoginCancelError extends OneKeyAppError {
+  constructor(props?: IOneKeyError) {
+    super(
+      normalizeErrorProps(props, {
+        defaultMessage: 'OAuthLoginCancelError',
+        defaultKey: ETranslations.global_cancel,
+        defaultAutoToast: false,
+      }),
+    );
+  }
+
+  override className: EOneKeyErrorClassNames =
+    EOneKeyErrorClassNames.OAuthLoginCancelError;
 }
 
 export class PreCheckBeforeSendingCancelError extends OneKeyAppError {
@@ -1123,4 +1153,24 @@ export class HomeScreenNotSupportFormatError extends OneKeyAppError {
       }),
     );
   }
+}
+
+export type IIncorrectPinErrorInfo = {
+  guessesRemaining: number;
+};
+
+export class IncorrectPinError extends OneKeyAppError<IIncorrectPinErrorInfo> {
+  constructor(props: IOneKeyError<IIncorrectPinErrorInfo>) {
+    super(
+      normalizeErrorProps(props, {
+        defaultMessage: 'IncorrectPinError',
+        defaultKey: ETranslations.incorrect_pin,
+        defaultAutoToast: false,
+      }),
+    );
+  }
+
+  override className = EOneKeyErrorClassNames.IncorrectPinError;
+
+  override name = EOneKeyErrorClassNames.IncorrectPinError;
 }

@@ -56,7 +56,7 @@ export const verifiedWebAuth = async (credId: string) => {
       allowCredentials: [
         {
           type: 'public-key',
-          id: base64Decode(credId),
+          id: base64Decode(credId) as BufferSource,
         },
       ],
       userVerification: 'required',

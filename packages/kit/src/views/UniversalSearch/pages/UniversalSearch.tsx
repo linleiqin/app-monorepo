@@ -23,6 +23,7 @@ import { DiscoveryBrowserProviderMirror } from '@onekeyhq/kit/src/views/Discover
 import { EJotaiContextStoreNames } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import { isGoogleSearchItem } from '@onekeyhq/shared/src/consts/discovery';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
+import { defaultLogger } from '@onekeyhq/shared/src/logger/logger';
 import platformEnv from '@onekeyhq/shared/src/platformEnv';
 import { ETabRoutes } from '@onekeyhq/shared/src/routes';
 import type {
@@ -55,6 +56,7 @@ import {
   UniversalSearchAddressItem,
   UniversalSearchDappItem,
   UniversalSearchMarketTokenItem,
+  UniversalSearchPerpItem,
   UniversalSearchV2MarketTokenItem,
 } from '../components/SearchResultItems';
 
@@ -77,6 +79,7 @@ const getSearchTypes = () => {
     // Hide AccountAssets search in WebDapp mode
     !platformEnv.isWebDappMode && EUniversalSearchType.AccountAssets,
     EUniversalSearchType.Dapp,
+    EUniversalSearchType.Perp,
   ].filter(Boolean);
 };
 
@@ -84,11 +87,12 @@ const getTabIndexForSearchType = (searchType: EUniversalSearchType): number => {
   const tabMapping: Record<EUniversalSearchType, number> = {
     [EUniversalSearchType.Address]: 1, // Wallets tab
     [EUniversalSearchType.V2MarketToken]: 2, // Market tab
-    [EUniversalSearchType.MarketToken]: 3, // Tokens tab
+    [EUniversalSearchType.Perp]: 3, // Perp tab (after Market)
+    [EUniversalSearchType.MarketToken]: 4, // Tokens tab
     // In WebDapp mode, My Assets tab is hidden
-    [EUniversalSearchType.AccountAssets]: platformEnv.isWebDappMode ? 0 : 4,
+    [EUniversalSearchType.AccountAssets]: platformEnv.isWebDappMode ? 0 : 5,
     // DApps tab index changes based on whether My Assets tab is shown
-    [EUniversalSearchType.Dapp]: platformEnv.isWebDappMode ? 4 : 5,
+    [EUniversalSearchType.Dapp]: platformEnv.isWebDappMode ? 5 : 6,
   };
 
   return tabMapping[searchType];
@@ -124,8 +128,10 @@ function ListEmptyComponent() {
 
 export function UniversalSearch({
   filterTypes,
+  initialTab,
 }: {
   filterTypes?: EUniversalSearchType[];
+  initialTab?: 'market' | 'dapp';
 }) {
   const intl = useIntl();
   const { activeAccount } = useActiveAccount({ num: 0 });
@@ -165,6 +171,9 @@ export function UniversalSearch({
         id: ETranslations.global_market,
       }),
       intl.formatMessage({
+        id: ETranslations.global_perp,
+      }),
+      intl.formatMessage({
         id: ETranslations.global_universal_search_tabs_tokens,
       }),
       // Include My Assets tab only when not in WebDapp mode
@@ -177,6 +186,19 @@ export function UniversalSearch({
       }),
     ].filter(Boolean);
   }, [intl]);
+
+  const initialTabName = useMemo(() => {
+    if (initialTab === 'market') {
+      return intl.formatMessage({ id: ETranslations.global_market });
+    }
+    if (initialTab === 'dapp') {
+      return intl.formatMessage({
+        id: ETranslations.global_universal_search_tabs_dapps,
+      });
+    }
+    return tabTitles[0];
+  }, [initialTab, intl, tabTitles]);
+
   const [filterType, setFilterType] = useState(tabTitles[0]);
   const focusedTab = useSharedValue(tabTitles[0]);
   const handleTabPress = useCallback(
@@ -191,17 +213,16 @@ export function UniversalSearch({
   }, [filterType, tabTitles]);
 
   useEffect(() => {
-    if (
-      searchStatus === ESearchStatus.done &&
-      focusedTab.value !== tabTitles[0]
-    ) {
-      const firstTabName = tabTitles[0];
-      setFilterType(firstTabName);
-      setTimeout(() => {
-        focusedTab.value = firstTabName;
-      }, 0);
+    if (searchStatus === ESearchStatus.done) {
+      const targetTabName = initialTabName;
+      if (focusedTab.value !== targetTabName) {
+        setFilterType(targetTabName);
+        setTimeout(() => {
+          focusedTab.value = targetTabName;
+        }, 0);
+      }
     }
-  }, [focusedTab, searchStatus, tabTitles]);
+  }, [focusedTab, searchStatus, initialTabName]);
 
   const shouldUseTokensCacheData = useMemo(() => {
     return (
@@ -333,6 +354,18 @@ export function UniversalSearch({
         });
       }
 
+      if (result?.[EUniversalSearchType.Perp]?.items?.length) {
+        const data = result?.[EUniversalSearchType.Perp]
+          ?.items as IUniversalSearchResultItem[];
+        searchResultSections.push({
+          tabIndex: getTabIndexForSearchType(EUniversalSearchType.Perp),
+          title: intl.formatMessage({
+            id: ETranslations.global_perp,
+          }),
+          ...generateDataFn(data),
+        });
+      }
+
       if (result?.[EUniversalSearchType.MarketToken]?.items?.length) {
         const data = result?.[EUniversalSearchType.MarketToken]
           ?.items as IUniversalSearchResultItem[];
@@ -373,6 +406,23 @@ export function UniversalSearch({
 
       setSections(searchResultSections);
       setSearchStatus(ESearchStatus.done);
+
+      // Track search event for analytics
+      // Exclude Google search item from result count
+      const resultCount = searchResultSections.reduce((sum, section) => {
+        const count = section.data.filter(
+          (item) =>
+            !(
+              item.type === EUniversalSearchType.Dapp &&
+              isGoogleSearchItem(item.payload?.dappId)
+            ),
+        ).length;
+        return sum + count;
+      }, 0);
+      defaultLogger.universalSearch.search.universalSearchQuery({
+        searchText: input,
+        resultCount,
+      });
     } else {
       setSearchStatus(ESearchStatus.init);
     }
@@ -478,6 +528,8 @@ export function UniversalSearch({
               getSearchInput={() => searchInputRef.current}
             />
           );
+        case EUniversalSearchType.Perp:
+          return <UniversalSearchPerpItem item={item} />;
         default:
           return null;
       }
@@ -504,6 +556,8 @@ export function UniversalSearch({
           }-${index}`;
         case EUniversalSearchType.Dapp:
           return `${item.type}-${item.payload.dappId || index}`;
+        case EUniversalSearchType.Perp:
+          return `${item.type}-${item.payload.name}-${index}`;
         default:
           return `${index}`;
       }
@@ -640,7 +694,9 @@ export function UniversalSearch({
             autoFocus
             value={searchValue}
             placeholder={intl.formatMessage({
-              id: ETranslations.global_universal_search_placeholder,
+              id: platformEnv.isWebDappMode
+                ? ETranslations.global_search
+                : ETranslations.global_search_everything,
             })}
             onSearchTextChange={handleTextChange}
             onChangeText={handleChangeText}
@@ -666,6 +722,7 @@ const UniversalSearchWithHomeTokenListProvider = ({
     >
       <UniversalSearch
         filterTypes={route?.params?.filterTypes || getSearchTypes()}
+        initialTab={route?.params?.initialTab}
       />
     </HomeTokenListProviderMirrorWrapper>
   );

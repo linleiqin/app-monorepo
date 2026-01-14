@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { EDeviceType } from '@onekeyfe/hd-shared';
 import { MotiView } from 'moti';
@@ -14,24 +14,34 @@ import Svg, {
 
 import type { IYStackProps } from '@onekeyhq/components';
 import {
+  AnimatePresence,
   BlurView,
   Button,
   DecorativeOneKeyLogo,
   Icon,
   Page,
   SizableText,
+  Spinner,
   Stack,
   XStack,
   YStack,
   useMedia,
-  useThemeValue,
+  useTheme,
 } from '@onekeyhq/components';
+import {
+  useKeylessWallet,
+  useKeylessWalletFeatureIsEnabled,
+} from '@onekeyhq/kit/src/components/KeylessWallet/useKeylessWallet';
 import useAppNavigation from '@onekeyhq/kit/src/hooks/useAppNavigation';
+import { EOAuthSocialLoginProvider } from '@onekeyhq/shared/src/consts/authConsts';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import { defaultLogger } from '@onekeyhq/shared/src/logger/logger';
+import platformEnv from '@onekeyhq/shared/src/platformEnv';
 import { EOnboardingPagesV2 } from '@onekeyhq/shared/src/routes';
 import type { HwWalletAvatarImages } from '@onekeyhq/shared/src/utils/avatarUtils';
+import { EAccountSelectorSceneName } from '@onekeyhq/shared/types';
 
+import { AccountSelectorProviderMirror } from '../../../components/AccountSelector';
 import { WalletAvatar } from '../../../components/WalletAvatar';
 import { useThemeVariant } from '../../../hooks/useThemeVariant';
 import { TermsAndPrivacy } from '../../Onboarding/pages/GetStarted/components';
@@ -226,7 +236,78 @@ const GridBackground = memo(
 
 GridBackground.displayName = 'GridBackground';
 
-export default function GetStarted() {
+export const AnimatedDeviceAvatar = memo(
+  ({ deviceSize }: { deviceSize: number }) => {
+    const themeVariant = useThemeVariant();
+
+    const deviceData: (keyof typeof HwWalletAvatarImages)[] = useMemo(() => {
+      return [
+        themeVariant === 'light' ? `${EDeviceType.Pro}White` : EDeviceType.Pro,
+        EDeviceType.Classic,
+        EDeviceType.Touch,
+        ...(!platformEnv.isNative ? [EDeviceType.Mini] : []),
+      ];
+    }, [themeVariant]);
+
+    const [enableAnimation, setEnableAnimation] = useState(false);
+
+    useEffect(() => {
+      const timer = setTimeout(() => {
+        setEnableAnimation(true);
+      }, 100);
+
+      return () => clearTimeout(timer);
+    }, []);
+
+    return (
+      <YStack w="$5" h={deviceSize} overflow="hidden" alignItems="center">
+        {enableAnimation ? (
+          <MotiView
+            from={{
+              translateY: 0,
+            }}
+            animate={{
+              translateY: Array.from(
+                { length: deviceData.length },
+                (_, index) => ({
+                  type: 'spring',
+                  value: -index * deviceSize,
+                  delay: 1000,
+                }),
+              ),
+            }}
+            transition={{
+              loop: true,
+            }}
+          >
+            <YStack>
+              {deviceData.map((device, index) => (
+                <WalletAvatar
+                  key={index}
+                  wallet={undefined}
+                  img={device}
+                  size={deviceSize}
+                />
+              ))}
+            </YStack>
+          </MotiView>
+        ) : (
+          <YStack>
+            <WalletAvatar
+              wallet={undefined}
+              img={deviceData[0]}
+              size={deviceSize}
+            />
+          </YStack>
+        )}
+      </YStack>
+    );
+  },
+);
+
+AnimatedDeviceAvatar.displayName = 'AnimatedDeviceAvatar';
+
+function GetStarted() {
   const navigation = useAppNavigation();
   const handleGetStarted = () => {
     navigation.push(EOnboardingPagesV2.PickYourDevice);
@@ -234,37 +315,24 @@ export default function GetStarted() {
   };
   const { gtMd } = useMedia();
   const intl = useIntl();
+  const isKeylessWalletEnabled = useKeylessWalletFeatureIsEnabled();
+  const { enableKeylessWalletLoading, checkKeylessWalletLocalExistence } =
+    useKeylessWallet();
 
   const handleCreateOrImportWallet = () => {
     navigation.push(EOnboardingPagesV2.CreateOrImportWallet);
   };
 
-  const themeVariant = useThemeVariant();
+  const handleGoogleLogin = useCallback(async () => {
+    await checkKeylessWalletLocalExistence({
+      signInProvider: EOAuthSocialLoginProvider.Google,
+    });
+  }, [checkKeylessWalletLocalExistence]);
 
   // Cache theme values to avoid multiple useThemeValue calls during render
-  const neutral6 = useThemeValue('$neutral6');
-  const bgColor = useThemeValue('$bgApp');
-
-  const DEVICE_DATA: (keyof typeof HwWalletAvatarImages)[] = useMemo(() => {
-    return [
-      themeVariant === 'light' ? `${EDeviceType.Pro}White` : EDeviceType.Pro,
-      EDeviceType.Classic,
-      EDeviceType.Touch,
-      EDeviceType.Mini,
-    ];
-  }, [themeVariant]);
-
-  // Delay animation initialization to improve initial render performance
-  const [enableAnimation, setEnableAnimation] = useState(false);
-
-  useEffect(() => {
-    // Start animation after component has mounted and initial render is complete
-    const timer = setTimeout(() => {
-      setEnableAnimation(true);
-    }, 100);
-
-    return () => clearTimeout(timer);
-  }, []);
+  const theme = useTheme();
+  const neutral6 = theme.neutral6.val;
+  const bgColor = theme.bgApp.val;
 
   return (
     <Page>
@@ -364,71 +432,92 @@ export default function GetStarted() {
                   onPress={handleGetStarted}
                 >
                   <XStack alignItems="center" gap="$2">
-                    <YStack
-                      w="$5"
-                      h={DEVICE_SIZE}
-                      overflow="hidden"
-                      alignItems="center"
-                    >
-                      {enableAnimation ? (
-                        <MotiView
-                          from={{
-                            translateY: 0,
-                          }}
-                          animate={{
-                            translateY: Array.from(
-                              { length: DEVICE_DATA.length },
-                              (_, index) => ({
-                                type: 'spring',
-                                value: -index * DEVICE_SIZE,
-                                delay: 1000,
-                              }),
-                            ),
-                          }}
-                          transition={{
-                            loop: true,
-                          }}
-                        >
-                          <YStack>
-                            {DEVICE_DATA.map((device, index) => (
-                              <WalletAvatar
-                                key={index}
-                                wallet={undefined}
-                                img={device}
-                                size={DEVICE_SIZE}
-                              />
-                            ))}
-                          </YStack>
-                        </MotiView>
-                      ) : (
-                        <YStack>
-                          <WalletAvatar
-                            wallet={undefined}
-                            img={DEVICE_DATA[0]}
-                            size={DEVICE_SIZE}
-                          />
-                        </YStack>
-                      )}
-                    </YStack>
+                    <AnimatedDeviceAvatar deviceSize={DEVICE_SIZE} />
                     <SizableText size="$bodyLgMedium" color="$textInverse">
                       {intl.formatMessage({
-                        id: ETranslations.global_get_started,
+                        id: ETranslations.global_connect_hardware_wallet,
                       })}
                     </SizableText>
                   </XStack>
                 </Button>
-                <Button
-                  bg="$gray3"
-                  hoverStyle={{ bg: '$gray4' }}
-                  pressStyle={{ bg: '$gray5' }}
-                  size="large"
-                  icon="PlusLargeOutline"
-                  onPress={handleCreateOrImportWallet}
-                >
-                  {intl.formatMessage({
-                    id: ETranslations.onboarding_create_or_import_wallet,
-                  })}
-                </Button>
+                {isKeylessWalletEnabled ? (
+                  <XStack gap="$2">
+                    <Button
+                      flex={1}
+                      bg="$gray3"
+                      hoverStyle={{ bg: '$gray4' }}
+                      pressStyle={{ bg: '$gray5' }}
+                      size="large"
+                      childrenAsText={false}
+                      onPress={
+                        enableKeylessWalletLoading
+                          ? undefined
+                          : handleGoogleLogin
+                      }
+                    >
+                      <XStack gap="$2" alignItems="center">
+                        <AnimatePresence exitBeforeEnter initial={false}>
+                          {enableKeylessWalletLoading ? (
+                            <YStack
+                              key="loading"
+                              animation="quick"
+                              animateOnly={['transform', 'opacity']}
+                              enterStyle={{ scale: 0.7, opacity: 0 }}
+                              exitStyle={{ scale: 0.7, opacity: 0 }}
+                            >
+                              <Spinner size="small" />
+                            </YStack>
+                          ) : (
+                            <YStack
+                              key="icon"
+                              animation="quick"
+                              animateOnly={['transform', 'opacity']}
+                              enterStyle={{ scale: 0.7, opacity: 0 }}
+                              exitStyle={{ scale: 0.7, opacity: 0 }}
+                            >
+                              <Icon name="GoogleIllus" size="$5" />
+                            </YStack>
+                          )}
+                        </AnimatePresence>
+                        <SizableText size="$bodyLgMedium">
+                          {intl.formatMessage(
+                            { id: ETranslations.continue_with_social_platform },
+                            { platform: 'Google' },
+                          )}
+                        </SizableText>
+                      </XStack>
+                    </Button>
+                    <Button
+                      bg="$gray3"
+                      hoverStyle={{ bg: '$gray4' }}
+                      pressStyle={{ bg: '$gray5' }}
+                      size="large"
+                      childrenAsText={false}
+                      onPress={handleCreateOrImportWallet}
+                    >
+                      <Icon name="DotHorOutline" size="$5" />
+                    </Button>
+                  </XStack>
+                ) : (
+                  <Button
+                    bg="$gray3"
+                    hoverStyle={{ bg: '$gray4' }}
+                    pressStyle={{ bg: '$gray5' }}
+                    size="large"
+                    alignSelf="stretch"
+                    childrenAsText={false}
+                    onPress={handleCreateOrImportWallet}
+                  >
+                    <XStack gap="$2" alignItems="center">
+                      <Icon name="PlusLargeOutline" size="$5" />
+                      <SizableText size="$bodyLgMedium">
+                        {intl.formatMessage({
+                          id: ETranslations.onboarding_create_or_import_wallet,
+                        })}
+                      </SizableText>
+                    </XStack>
+                  </Button>
+                )}
               </Stack>
             </YStack>
           </YStack>
@@ -440,3 +529,17 @@ export default function GetStarted() {
     </Page>
   );
 }
+
+function GetStartedWithContext() {
+  return (
+    <AccountSelectorProviderMirror
+      enabledNum={[0]}
+      config={{
+        sceneName: EAccountSelectorSceneName.home,
+      }}
+    >
+      <GetStarted />
+    </AccountSelectorProviderMirror>
+  );
+}
+export default GetStartedWithContext;

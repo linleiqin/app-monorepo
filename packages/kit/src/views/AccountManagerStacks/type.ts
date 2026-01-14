@@ -4,7 +4,6 @@ import type {
   IDBWallet,
 } from '@onekeyhq/kit-bg/src/dbs/local/types';
 
-import type { EFirmwareType } from '@onekeyfe/hd-shared';
 import type { AvatarImageProps } from 'tamagui';
 
 export type IAccountProps = {
@@ -26,14 +25,12 @@ export type IAccountGroupProps = {
 export type IWalletProps = {
   id: string;
   img: IWalletAvatarProps['img'];
-  status?: 'default' | 'connected';
+  status?: 'default' | 'connected' | 'keyless';
   type?: 'hd' | 'hw' | 'others';
   name: string;
   accounts: IAccountGroupProps[];
 };
 
 export type IAccountSelectorWalletInfo = IDBWallet & {
-  // only firmware device
-  firmwareTypeBadge?: EFirmwareType;
   badge?: number | string;
 };

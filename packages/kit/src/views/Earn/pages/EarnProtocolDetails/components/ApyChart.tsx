@@ -9,25 +9,15 @@ import {
   Stack,
   YStack,
 } from '@onekeyhq/components';
-import backgroundApiProxy from '@onekeyhq/kit/src/background/instance/backgroundApiProxy';
 import { LightweightChart } from '@onekeyhq/kit/src/components/LightweightChart';
-import { usePromiseResult } from '@onekeyhq/kit/src/hooks/usePromiseResult';
 
 import type { UTCTimestamp } from 'lightweight-charts';
 
 interface IApyChartProps {
-  networkId: string;
-  symbol: string;
-  provider: string;
-  vault?: string;
+  apyHistory?: { timestamp: number; apy: string }[] | null;
 }
 
-const ApyChartComponent = ({
-  networkId,
-  symbol,
-  provider,
-  vault,
-}: IApyChartProps) => {
+const ApyChartComponent = ({ apyHistory }: IApyChartProps) => {
   const intl = useIntl();
 
   // Hover state for popover
@@ -71,17 +61,16 @@ const ApyChartComponent = ({
     if (!hoverData || !containerWidth) return null;
 
     const POPOVER_WIDTH = 120;
-    const OFFSET = 10; // Distance from cursor
+    const OFFSET = 10;
     const isLeftHalf = hoverData.x < containerWidth / 2;
 
     return {
       left: isLeftHalf ? hoverData.x + OFFSET : hoverData.x - OFFSET,
-      translateXValue: isLeftHalf ? 0 : -POPOVER_WIDTH, // Left align or right align
+      translateXValue: isLeftHalf ? 0 : -POPOVER_WIDTH,
       top: Math.max(10, hoverData.y - 70),
     };
   }, [hoverData, containerWidth]);
 
-  // Format date for popover with i18n
   const formatPopoverDate = useCallback(
     (timestamp: number) => {
       const date = new Date(timestamp * 1000);
@@ -94,44 +83,25 @@ const ApyChartComponent = ({
     [intl],
   );
 
-  const { result: chartData, isLoading } = usePromiseResult(
-    async () => {
-      const apyHistory = await backgroundApiProxy.serviceStaking.getApyHistory({
-        networkId,
-        symbol,
-        provider,
-        vault,
-      });
-
-      if (!apyHistory || apyHistory.length === 0) {
-        return null;
-      }
-
-      // Convert to chart format
-      // timestamp is in milliseconds, need to convert to seconds for UTCTimestamp
-      const formattedData = apyHistory
-        .map((item) => ({
-          time: Math.floor(item.timestamp / 1000) as UTCTimestamp,
-          value: Number(item.apy),
-        }))
-        .sort((a, b) => a.time - b.time);
-
-      // Convert to Market chart format [timestamp, value][]
-      const marketChartData = formattedData.map(
-        (item) => [item.time, item.value] as [UTCTimestamp, number],
-      );
-
-      return {
-        marketChartData,
-      };
-    },
-    [networkId, symbol, provider, vault],
-    { watchLoading: true },
-  );
+  const chartData = useMemo(() => {
+    if (!apyHistory || apyHistory.length === 0) {
+      return null;
+    }
+    const formattedData = apyHistory
+      .map((item) => ({
+        time: Math.floor(item.timestamp / 1000) as UTCTimestamp,
+        value: Number(item.apy),
+      }))
+      .sort((a, b) => a.time - b.time);
+    const marketChartData = formattedData.map(
+      (item) => [item.time, item.value] as [UTCTimestamp, number],
+    );
+    return { marketChartData };
+  }, [apyHistory]);
+  const isLoading = apyHistory === undefined;
 
   return (
     <>
-      {/* Chart Skeleton - show during loading */}
       {isLoading && !chartData ? (
         <Stack
           $gtMd={{ height: 200 }}
@@ -144,7 +114,6 @@ const ApyChartComponent = ({
           enterStyle={{ opacity: 0 }}
         >
           <Skeleton w="100%" h="100%" borderRadius="$2" />
-          {/* Simulated chart curve overlay for better visual */}
           <Stack
             position="absolute"
             bottom={0}
@@ -158,7 +127,6 @@ const ApyChartComponent = ({
         </Stack>
       ) : null}
 
-      {/* Chart - show when data is loaded */}
       {chartData && !isLoading ? (
         <YStack
           position="relative"
@@ -172,7 +140,6 @@ const ApyChartComponent = ({
             }
           }}
         >
-          {/* Hover Popover - follows cursor/touch position with boundary detection */}
           {hoverData && popoverPosition ? (
             <YStack
               position="absolute"
@@ -207,6 +174,10 @@ const ApyChartComponent = ({
             data={chartData.marketChartData}
             height={200}
             onHover={handleHover}
+            lineColor="#008347D6"
+            topColor="#00834726"
+            bottomColor="#00834700"
+            lineWidth={2}
           />
           <Divider mt="$8" />
         </YStack>

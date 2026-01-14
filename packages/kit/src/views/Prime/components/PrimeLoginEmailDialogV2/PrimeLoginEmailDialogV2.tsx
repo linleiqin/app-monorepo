@@ -1,27 +1,38 @@
-import { useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 
 import { useIntl } from 'react-intl';
 
 import { Dialog, Form, Input, Stack, useForm } from '@onekeyhq/components';
 import backgroundApiProxy from '@onekeyhq/kit/src/background/instance/backgroundApiProxy';
 import { useOneKeyAuth } from '@onekeyhq/kit/src/components/OneKeyAuth/useOneKeyAuth';
+import { useDevSettingsPersistAtom } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import appStorage from '@onekeyhq/shared/src/storage/appStorage';
 import { EAppSyncStorageKeys } from '@onekeyhq/shared/src/storage/syncStorageKeys';
 import stringUtils from '@onekeyhq/shared/src/utils/stringUtils';
 import timerUtils from '@onekeyhq/shared/src/utils/timerUtils';
 
+import { DevTestAccountSelector } from '../OneKeyIDLoginDialog/DevTestAccountSelector';
 import { PrimeLoginEmailCodeDialogV2 } from '../PrimeLoginEmailCodeDialogV2';
 
-export function PrimeLoginEmailDialogV2(props: {
+function PrimeLoginEmailDialogV2(props: {
   onComplete: () => void;
   onLoginSuccess?: () => void | Promise<void>;
   title?: string;
   description?: string;
-  onConfirm: (code: string) => void;
+  onConfirm?: (code: string) => void;
+  onCancel?: () => void | Promise<void>;
 }) {
-  const { onComplete, onLoginSuccess, title, description, onConfirm } = props;
+  const {
+    onComplete,
+    onLoginSuccess,
+    title,
+    description,
+    onConfirm,
+    onCancel,
+  } = props;
 
+  const [devSettings] = useDevSettingsPersistAtom();
   const lastOneKeyIdLoginEmail = appStorage.syncStorage.getString(
     EAppSyncStorageKeys.last_onekey_id_login_email,
   );
@@ -60,6 +71,8 @@ export function PrimeLoginEmailDialogV2(props: {
         onComplete?.();
         await timerUtils.wait(550);
         const dialog = Dialog.show({
+          onCancel,
+          onClose: onCancel,
           renderContent: (
             <PrimeLoginEmailCodeDialogV2
               sendCode={sendCode}
@@ -93,6 +106,7 @@ export function PrimeLoginEmailDialogV2(props: {
       onConfirm,
       onLoginSuccess,
       sendCode,
+      onCancel,
     ],
   );
 
@@ -114,6 +128,7 @@ export function PrimeLoginEmailDialogV2(props: {
         </Dialog.Description>
       </Dialog.Header>
       <Stack>
+        {devSettings.enabled ? <DevTestAccountSelector /> : null}
         <Form form={form}>
           <Form.Field
             name="email"

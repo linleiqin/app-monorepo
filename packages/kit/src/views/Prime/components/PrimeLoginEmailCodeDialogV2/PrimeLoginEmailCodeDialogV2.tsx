@@ -13,8 +13,11 @@ import {
   YStack,
 } from '@onekeyhq/components';
 import { useOneKeyAuth } from '@onekeyhq/kit/src/components/OneKeyAuth/useOneKeyAuth';
+import { useDevSettingsPersistAtom } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import { defaultLogger } from '@onekeyhq/shared/src/logger/logger';
+
+import { DevOTPAutoFill } from '../OneKeyIDLoginDialog/DevOTPAutoFill';
 
 const COUNTDOWN_TIME = 60;
 
@@ -23,9 +26,10 @@ export function PrimeLoginEmailCodeDialogV2(props: {
   sendCode: (args: { email: string }) => Promise<void>;
   loginWithCode: (args: { code: string; email: string }) => Promise<void>;
   onLoginSuccess?: () => void | Promise<void>;
-  onConfirm: (code: string) => void;
+  onConfirm?: (code: string) => void;
 }) {
   const { email, sendCode, loginWithCode, onLoginSuccess, onConfirm } = props;
+  const [devSettings] = useDevSettingsPersistAtom();
   const [isSubmittingVerificationCode, setIsSubmittingVerificationCode] =
     useState(false);
   const [countdown, setCountdown] = useState(COUNTDOWN_TIME);
@@ -213,6 +217,8 @@ export function PrimeLoginEmailCodeDialogV2(props: {
             setState({ status: 'initial' });
           }}
         />
+
+        {devSettings.enabled ? <DevOTPAutoFill email={email} /> : null}
 
         {state.status === 'error' ? (
           <SizableText size="$bodyMd" color="$red9">

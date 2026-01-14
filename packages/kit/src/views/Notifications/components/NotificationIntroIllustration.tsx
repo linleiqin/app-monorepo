@@ -7,23 +7,38 @@ import {
   Stack,
   XStack,
   YStack,
+  useTheme,
 } from '@onekeyhq/components';
+import { ETranslations } from '@onekeyhq/shared/src/locale';
+import { appLocale } from '@onekeyhq/shared/src/locale/appLocale';
 
 const DATA = [
   {
-    title: 'Sent',
-    description: 'Account 1 sent 10 MATIC',
+    title: appLocale.intl.formatMessage({
+      id: ETranslations.global_wallet_activity,
+    }),
+    description: appLocale.intl.formatMessage({
+      id: ETranslations.global_real_time_updates,
+    }),
     time: 'now',
     stacked: true,
   },
   {
-    title: 'Received',
-    description: 'Account 2 received 10 MATIC',
+    title: appLocale.intl.formatMessage({
+      id: ETranslations.global_market_moves,
+    }),
+    description: appLocale.intl.formatMessage({
+      id: ETranslations.global_daily_price_change,
+    }),
     time: '10m ago',
   },
   {
-    title: 'Approved USDC',
-    description: 'Account 3 • Polygon',
+    title: appLocale.intl.formatMessage({
+      id: ETranslations.global_perps_alert,
+    }),
+    description: appLocale.intl.formatMessage({
+      id: ETranslations.global_instant_update_liquidation,
+    }),
     time: '1h ago',
   },
 ];
@@ -39,6 +54,9 @@ function Item({
   time?: string;
   stacked?: boolean;
 }) {
+  const theme = useTheme();
+  const gray5Color = theme.gray5.val;
+  const gray3Color = theme.gray3.val;
   return (
     <YStack {...(stacked ? { pb: '$2.5' } : {})}>
       {stacked ? (
@@ -59,7 +77,7 @@ function Item({
           <LinearGradient
             h="$2.5"
             mt="auto"
-            colors={['$gray5', '$gray3']}
+            colors={[gray5Color, gray3Color]}
             start={[0, 0]}
             end={[0, 1]}
           />

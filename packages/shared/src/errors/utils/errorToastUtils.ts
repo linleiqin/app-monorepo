@@ -60,6 +60,7 @@ function showToastOfError(error: IOneKeyError | unknown | undefined) {
       // ignore auto toast errors
       EOneKeyErrorClassNames.HardwareUserCancelFromOutside,
       EOneKeyErrorClassNames.PrimeLoginDialogCancelError,
+      EOneKeyErrorClassNames.OAuthLoginCancelError,
       EOneKeyErrorClassNames.SecureQRCodeDialogCancel,
       EOneKeyErrorClassNames.PasswordPromptDialogCancel,
       EOneKeyErrorClassNames.OneKeyErrorScanQrCodeCancel,
@@ -101,8 +102,29 @@ function showToastOfError(error: IOneKeyError | unknown | undefined) {
     lastToastErrorInstance = err;
     void (async () => {
       const diagnosticText = await buildDiagnosticText(err);
+
+      let httpStatusCode: number | undefined = err.httpStatusCode;
+
+      if (!httpStatusCode) {
+        const errorWithResponse = err as
+          | (IOneKeyError & {
+              response?: {
+                status?: unknown;
+              };
+            })
+          | undefined;
+
+        if (
+          errorWithResponse?.response &&
+          typeof errorWithResponse.response.status === 'number'
+        ) {
+          httpStatusCode = errorWithResponse.response.status;
+        }
+      }
+
       appEventBus.emit(EAppEventBusNames.ShowToast, {
         errorCode: err?.code,
+        httpStatusCode,
         method: 'error',
         title: err?.message ?? 'Error',
         requestId: err?.requestId,

@@ -27,7 +27,7 @@ import type ServiceCustomToken from '../services/ServiceCustomToken';
 import type ServiceDApp from '../services/ServiceDApp';
 import type ServiceDappSide from '../services/ServiceDappSide';
 import type ServiceDBBackup from '../services/ServiceDBBackup';
-import type ServiceDefi from '../services/ServiceDefi';
+import type ServiceDeFi from '../services/ServiceDeFi';
 import type ServiceDemo from '../services/ServiceDemo';
 import type ServiceDevSetting from '../services/ServiceDevSetting';
 import type ServiceDiscovery from '../services/ServiceDiscovery';
@@ -42,10 +42,12 @@ import type ServiceHardwareUI from '../services/ServiceHardwareUI';
 import type ServiceHistory from '../services/ServiceHistory';
 import type ServiceHyperliquid from '../services/ServiceHyperLiquid/ServiceHyperliquid';
 import type ServiceHyperliquidExchange from '../services/ServiceHyperLiquid/ServiceHyperliquidExchange';
+import type ServiceHyperliquidReferral from '../services/ServiceHyperLiquid/ServiceHyperliquidReferral';
 import type ServiceHyperliquidSubscription from '../services/ServiceHyperLiquid/ServiceHyperliquidSubscription';
 import type ServiceHyperliquidWallet from '../services/ServiceHyperLiquid/ServiceHyperliquidWallet';
 import type ServiceInternalSignAndVerify from '../services/ServiceInternalSignAndVerify';
 import type ServiceIpTable from '../services/ServiceIpTable';
+import type ServiceKeylessWallet from '../services/ServiceKeylessWallet/ServiceKeylessWallet';
 import type ServiceLightning from '../services/ServiceLightning';
 import type ServiceLiteCardMnemonic from '../services/ServiceLiteCardMnemonic';
 import type ServiceLogger from '../services/ServiceLogger';
@@ -60,6 +62,7 @@ import type ServiceNFT from '../services/ServiceNFT';
 import type ServiceNostr from '../services/ServiceNostr';
 import type ServiceNotification from '../services/ServiceNotification';
 import type ServiceOnboarding from '../services/ServiceOnboarding';
+import type ServiceOneKeyID from '../services/ServiceOneKeyID';
 import type ServicePassword from '../services/ServicePassword';
 import type ServicePrime from '../services/ServicePrime';
 import type ServicePrimeCloudSync from '../services/ServicePrimeCloudSync';
@@ -68,6 +71,7 @@ import type ServicePrimeTransfer from '../services/ServicePrimeTransfer';
 import type ServicePromise from '../services/ServicePromise';
 import type ServiceQrWallet from '../services/ServiceQrWallet';
 import type ServiceReferralCode from '../services/ServiceReferralCode';
+import type ServiceRookieGuide from '../services/ServiceRookieGuide';
 import type ServiceScanQRCode from '../services/ServiceScanQRCode';
 import type ServiceSend from '../services/ServiceSend';
 import type ServiceSetting from '../services/ServiceSetting';
@@ -158,7 +162,7 @@ class BackgroundApiProxy
     'serviceTransaction',
   ) as ServiceTransaction;
 
-  serviceDefi = this._createProxyService('serviceDefi') as ServiceDefi;
+  serviceDeFi = this._createProxyService('serviceDeFi') as ServiceDeFi;
 
   serviceValidator = this._createProxyService(
     'serviceValidator',
@@ -360,6 +364,10 @@ class BackgroundApiProxy
     'serviceHyperliquidExchange',
   ) as ServiceHyperliquidExchange;
 
+  serviceHyperliquidReferral = this._createProxyService(
+    'serviceHyperliquidReferral',
+  ) as ServiceHyperliquidReferral;
+
   serviceHyperliquidWallet = this._createProxyService(
     'serviceHyperliquidWallet',
   ) as ServiceHyperliquidWallet;
@@ -372,11 +380,23 @@ class BackgroundApiProxy
     'serviceWalletStatus',
   ) as ServiceWalletStatus;
 
+  serviceKeylessWallet = this._createProxyService(
+    'serviceKeylessWallet',
+  ) as ServiceKeylessWallet;
+
   serviceIpTable = this._createProxyService('serviceIpTable') as ServiceIpTable;
 
   serviceNetworkDoctor = this._createProxyService(
     'serviceNetworkDoctor',
   ) as ServiceNetworkDoctor;
+
+  serviceOneKeyID = this._createProxyService(
+    'serviceOneKeyID',
+  ) as ServiceOneKeyID;
+
+  serviceRookieGuide = this._createProxyService(
+    'serviceRookieGuide',
+  ) as ServiceRookieGuide;
 }
 
 export default BackgroundApiProxy;

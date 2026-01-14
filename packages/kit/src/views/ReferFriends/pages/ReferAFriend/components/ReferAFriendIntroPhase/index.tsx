@@ -57,7 +57,12 @@ export function ReferAFriendIntroPhase({
             },
             {
               amount: (
-                <SizableText size="$heading2xl" color="$textSuccess">
+                <SizableText
+                  // `react-intl` may return an array of nodes; ensure the element has a stable key.
+                  key="referral_reward_amount"
+                  size="$heading2xl"
+                  color="$textSuccess"
+                >
                   {`${postConfig.referralReward.unit}${postConfig.referralReward.amount}`}
                 </SizableText>
               ),

@@ -4,6 +4,7 @@ import { memoizee } from '@onekeyhq/shared/src/utils/cacheUtils';
 
 import { DESKTOP_API_MESSAGE_TYPE } from '../base/consts';
 import { JsBridgeDesktopApiOfMain } from '../base/JsBridgeDesktopApiOfMain';
+import DesktopApiAppleAuth from '../DesktopApiAppleAuth';
 import DesktopApiAppUpdate from '../DesktopApiAppUpdate';
 import DesktopApiBluetooth from '../DesktopApiBluetooth';
 import DesktopApiBundleUpdate from '../DesktopApiBundleUpdate';
@@ -12,6 +13,7 @@ import DesktopApiDev from '../DesktopApiDev';
 import DesktopApiInAppPurchase from '../DesktopApiInAppPurchase';
 import DesktopApiKeychain from '../DesktopApiKeychain';
 import DesktopApiNotification from '../DesktopApiNotification';
+import DesktopApiOAuthLocalServer from '../DesktopApiOAuthLocalServer';
 import DesktopApiSecurity from '../DesktopApiSecurity';
 import DesktopApiSniRequest from '../DesktopApiSniRequest';
 import DesktopApiStorage from '../DesktopApiStorage';
@@ -74,6 +76,16 @@ class DesktopApi implements IDesktopApi {
   });
 
   sniRequest: DesktopApiSniRequest = new DesktopApiSniRequest({
+    desktopApi: this,
+  });
+
+  oauthLocalServer: DesktopApiOAuthLocalServer = new DesktopApiOAuthLocalServer(
+    {
+      desktopApi: this,
+    },
+  );
+
+  appleAuth: DesktopApiAppleAuth = new DesktopApiAppleAuth({
     desktopApi: this,
   });
 }

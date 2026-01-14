@@ -7,7 +7,10 @@ import { Page, SearchBar, Stack } from '@onekeyhq/components';
 import { AccountSelectorProviderMirror } from '@onekeyhq/kit/src/components/AccountSelector';
 import useAppNavigation from '@onekeyhq/kit/src/hooks/useAppNavigation';
 import { useDebounce } from '@onekeyhq/kit/src/hooks/useDebounce';
-import { useSwapProSelectTokenAtom } from '@onekeyhq/kit/src/states/jotai/contexts/swap';
+import {
+  useSwapActions,
+  useSwapProSelectTokenAtom,
+} from '@onekeyhq/kit/src/states/jotai/contexts/swap';
 import { EJotaiContextStoreNames } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import type {
@@ -30,10 +33,15 @@ import { SwapProviderMirror } from '../SwapProviderMirror';
 import type { IMarketToken } from '../../../Market/MarketHomeV2/components/MarketTokenList/MarketTokenData';
 import type { RouteProp } from '@react-navigation/core';
 
-const SwapProSelectTokenPage = () => {
+interface ISwapProSelectTokenPageProps {
+  autoSearch?: boolean;
+}
+const SwapProSelectTokenPage = ({
+  autoSearch,
+}: ISwapProSelectTokenPageProps) => {
   const intl = useIntl();
-  const [swapProTokenSelect, setSwapProSelectToken] =
-    useSwapProSelectTokenAtom();
+  const { setSwapProSelectToken } = useSwapActions().current;
+  const [swapProTokenSelect] = useSwapProSelectTokenAtom();
   const [selectedNetworkId, setSelectedNetworkId] = useState<
     string | undefined
   >(swapProTokenSelect?.networkId ?? 'evm--1');
@@ -44,11 +52,13 @@ const SwapProSelectTokenPage = () => {
     setSelectedNetworkId(networkId);
   };
   const searchValueDebounce = useDebounce(searchValue, 500, { leading: true });
-  const { searchLoading, searchTokenList } =
-    useSwapProTokenSearch(searchValueDebounce);
+  const { searchLoading, searchTokenList } = useSwapProTokenSearch(
+    searchValueDebounce,
+    selectedNetworkId,
+  );
   const navigation = useAppNavigation();
   const handleTokenSelect = (token: IMarketToken) => {
-    setSwapProSelectToken({
+    void setSwapProSelectToken({
       networkId: token.networkId,
       contractAddress: token.address,
       decimals: token.decimals,
@@ -64,7 +74,7 @@ const SwapProSelectTokenPage = () => {
   const handleSearchTokenSelect = (
     token: IMarketSearchV2Token & { networkLogoURI: string },
   ) => {
-    setSwapProSelectToken({
+    void setSwapProSelectToken({
       networkId: token.network,
       contractAddress: token.address,
       decimals: token.decimals,
@@ -87,11 +97,11 @@ const SwapProSelectTokenPage = () => {
       <Page.Body>
         <Stack px="$5" pb="$4">
           <SearchBar
+            autoFocus={autoSearch}
             placeholder={intl.formatMessage({
               id: ETranslations.token_selector_search_placeholder,
             })}
             zIndex={20}
-            selectTextOnFocus
             value={searchValue}
             onSearchTextChange={setSearchValue}
           />
@@ -120,7 +130,10 @@ const SwapProSelectTokenPage = () => {
               }}
             />
             {startListSelect ? (
-              <MarketWatchlistTokenList />
+              <MarketWatchlistTokenList
+                onItemPress={handleTokenSelect}
+                hideNativeToken
+              />
             ) : (
               <MarketNormalTokenList
                 onItemPress={handleTokenSelect}
@@ -139,13 +152,13 @@ const SwapProSelectTokenModalWithProvider = () => {
     useRoute<
       RouteProp<IModalSwapParamList, EModalSwapRoutes.SwapProSelectToken>
     >();
-  const { storeName } = route.params;
+  const { storeName, autoSearch = false } = route.params;
   return (
     <MarketWatchListProviderMirrorV2
       storeName={EJotaiContextStoreNames.marketWatchListV2}
     >
       <SwapProviderMirror storeName={storeName}>
-        <SwapProSelectTokenPage />
+        <SwapProSelectTokenPage autoSearch={autoSearch} />
       </SwapProviderMirror>
     </MarketWatchListProviderMirrorV2>
   );

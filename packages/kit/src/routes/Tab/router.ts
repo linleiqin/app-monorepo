@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 
 import { CommonActions } from '@react-navigation/native';
 
@@ -11,25 +11,22 @@ import type {
   ITabNavigatorConfig,
   ITabNavigatorExtraConfig,
 } from '@onekeyhq/components/src/layouts/Navigation/Navigator/types';
-import {
-  useIsGtMdNonNative,
-  useToMyOneKeyModalByRootNavigation,
-} from '@onekeyhq/kit/src/views/DeviceManagement/hooks/useToMyOneKeyModal';
+import { useIsGtMdNonNative } from '@onekeyhq/kit/src/views/DeviceManagement/hooks/useToMyOneKeyModal';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import platformEnv from '@onekeyhq/shared/src/platformEnv';
 import { ETabMarketRoutes, ETabRoutes } from '@onekeyhq/shared/src/routes';
 
 import { usePerpTabConfig } from '../../hooks/usePerpTabConfig';
-import { useToReferFriendsModalByRootNavigation } from '../../hooks/useReferFriends';
 import { developerRouters } from '../../views/Developer/router';
+import { useDeviceManagerModalStyle } from '../../views/DeviceManagement/hooks/useDeviceManagerModalStyle';
 import { homeRouters } from '../../views/Home/router';
 import { perpRouters } from '../../views/Perp/router';
 import { perpTradeRouters as perpWebviewRouters } from '../../views/PerpTrade/router';
 
+import { deviceManagementRouters } from './DeviceManagement/router';
 import { discoveryRouters } from './Discovery/router';
 import { earnRouters } from './Earn/router';
 import { marketRouters } from './Marktet/router';
-import { meRouters } from './Me/router';
 import { multiTabBrowserRouters } from './MultiTabBrowser/router';
 import { referFriendsRouters } from './ReferFriends/router';
 import { swapRouters } from './Swap/router';
@@ -66,6 +63,7 @@ const getDiscoverRouterConfig = (
 export const useTabRouterConfig = (params?: IGetTabRouterParams) => {
   const { md } = useMedia();
 
+  const { isModalStack } = useDeviceManagerModalStyle();
   const isShowDesktopDiscover = useIsShowDesktopDiscover();
   const isWebDappMode = platformEnv.isWebDappMode;
   const isShowMDDiscover = useMemo(
@@ -77,8 +75,6 @@ export const useTabRouterConfig = (params?: IGetTabRouterParams) => {
     [isShowDesktopDiscover, md],
   );
 
-  const toMyOneKeyModal = useToMyOneKeyModalByRootNavigation();
-  const toReferFriendsPage = useToReferFriendsModalByRootNavigation();
   const isGtMdNonNative = useIsGtMdNonNative();
   const shouldShowMarketTab = !(
     platformEnv.isExtensionUiPopup || platformEnv.isExtensionUiSidePanel
@@ -106,10 +102,6 @@ export const useTabRouterConfig = (params?: IGetTabRouterParams) => {
     };
   }, []);
 
-  const handleReferFriendsEntry = useCallback(() => {
-    void toReferFriendsPage();
-  }, [toReferFriendsPage]);
-
   const referFriendsTabConfig = useMemo(() => {
     return {
       name: ETabRoutes.ReferFriends,
@@ -120,9 +112,8 @@ export const useTabRouterConfig = (params?: IGetTabRouterParams) => {
       children: referFriendsRouters,
       trackId: 'global-referral',
       freezeOnBlur: Boolean(params?.freezeOnBlur),
-      tabbarOnPress: handleReferFriendsEntry,
     };
-  }, [handleReferFriendsEntry, params?.freezeOnBlur]);
+  }, [params?.freezeOnBlur]);
 
   return useMemo(() => {
     const tabs = [
@@ -149,6 +140,8 @@ export const useTabRouterConfig = (params?: IGetTabRouterParams) => {
             exact: true,
             children: marketRouters,
             trackId: 'global-market',
+            // Hide Market tab on mobile (merged into Discovery)
+            hiddenIcon: platformEnv.isNative,
             // Only apply custom tab press handler for non-mobile platforms
             ...(platformEnv.isDesktop ||
             platformEnv.isWeb ||
@@ -220,25 +213,13 @@ export const useTabRouterConfig = (params?: IGetTabRouterParams) => {
             name: ETabRoutes.DeviceManagement,
             tabBarIcon: () => 'OnekeyDeviceCustom',
             translationId: ETranslations.global_device,
-            tabbarOnPress: toMyOneKeyModal,
-            children: null,
+            freezeOnBlur: Boolean(params?.freezeOnBlur),
+            exact: true,
+            children: deviceManagementRouters,
             trackId: 'global-my-onekey',
-            hideOnTabBar: !isGtMdNonNative,
+            hideOnTabBar: isModalStack,
           },
       isShowMDDiscover ? getDiscoverRouterConfig(params) : undefined,
-      platformEnv.isDev
-        ? {
-            name: ETabRoutes.Me,
-            rewrite: '/me',
-            exact: true,
-            tabBarIcon: (focused?: boolean) =>
-              focused ? 'LayoutGrid2Solid' : 'LayoutGrid2Outline',
-            translationId: ETranslations.global_more,
-            freezeOnBlur: Boolean(params?.freezeOnBlur),
-            children: meRouters,
-            trackId: 'global-me',
-          }
-        : undefined,
       platformEnv.isDev
         ? {
             name: ETabRoutes.Developer,
@@ -280,7 +261,7 @@ export const useTabRouterConfig = (params?: IGetTabRouterParams) => {
     perpDisabled,
     referFriendsTabConfig,
     isGtMdNonNative,
-    toMyOneKeyModal,
+    isModalStack,
     isShowMDDiscover,
     isShowDesktopDiscover,
   ]) as ITabNavigatorConfig<ETabRoutes>[];

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { memo, useMemo } from 'react';
 
 import {
@@ -20,6 +20,7 @@ interface ISwapCommonInfoItemProps {
   isLoading?: boolean;
   titleProps?: ISizableTextProps;
   valueProps?: ISizableTextProps;
+  containerProps?: ComponentProps<typeof XStack>;
 }
 
 const SwapCommonInfoItemTitleContent = ({
@@ -75,6 +76,7 @@ const SwapCommonInfoItem = ({
   questionMarkContent,
   titleProps,
   valueProps,
+  containerProps,
 }: ISwapCommonInfoItemProps) => {
   const rightTrigger = useMemo(
     () => (
@@ -106,7 +108,11 @@ const SwapCommonInfoItem = ({
   );
 
   return (
-    <XStack justifyContent="space-between" alignItems="center">
+    <XStack
+      justifyContent="space-between"
+      alignItems="center"
+      {...containerProps}
+    >
       <SwapCommonInfoItemTitleContentMemo
         title={title}
         questionMarkContent={questionMarkContent}
@@ -115,8 +121,8 @@ const SwapCommonInfoItem = ({
 
       <XStack gap="$2">
         {isLoading ? (
-          <Stack py={valueProps?.size === '$bodySmMedium' ? '$0' : '$1'}>
-            <Skeleton h="$3" w="$24" />
+          <Stack {...containerProps}>
+            <Skeleton h="$2" w="$24" />
           </Stack>
         ) : (
           rightTrigger

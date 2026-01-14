@@ -1443,33 +1443,6 @@ const aurora: IServerNetwork = {
   'defaultEnabled': true,
   'backendIndex': false,
 };
-const holesky: IServerNetwork = {
-  'impl': 'evm',
-  'chainId': '17000',
-  'id': 'evm--17000',
-  'name': 'Ethereum Holesky Testnet',
-  'symbol': 'ETH',
-  'code': 'holesky',
-  'shortcode': 'holesky',
-  'shortname': 'Holesky',
-  'decimals': 18,
-  'feeMeta': {
-    'decimals': 9,
-    'symbol': 'Gwei',
-    'isEIP1559FeeEnabled': false,
-    'isWithL1BaseFee': false,
-  },
-  'status': ENetworkStatus.LISTED,
-  'isTestnet': true,
-  'extensions': {
-    'position': 9999,
-    'isTokenSupported': false,
-    'isNFTEnabled': false,
-  },
-  'logoURI': 'https://uni.onekey-asset.com/static/chain/holesky.png',
-  'defaultEnabled': false,
-  'backendIndex': false,
-};
 const zircuit: IServerNetwork = {
   'impl': 'evm',
   'chainId': '48900',
@@ -2890,6 +2863,27 @@ const neoN3: IServerNetwork = {
   'status': ENetworkStatus.LISTED,
 };
 
+const stellar: IServerNetwork = {
+  'impl': 'stellar',
+  'chainId': 'stellar',
+  'id': 'stellar--mainnet',
+  'code': 'stellar',
+  'decimals': 7,
+  'isTestnet': false,
+  'logoURI': 'https://uni.onekey-asset.com/static/chain/stellar.png',
+  'name': 'Stellar',
+  'shortcode': 'stellar',
+  'shortname': 'XLM',
+  'symbol': 'XLM',
+  'feeMeta': {
+    'decimals': 7,
+    'symbol': 'XLM',
+  },
+  'defaultEnabled': true,
+  'isCustomNetwork': false,
+  'status': ENetworkStatus.LISTED,
+};
+
 const chainsOnlyEnabledInDev = [
   tatom, // Cosmos Testnet
 ];
@@ -2958,7 +2952,6 @@ export const presetNetworksMap = {
   base,
   bob,
   aurora,
-  holesky,
   zircuit,
   neox,
   azero,
@@ -3013,6 +3006,7 @@ export const presetNetworksMap = {
   scdo,
   benfen,
   neoN3,
+  stellar,
 };
 
 export const getDefaultEnabledNetworksInAllNetworks = memoFn(
@@ -3149,7 +3143,6 @@ export const getPresetNetworks = memoFn((): IServerNetwork[] => {
     base,
     bob,
     aurora,
-    holesky,
     zircuit,
     neox,
     azero,
@@ -3211,6 +3204,7 @@ export const getPresetNetworks = memoFn((): IServerNetwork[] => {
     scdo,
     benfen,
     neoN3,
+    stellar,
     ...(platformEnv.isDev ? chainsOnlyEnabledInDev : []),
   ];
 
@@ -3227,7 +3221,6 @@ export const getNetworksSupportFilterScamHistory = memoFn(
     eth,
     sol,
     sepolia,
-    holesky,
     hoodi,
     base,
     optimism,

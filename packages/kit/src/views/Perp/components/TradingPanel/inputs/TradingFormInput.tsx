@@ -171,7 +171,7 @@ export const TradingFormInput = memo(
         >
           <Input
             flex={1}
-            h={36}
+            h={platformEnv.isNativeAndroid ? 40 : 36}
             size="small"
             value={value}
             onChangeText={handleInputChange}
@@ -238,7 +238,7 @@ export const TradingFormInput = memo(
       >
         <YStack>
           <Input
-            h={40}
+            h={32}
             placeholder={placeholder}
             textAlign="right"
             leftAddOnProps={{

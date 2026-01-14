@@ -26,6 +26,7 @@ import type { SimpleDbEntityCustomRpc } from '../entity/SimpleDbEntityCustomRPC'
 import type { SimpleDbEntityCustomTokens } from '../entity/SimpleDbEntityCustomTokens';
 import type { SimpleDbEntityDappConnection } from '../entity/SimpleDbEntityDappConnection';
 import type { SimpleDbEntityDefaultWalletSettings } from '../entity/SimpleDbEntityDefaultWalletSettings';
+import type { SimpleDbEntityDeFi } from '../entity/SimpleDbEntityDeFi';
 import type { SimpleDbEntityEarn } from '../entity/SimpleDbEntityEarn';
 import type { SimpleDbEntityEarnExtra } from '../entity/SimpleDbEntityEarnExtra';
 import type { SimpleDbEntityEarnOrders } from '../entity/SimpleDbEntityEarnOrders';
@@ -50,10 +51,12 @@ import type { SimpleDbEntityRecentRecipients } from '../entity/SimpleDbEntityRec
 import type { SimpleDbEntityReferralCode } from '../entity/SimpleDbEntityReferralCode';
 import type { SimpleDbEntityRiskTokenManagement } from '../entity/SimpleDbEntityRiskTokenManagement';
 import type { SimpleDbEntityRiskyTokens } from '../entity/SimpleDbEntityRiskyTokens';
+import type { SimpleDbEntityRookieGuide } from '../entity/SimpleDbEntityRookieGuide';
 import type { SimpleDbEntityServerNetwork } from '../entity/SimpleDbEntityServerNetwork';
 import type { SimpleDbEntitySwapConfigs } from '../entity/SimpleDbEntitySwapConfigs';
 import type { SimpleDbEntitySwapHistory } from '../entity/SimpleDbEntitySwapHistory';
 import type { SimpleDbEntitySwapNetworksSort } from '../entity/SimpleDbEntitySwapNetworksSort';
+import type { SimpleDbEntitySwapProSelectToken } from '../entity/SimpleDbEntitySwapProSelectToken';
 import type { SimpleDbEntityUniversalSearch } from '../entity/SimpleDbEntityUniversalSearch';
 import type { SimpleDbEntityV4MigrationResult } from '../entity/SimpleDbEntityV4MigrationResult';
 import type { SimpleDbEntityWalletBanner } from '../entity/SimpleDbEntityWalletBanner';
@@ -122,6 +125,10 @@ export class SimpleDbProxy
   swapConfigs = this._createProxyService(
     'swapConfigs',
   ) as SimpleDbEntitySwapConfigs;
+
+  swapProSelectToken = this._createProxyService(
+    'swapProSelectToken',
+  ) as SimpleDbEntitySwapProSelectToken;
 
   localTokens = this._createProxyService(
     'localTokens',
@@ -278,4 +285,10 @@ export class SimpleDbProxy
   ) as SimpleDbEntityWalletStatus;
 
   ipTable = this._createProxyService('ipTable') as SimpleDbEntityIpTable;
+
+  deFi = this._createProxyService('deFi') as SimpleDbEntityDeFi;
+
+  rookieGuide = this._createProxyService(
+    'rookieGuide',
+  ) as SimpleDbEntityRookieGuide;
 }

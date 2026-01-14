@@ -5,11 +5,12 @@
  * This config extends '@react-native/metro-config' to support React Native >=0.73
  * For details see: https://github.com/react-native-community/template/blob/main/template/metro.config.js
  */
-
+const connect = require('connect');
 const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
 const { withRozenite } = require('@rozenite/metro');
 const path = require('path');
 const fs = require('fs-extra');
+const { resolve } = require('metro-resolver');
 const { getSentryExpoConfig } = require('@sentry/react-native/metro');
 // const { withRozeniteExpoAtlasPlugin } = require('@rozenite/expo-atlas-plugin'); // Uncomment if needed
 
@@ -53,6 +54,18 @@ config.resolver.extraNodeModules = {
 // Fix for Metro resolver with "subpath exports"
 config.resolver.unstable_enablePackageExports = false;
 
+// Manual alias for a subpath export when package exports are disabled.
+const hyperliquidSigningPath = require.resolve('@nktkas/hyperliquid/signing');
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (moduleName === '@nktkas/hyperliquid/signing') {
+    return {
+      type: 'sourceFile',
+      filePath: hyperliquidSigningPath,
+    };
+  }
+  return resolve(context, moduleName, platform);
+};
+
 // ---- Optional monorepo setup for Yarn workspaces (commented) ----
 // const workspaceRoot = path.resolve(projectRoot, '../..');
 // config.watchFolders = [workspaceRoot];
@@ -85,9 +98,10 @@ config.cacheStores = ({ FileStore }) => [
 ];
 
 // Patch for lazy compilation instability: always set lazy=false in bundle requests
-const orignalRewriteRequestUrl = config.server && config.server.rewriteRequestUrl
-  ? config.server.rewriteRequestUrl
-  : (url) => url;
+const orignalRewriteRequestUrl =
+  config.server && config.server.rewriteRequestUrl
+    ? config.server.rewriteRequestUrl
+    : (url) => url;
 config.server = config.server || {};
 config.server.rewriteRequestUrl = (url) =>
   orignalRewriteRequestUrl(url).replace('&lazy=true', '&lazy=false');
@@ -95,11 +109,50 @@ config.server.rewriteRequestUrl = (url) =>
 // Apply split code plugin, then wrap with Rozenite plugin
 const splitCodePlugin = require('./plugins');
 
-module.exports = withRozenite(
-  splitCodePlugin(config, projectRoot),
-  {
-    enabled: process.env.WITH_ROZENITE === 'true',
-    // enhanceMetroConfig: (config) => withRozeniteExpoAtlasPlugin(config),
-    enhanceMetroConfig: (config) => config,
-  },
-);
+const GET_TOP_DIR_SYMBOL = 'relative_dir_symbol';
+const buildRelativeDirPath = (url, depth = 2) => {
+  const symbols = Array.from({ length: depth }, () => GET_TOP_DIR_SYMBOL).join(
+    '/',
+  );
+  return `/assets/${symbols}${url}`;
+};
+
+const AssetsPaths = [
+  '/packages/shared/src/assets/',
+  '/packages/components/src/hocs/Provider/fonts/',
+  '/node_modules/@expo-google-fonts',
+  '/packages/kit/assets',
+];
+
+const applyFixImageAssetsMiddleware = (middleware) => {
+  return (req, res, next) => {
+    console.log('metro-sever: >>>>>', req.url);
+    // Android asset path fix
+    const prefixPath = AssetsPaths.find((path) => req.url.startsWith(path));
+    if (prefixPath) {
+      req.url = req.url.replace(prefixPath, buildRelativeDirPath(prefixPath));
+      console.log(
+        'metro-sever: >>>>> the asset path is auto fixed >>>>>',
+        req.url,
+      );
+    } else if (req.url.startsWith('/assets/')) {
+      // iOS asset path fix
+      req.url = req.url.replaceAll('../', `${GET_TOP_DIR_SYMBOL}/`);
+      console.log(
+        'metro-sever: >>>>> the asset path is auto fixed >>>>>',
+        req.url,
+      );
+    }
+    return middleware(req, res, next);
+  };
+};
+
+const outputChunkDir = path.resolve(projectRoot, 'dist/chunks');
+config.server.enhanceMiddleware = (metroMiddleware, metroServer) =>
+  connect().use(applyFixImageAssetsMiddleware(metroMiddleware));
+
+module.exports = withRozenite(splitCodePlugin(config, projectRoot), {
+  enabled: process.env.WITH_ROZENITE === 'true',
+  // enhanceMetroConfig: (config) => withRozeniteExpoAtlasPlugin(config),
+  enhanceMetroConfig: (config) => config,
+});

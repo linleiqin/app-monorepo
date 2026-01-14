@@ -238,12 +238,7 @@ function ChartSection({
         </XStack>
       ) : null}
       {/* Chart component */}
-      <ApyChart
-        networkId={networkId}
-        symbol={symbol}
-        provider={provider}
-        vault={vault}
-      />
+      <ApyChart apyHistory={apyHistory} />
     </YStack>
   );
 }
@@ -458,7 +453,6 @@ const ManagePositionPart = ({
   tokenImageUri,
   accountId,
   indexedAccountId,
-  protocolInputDecimals,
   onCreateAddress,
   onStakeWithdrawSuccess,
 }: {
@@ -469,7 +463,6 @@ const ManagePositionPart = ({
   tokenImageUri?: string;
   accountId: string;
   indexedAccountId?: string;
-  protocolInputDecimals?: number;
   onCreateAddress?: () => Promise<void>;
   onStakeWithdrawSuccess?: () => void;
 }) => {
@@ -485,7 +478,6 @@ const ManagePositionPart = ({
           accountId={accountId}
           indexedAccountId={indexedAccountId}
           fallbackTokenImageUri={tokenImageUri}
-          protocolInputDecimals={protocolInputDecimals}
           onCreateAddress={onCreateAddress}
           onStakeWithdrawSuccess={onStakeWithdrawSuccess}
         />
@@ -621,13 +613,11 @@ const EarnProtocolDetailsPage = ({ route }: { route: IRouteProps }) => {
           vault,
           tab,
           tokenImageUri: tokenInfo?.token?.logoURI,
-          protocolInputDecimals: detailInfo?.protocolInputDecimals,
         },
       });
     },
     [
       appNavigation,
-      detailInfo?.protocolInputDecimals,
       networkId,
       symbol,
       provider,
@@ -706,7 +696,7 @@ const EarnProtocolDetailsPage = ({ route }: { route: IRouteProps }) => {
       tabRoute={ETabRoutes.Earn}
       showBackButton
       header={
-        <XStack ml={gtMd ? 'auto' : '0'}>
+        <XStack ml={gtMd ? 'auto' : '0'} pr="$2">
           <ManagersSection managers={detailInfo?.managers} noPadding />
         </XStack>
       }
@@ -738,7 +728,6 @@ const EarnProtocolDetailsPage = ({ route }: { route: IRouteProps }) => {
               tokenImageUri={tokenInfo?.token?.logoURI}
               accountId={accountId}
               indexedAccountId={indexedAccountId}
-              protocolInputDecimals={detailInfo?.protocolInputDecimals}
               onCreateAddress={onCreateAddress}
               onStakeWithdrawSuccess={handleStakeWithdrawSuccess}
             />

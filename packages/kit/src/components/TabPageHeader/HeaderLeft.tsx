@@ -27,7 +27,7 @@ import { EAccountSelectorSceneName } from '@onekeyhq/shared/types';
 
 import { AccountSelectorProviderMirror } from '../AccountSelector';
 
-import { WalletConnectionGroup, WebHeaderNavigation } from './components';
+import { WalletConnectionGroup } from './components';
 import { UrlAccountPageHeader } from './urlAccountPageHeader';
 
 export function HeaderLeftCloseButton() {
@@ -37,7 +37,13 @@ export function HeaderLeftCloseButton() {
     </Page.Close>
   );
 }
-const discoveryTabs = [ETranslations.global_browser, ETranslations.global_earn];
+const discoveryTabs = platformEnv.isNative
+  ? [
+      ETranslations.global_market,
+      ETranslations.global_earn,
+      ETranslations.global_browser,
+    ]
+  : [ETranslations.global_market, ETranslations.global_earn];
 
 function SegmentText({
   translationId,
@@ -50,6 +56,7 @@ function SegmentText({
   const handlePress = useCallback(() => {
     appEventBus.emit(EAppEventBusNames.SwitchDiscoveryTabInNative, {
       tab: translationId as
+        | ETranslations.global_market
         | ETranslations.global_browser
         | ETranslations.global_earn,
     });
@@ -67,7 +74,7 @@ function SegmentText({
   );
 }
 
-function DiscoveryHeaderSegment({
+export function DiscoveryHeaderSegment({
   selectedHeaderTab,
 }: {
   selectedHeaderTab?: ETranslations;
@@ -96,34 +103,14 @@ export function HeaderLeft({
   tabRoute: ETabRoutes;
   customHeaderLeftItems?: ReactNode;
 }) {
-  const { gtMd } = useMedia();
+  const { gtMd: _gtMd } = useMedia();
 
   const items = useMemo(() => {
-    const withWebNavigation = (content: ReactNode) => {
-      if (platformEnv.isWebDappMode && gtMd) {
-        return (
-          <XStack gap="$6" ai="center">
-            <WebHeaderNavigation />
-            {content}
-          </XStack>
-        );
-      }
-
-      return content;
-    };
-
     if (customHeaderLeftItems) {
-      if (tabRoute === ETabRoutes.WebviewPerpTrade) {
-        return withWebNavigation(customHeaderLeftItems);
-      }
       return customHeaderLeftItems;
     }
 
     if (sceneName === EAccountSelectorSceneName.homeUrlAccount) {
-      if (platformEnv.isWebDappMode && gtMd) {
-        return withWebNavigation(null);
-      }
-
       return (
         <XStack gap="$1.5">
           <NavBackButton
@@ -157,30 +144,16 @@ export function HeaderLeft({
     }
 
     if (tabRoute === ETabRoutes.Discovery) {
-      return platformEnv.isNative ? (
+      return platformEnv.isNative ||
+        platformEnv.isExtensionUiPopup ||
+        platformEnv.isExtensionUiSidePanel ? (
         <DiscoveryHeaderSegment selectedHeaderTab={selectedHeaderTab} />
       ) : null;
     }
 
-    if (tabRoute === ETabRoutes.WebviewPerpTrade) {
-      return (
-        <SizableText size="$headingLg">
-          {/* {intl.formatMessage({
-            id: ETranslations.global_browser,
-          })} */}
-        </SizableText>
-      );
-    }
-
-    // For web platform, only show WebHeaderNavigation (logo + navigation)
-    // Account selector will be moved to HeaderRight
-    if (platformEnv.isWebDappMode && gtMd) {
-      return <WebHeaderNavigation />;
-    }
-
     // For mobile and native platforms, keep the original layout
     return <WalletConnectionGroup tabRoute={tabRoute} />;
-  }, [customHeaderLeftItems, sceneName, tabRoute, gtMd, selectedHeaderTab]);
+  }, [customHeaderLeftItems, sceneName, tabRoute, selectedHeaderTab]);
   return (
     <AccountSelectorProviderMirror
       enabledNum={[0]}

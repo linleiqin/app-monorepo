@@ -34,6 +34,7 @@ import platformEnv from '@onekeyhq/shared/src/platformEnv';
 import accountUtils from '@onekeyhq/shared/src/utils/accountUtils';
 import { memoizee } from '@onekeyhq/shared/src/utils/cacheUtils';
 import deviceUtils from '@onekeyhq/shared/src/utils/deviceUtils';
+import { generateUUID } from '@onekeyhq/shared/src/utils/miscUtils';
 import networkUtils from '@onekeyhq/shared/src/utils/networkUtils';
 import resetUtils from '@onekeyhq/shared/src/utils/resetUtils';
 import timerUtils from '@onekeyhq/shared/src/utils/timerUtils';
@@ -133,6 +134,16 @@ class ServiceSetting extends ServiceBase {
   public async getInstanceId() {
     const { instanceId } = await settingsPersistAtom.get();
     return instanceId;
+  }
+
+  @backgroundMethod()
+  public async resetInstanceId() {
+    const newInstanceId = generateUUID();
+    await settingsPersistAtom.set((prev) => ({
+      ...prev,
+      instanceId: newInstanceId,
+    }));
+    return newInstanceId;
   }
 
   @backgroundMethod()
@@ -445,6 +456,30 @@ class ServiceSetting extends ServiceBase {
   }
 
   @backgroundMethod()
+  public async fetchGetStartedLinks({
+    slots,
+  }: {
+    slots: ('hardware_faqs' | 'hardware_getstarteds')[];
+  }) {
+    const client = await this.getClient(EServiceEndpointEnum.Utility);
+    const response = await client.get<{
+      data: {
+        linkId: string;
+        title: string;
+        mode: number;
+        payload: string;
+        image: string;
+        description: string;
+      }[];
+    }>('/utility/v1/link-config', {
+      params: {
+        slots: slots.join(','),
+      },
+    });
+    return response.data.data;
+  }
+
+  @backgroundMethod()
   public async getInscriptionProtection() {
     const { inscriptionProtection } = await settingsPersistAtom.get();
     return inscriptionProtection;
@@ -624,7 +659,9 @@ class ServiceSetting extends ServiceBase {
       return;
     }
 
-    const { wallets } = await this.backgroundApi.serviceAccount.getAllWallets();
+    const { wallets } = await this.backgroundApi.serviceAccount.getAllWallets({
+      excludeKeylessWallet: true,
+    });
 
     const hasHdOrHwWallet =
       wallets?.some((wallet) => {

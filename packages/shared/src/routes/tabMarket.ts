@@ -4,6 +4,8 @@ export enum ETabMarketRoutes {
   TabMarket = 'TabMarket',
   MarketDetail = 'MarketDetail',
   MarketDetailV2 = 'MarketDetailV2',
+  MarketNativeDetail = 'MarketNativeDetail',
+  MarketBannerDetail = 'MarketBannerDetail',
 }
 
 export type ITabMarketParamList = {
@@ -17,5 +19,15 @@ export type ITabMarketParamList = {
     isNative?: boolean;
     from?: EEnterWay;
     disableTrade?: boolean;
+  };
+  [ETabMarketRoutes.MarketNativeDetail]: {
+    network: string;
+    isNative?: boolean;
+    from?: EEnterWay;
+    disableTrade?: boolean;
+  };
+  [ETabMarketRoutes.MarketBannerDetail]: {
+    tokenListId: string;
+    title: string;
   };
 };

@@ -17,6 +17,7 @@ import {
 } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import { appLocale } from '@onekeyhq/shared/src/locale/appLocale';
+import { parseDexCoin } from '@onekeyhq/shared/src/utils/perpsUtils';
 
 import { useOrderConfirm, useTradingCalculationsForSide } from '../../../hooks';
 import { PerpsProviderMirror } from '../../../PerpsProviderMirror';
@@ -66,10 +67,41 @@ function OrderConfirmContent({
   const sizeDisplay = useMemo(() => {
     const sizeString = computedSizeForSide.toFixed(szDecimals);
     if (selectedSymbol?.coin) {
-      return `${sizeString} ${selectedSymbol.coin}`;
+      const parsed = parseDexCoin(selectedSymbol.coin);
+      return `${sizeString} ${parsed.displayName}`;
     }
     return sizeString;
   }, [computedSizeForSide, szDecimals, selectedSymbol?.coin]);
+
+  const priceDisplay = useMemo(() => {
+    if (formData.type === 'market' || !formData.price) {
+      return (
+        <SizableText size="$bodyMdMedium">
+          {appLocale.intl.formatMessage({
+            id: ETranslations.perp_trade_market,
+          })}
+        </SizableText>
+      );
+    }
+
+    if (formData.bboPriceMode) {
+      const { type } = formData.bboPriceMode;
+      const modeName = intl.formatMessage({
+        id:
+          type === 'counterparty'
+            ? ETranslations.Perps_BBO_Counterparty
+            : ETranslations.Perps_BBO_Queue,
+      });
+
+      return (
+        <YStack alignItems="flex-end" gap="$1">
+          <SizableText size="$bodyMdMedium">{modeName}</SizableText>
+        </YStack>
+      );
+    }
+
+    return <SizableText size="$bodyMdMedium">$ {formData.price}</SizableText>;
+  }, [formData.type, formData.price, formData.bboPriceMode, intl]);
 
   const buttonText = useMemo(() => {
     if (isSubmitting) {
@@ -130,15 +162,7 @@ function OrderConfirmContent({
               id: ETranslations.perp_orderbook_price,
             })}
           </SizableText>
-          {formData.type === 'market' || !formData.price ? (
-            <SizableText size="$bodyMdMedium">
-              {appLocale.intl.formatMessage({
-                id: ETranslations.perp_trade_market,
-              })}
-            </SizableText>
-          ) : (
-            <SizableText size="$bodyMd">$ {formData.price}</SizableText>
-          )}
+          {priceDisplay}
         </XStack>
 
         {/* Liquidation Price */}

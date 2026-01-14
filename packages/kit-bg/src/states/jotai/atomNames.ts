@@ -55,6 +55,8 @@ export enum EAtomNames {
   primeInitAtom = 'primeInitAtom',
   primeLoginDialogAtom = 'primeLoginDialogAtom',
   primeTransferAtom = 'primeTransferAtom',
+  keylessDialogAtom = 'keylessDialogAtom',
+  keylessPinConfirmStatusAtom = 'keylessPinConfirmStatusAtom',
   accountSelectorAccountsListIsLoadingAtom = 'accountSelectorAccountsListIsLoadingAtom',
   accountSelectorStatusAtom = 'accountSelectorStatusAtom',
   allNetworksPersistAtom = 'allNetworksPersistAtom',
@@ -83,14 +85,17 @@ export enum EAtomNames {
   perpsCandlesWebviewReloadHookAtom = 'perpsCandlesWebviewReloadHookAtom',
   perpsCandlesWebviewMountedAtom = 'perpsCandlesWebviewMountedAtom',
   perpsWebSocketDataUpdateTimesAtom = 'perpsWebSocketDataUpdateTimesAtom',
-  perpTokenSortConfigPersistAtom = 'perpTokenSortConfigPersistAtom',
+  perpTokenSelectorConfigPersistAtom = 'perpTokenSelectorConfigPersistAtom',
+  perpTokenFavoritesPersistAtom = 'perpTokenFavoritesPersistAtom',
   perpsDepositOrderAtom = 'perpsDepositOrderAtom',
   perpsLastUsedLeverageAtom = 'perpsLastUsedLeverageAtom',
+  perpsLayoutStateAtom = 'perpsLayoutStateAtom',
   // network doctor
   networkDoctorStateAtom = 'networkDoctorStateAtom',
 
   // swap
   swapProJumpTokenAtom = 'swapProJumpTokenAtom',
+  swapFromMarketJumpTokenAtom = 'swapFromMarketJumpTokenAtom',
   // market
   marketSelectedTabAtom = 'marketSelectedTabAtom',
 }

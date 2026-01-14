@@ -4,6 +4,7 @@ import {
   resolveTradingSizeBN,
   sanitizeManualSize,
 } from '@onekeyhq/shared/src/utils/perpsUtils';
+import { XYZ_ASSET_ID_OFFSET } from '@onekeyhq/shared/types/hyperliquid/perp.constants';
 import type * as HL from '@onekeyhq/shared/types/hyperliquid/sdk';
 import type {
   IConnectionState,
@@ -26,10 +27,10 @@ export const {
   atom: perpsAllAssetsFilteredAtom,
   use: usePerpsAllAssetsFilteredAtom,
 } = contextAtom<{
-  assets: HL.IPerpsUniverse[];
+  assetsByDex: HL.IPerpsUniverse[][];
   query: string;
 }>({
-  assets: [],
+  assetsByDex: [],
   query: '',
 });
 
@@ -38,18 +39,25 @@ export const {
   use: usePerpsAllAssetsFilteredLengthAtom,
 } = contextAtomComputed((get) => {
   const perpsAllAssetsFiltered = get(perpsAllAssetsFilteredAtom());
-  return perpsAllAssetsFiltered.assets.length;
+  return perpsAllAssetsFiltered.assetsByDex.reduce(
+    (sum, assets) => sum + assets.length,
+    0,
+  );
 });
 
 export const { atom: perpsAllAssetCtxsAtom, use: usePerpsAllAssetCtxsAtom } =
   contextAtom<{
-    assetCtxs: HL.IPerpsAssetCtx[];
+    assetCtxsByDex: HL.IPerpsAssetCtx[][];
   }>({
-    assetCtxs: [],
+    assetCtxsByDex: [],
   });
 
 export const { atom: l2BookAtom, use: useL2BookAtom } =
   contextAtom<HL.IBook | null>(null);
+
+export const { atom: bboAtom, use: useBboAtom } = contextAtom<HL.IWsBbo | null>(
+  null,
+);
 
 // TODO remove
 export const { atom: connectionStateAtom, use: useConnectionStateAtom } =
@@ -67,6 +75,11 @@ export const {
 export const { atom: subscriptionActiveAtom, use: useSubscriptionActiveAtom } =
   contextAtom<boolean>(false);
 
+export type IBBOPriceMode =
+  | null
+  | { type: 'counterparty'; level: number }
+  | { type: 'queue'; level: number };
+
 export interface ITradingFormData {
   side: 'long' | 'short';
   type: 'market' | 'limit';
@@ -75,6 +88,9 @@ export interface ITradingFormData {
   sizeInputMode: EPerpsSizeInputMode;
   sizePercent: number;
   leverage?: number;
+
+  // BBO limit price mode
+  bboPriceMode?: IBBOPriceMode;
 
   // Take Profit / Stop Loss
   hasTpsl: boolean;
@@ -99,6 +115,7 @@ export const { atom: tradingFormAtom, use: useTradingFormAtom } =
     sizeInputMode: EPerpsSizeInputMode.MANUAL,
     sizePercent: 0,
     leverage: 1,
+    bboPriceMode: null,
     hasTpsl: false,
     tpTriggerPx: '',
     tpGainPercent: '',
@@ -211,6 +228,7 @@ export const { atom: perpsLedgerUpdatesAtom, use: usePerpsLedgerUpdatesAtom } =
 export interface ITradingFormEnv {
   markPrice?: string;
   availableToTrade?: Array<number | string>;
+  maxTradeSzs?: Array<number | string>;
   leverageValue?: number;
   fallbackLeverage?: number;
   szDecimals?: number;
@@ -235,7 +253,7 @@ export const {
     side: form.side,
     price,
     markPrice: env.markPrice,
-    availableToTrade: env.availableToTrade,
+    maxTradeSzs: env.maxTradeSzs,
     leverageValue: env.leverageValue,
     fallbackLeverage: env.fallbackLeverage,
     szDecimals: env.szDecimals,
@@ -248,7 +266,7 @@ export const {
     side: form.side,
     price,
     markPrice: env.markPrice,
-    availableToTrade: env.availableToTrade,
+    maxTradeSzs: env.maxTradeSzs,
     leverageValue: env.leverageValue,
     fallbackLeverage: env.fallbackLeverage,
     szDecimals: env.szDecimals,
@@ -273,3 +291,31 @@ export const {
     sliderEnabled: maxSizeBN.isFinite() && maxSizeBN.gte(0),
   };
 });
+
+export const perpsCtxByCoinAtomCache = new Map<
+  string,
+  ReturnType<typeof contextAtomComputed<HL.IPerpsAssetCtx | null>>
+>();
+
+function getOrCreateCtxByCoinAtom(dexIndex: number, assetId: number) {
+  const key = `${dexIndex}-${assetId}`;
+  let entry = perpsCtxByCoinAtomCache.get(key);
+  if (!entry) {
+    const ctxIndex = dexIndex === 1 ? assetId - XYZ_ASSET_ID_OFFSET : assetId;
+    entry = contextAtomComputed((get) => {
+      const { assetCtxsByDex } = get(perpsAllAssetCtxsAtom());
+      return assetCtxsByDex?.[dexIndex]?.[ctxIndex] ?? null;
+    });
+    perpsCtxByCoinAtomCache.set(key, entry);
+  }
+  return entry;
+}
+
+export function usePerpsCtxByCoin(
+  dexIndex: number,
+  assetId: number,
+): HL.IPerpsAssetCtx | null {
+  const { use } = getOrCreateCtxByCoinAtom(dexIndex, assetId);
+  const [ctx] = use();
+  return ctx;
+}

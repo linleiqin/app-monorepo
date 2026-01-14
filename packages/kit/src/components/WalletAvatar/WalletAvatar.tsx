@@ -1,10 +1,11 @@
 import { EFirmwareType } from '@onekeyfe/hd-shared';
 import { isNil } from 'lodash';
 
-import type { SizeTokens } from '@onekeyhq/components';
+import type { IStackProps, SizeTokens } from '@onekeyhq/components';
 import { Icon, Image, SizableText, Stack } from '@onekeyhq/components';
 import type { IDBWallet } from '@onekeyhq/kit-bg/src/dbs/local/types';
 import { presetNetworksMap } from '@onekeyhq/shared/src/config/presetNetworks';
+import { EOAuthSocialLoginProvider } from '@onekeyhq/shared/src/consts/authConsts';
 import accountUtils from '@onekeyhq/shared/src/utils/accountUtils';
 import type { IAllWalletAvatarImageNames } from '@onekeyhq/shared/src/utils/avatarUtils';
 import { AllWalletAvatarImages } from '@onekeyhq/shared/src/utils/avatarUtils';
@@ -23,6 +24,7 @@ export type IWalletAvatarProps = IWalletAvatarBaseProps & {
   status?: IWalletProps['status'];
   badge?: number | string;
   firmwareTypeBadge?: EFirmwareType;
+  firmwareTypeProps?: IStackProps & { badgeSize?: number };
 };
 
 export function WalletAvatarBase({
@@ -67,7 +69,11 @@ export function WalletAvatar({
   firmwareTypeBadge,
   img,
   wallet,
+  firmwareTypeProps,
 }: IWalletAvatarProps) {
+  const socialLoginProvider = wallet?.keylessDetailsInfo?.keylessProvider;
+  const { badgeSize, ...restFirmwareTypeProps } = firmwareTypeProps ?? {};
+
   return (
     <Stack w={size} h={size} justifyContent="center" alignItems="center">
       <WalletAvatarBase size={size} img={img} wallet={wallet} />
@@ -94,8 +100,12 @@ export function WalletAvatar({
           left={0}
           borderRadius="$full"
           zIndex="$1"
+          {...restFirmwareTypeProps}
         >
-          <NetworkAvatar networkId={presetNetworksMap.btc.id} size={14} />
+          <NetworkAvatar
+            networkId={presetNetworksMap.btc.id}
+            size={badgeSize ?? 14}
+          />
         </Stack>
       ) : null}
       {!isNil(badge) ? (
@@ -113,6 +123,24 @@ export function WalletAvatar({
           <SizableText size="$bodySm" textAlign="center">
             {badge}
           </SizableText>
+        </Stack>
+      ) : null}
+      {/* Keyless wallet social login provider icon */}
+      {status === 'keyless' ? (
+        <Stack
+          position="absolute"
+          bottom={-2}
+          right={-2}
+          bg="$bgApp"
+          p="$0.5"
+          borderRadius="$full"
+          zIndex="$1"
+        >
+          {socialLoginProvider === EOAuthSocialLoginProvider.Google ? (
+            <Icon name="GoogleIllus" size="$3.5" />
+          ) : (
+            <Icon name="AppleBrand" size="$3.5" color="$iconActive" />
+          )}
         </Stack>
       ) : null}
     </Stack>

@@ -26,10 +26,12 @@ import {
 import type { IServerNetwork } from '@onekeyhq/shared/types';
 import type { INetworkAccount } from '@onekeyhq/shared/types/account';
 import type { IAddressValidation } from '@onekeyhq/shared/types/address';
+import { EServiceEndpointEnum } from '@onekeyhq/shared/types/endpoint';
 import type {
   IUniversalSearchAddress,
   IUniversalSearchBatchResult,
   IUniversalSearchDappResult,
+  IUniversalSearchPerpResult,
   IUniversalSearchResultItem,
   IUniversalSearchSingleResult,
 } from '@onekeyhq/shared/types/search';
@@ -134,6 +136,9 @@ class ServiceUniversalSearch extends ServiceBase {
       searchTypes.includes(EUniversalSearchType.Dapp)
         ? this.universalSearchOfDapp({ input })
         : Promise.resolve({ items: [] }),
+      searchTypes.includes(EUniversalSearchType.Perp)
+        ? this.universalSearchOfPerp({ input })
+        : Promise.resolve({ items: [] }),
     ]);
     const [
       addressResultSettled,
@@ -141,6 +146,7 @@ class ServiceUniversalSearch extends ServiceBase {
       marketTokenResultSettled,
       accountAssetsResultSettled,
       dappResultSettled,
+      perpResultSettled,
     ] = promiseResults;
 
     if (
@@ -202,6 +208,14 @@ class ServiceUniversalSearch extends ServiceBase {
       dappResultSettled.value.items.length > 0
     ) {
       result[EUniversalSearchType.Dapp] = dappResultSettled.value;
+    }
+
+    if (
+      perpResultSettled.status === 'fulfilled' &&
+      perpResultSettled.value &&
+      perpResultSettled.value.items.length > 0
+    ) {
+      result[EUniversalSearchType.Perp] = perpResultSettled.value;
     }
 
     return result;
@@ -535,13 +549,29 @@ class ServiceUniversalSearch extends ServiceBase {
       return items;
     }
 
+    const deFiRawData =
+      (await this.backgroundApi.simpleDb.deFi.getRawData()) ?? undefined;
+
     // Create search result items
     for (const accountItem of sortedAccounts) {
       let account;
       let indexedAccount;
       let wallet;
       let accountsValue;
+      let accountsDeFiOverview;
       try {
+        accountsDeFiOverview = (
+          await this.backgroundApi.serviceDeFi.getAccountsLocalDeFiOverview({
+            accounts: [
+              {
+                accountId: accountItem.accountId,
+                networkId: networkId || '',
+                accountAddress: address,
+              },
+            ],
+            deFiRawData,
+          })
+        )?.[0];
         if (
           accountUtils.isOthersAccount({
             accountId: accountItem.accountId,
@@ -611,6 +641,7 @@ class ServiceUniversalSearch extends ServiceBase {
           account,
           indexedAccount,
           accountsValue,
+          accountsDeFiOverview,
         },
       } as IUniversalSearchResultItem);
     }
@@ -944,6 +975,56 @@ class ServiceUniversalSearch extends ServiceBase {
     console.log('[searchAccountsByName] items: ', items);
 
     return { items } as IUniversalSearchSingleResult;
+  }
+
+  private universalSearchOfPerpCached = memoizee(
+    async (input: string): Promise<IUniversalSearchPerpResult> => {
+      try {
+        const client = await this.getClient(EServiceEndpointEnum.Wallet);
+        const response = await client.get<{
+          data: Array<{
+            type: string;
+            logoUrl: string;
+            name: string;
+            maxLeverage: number;
+            midPx: string;
+            dayNtlVlm: string;
+          }>;
+        }>('/wallet/v1/proxy/hyperliquid/perpsAsset', {
+          params: { query: input },
+        });
+
+        const items: IUniversalSearchPerpResult['items'] =
+          response?.data?.data?.map((asset) => ({
+            type: EUniversalSearchType.Perp,
+            payload: {
+              assetType: asset.type,
+              logoUrl: asset.logoUrl,
+              name: asset.name,
+              maxLeverage: asset.maxLeverage,
+              midPx: asset.midPx,
+              dayNtlVlm: asset.dayNtlVlm,
+            },
+          })) ?? [];
+
+        return { items };
+      } catch (error) {
+        console.error('[universalSearchOfPerp] error:', error);
+        throw error; // Re-throw to prevent caching failed results
+      }
+    },
+    {
+      maxAge: timerUtils.getTimeDurationMs({ seconds: 30 }),
+      promise: true,
+    },
+  );
+
+  async universalSearchOfPerp({
+    input,
+  }: {
+    input: string;
+  }): Promise<IUniversalSearchPerpResult> {
+    return this.universalSearchOfPerpCached(input);
   }
 
   async universalSearchOfDapp({

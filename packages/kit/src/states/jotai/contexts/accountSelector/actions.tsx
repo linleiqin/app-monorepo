@@ -17,13 +17,13 @@ import type {
   IDBIndexedAccount,
   IDBWallet,
   IDBWalletIdSingleton,
+  IKeylessWalletDetailsInfo,
 } from '@onekeyhq/kit-bg/src/dbs/local/types';
 import type {
   IAccountSelectorFocusedWallet,
   IAccountSelectorSelectedAccount,
   IAccountSelectorSelectedAccountsMap,
 } from '@onekeyhq/kit-bg/src/dbs/simple/entity/SimpleDbEntityAccountSelector';
-import { devSettingsPersistAtom } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import type { IJotaiSetter } from '@onekeyhq/kit-bg/src/states/jotai/types';
 import type { IAccountDeriveTypes } from '@onekeyhq/kit-bg/src/vaults/types';
 import { getNetworkIdsMap } from '@onekeyhq/shared/src/config/networkIds';
@@ -57,8 +57,8 @@ import accountSelectorUtils from '@onekeyhq/shared/src/utils/accountSelectorUtil
 import accountUtils from '@onekeyhq/shared/src/utils/accountUtils';
 import bufferUtils from '@onekeyhq/shared/src/utils/bufferUtils';
 import { memoFn } from '@onekeyhq/shared/src/utils/cacheUtils';
+import type { IAvatarInfo } from '@onekeyhq/shared/src/utils/emojiUtils';
 import networkUtils from '@onekeyhq/shared/src/utils/networkUtils';
-import rnUtils from '@onekeyhq/shared/src/utils/rnUtils';
 import timerUtils from '@onekeyhq/shared/src/utils/timerUtils';
 import {
   EAccountSelectorAutoSelectTriggerBy,
@@ -843,9 +843,13 @@ class AccountSelectorActions extends ContextJotaiActionsBase {
       {
         mnemonic,
         isWalletBackedUp,
+        isKeylessWallet,
+        keylessDetailsInfo,
       }: {
         mnemonic: string;
         isWalletBackedUp?: boolean;
+        isKeylessWallet?: boolean;
+        keylessDetailsInfo?: IKeylessWalletDetailsInfo;
       },
     ) =>
       this.withFinalizeWalletSetupStep.call(set, {
@@ -854,6 +858,8 @@ class AccountSelectorActions extends ContextJotaiActionsBase {
             await serviceAccount.createHDWallet({
               mnemonic,
               isWalletBackedUp,
+              isKeylessWallet,
+              keylessDetailsInfo,
             });
           await this.autoSelectToCreatedWallet.call(set, {
             wallet,
@@ -861,6 +867,44 @@ class AccountSelectorActions extends ContextJotaiActionsBase {
             isOverrideWallet,
           });
           return { wallet, indexedAccount, isOverrideWallet };
+        },
+        generatingAccountsFn: async ({ wallet, indexedAccount }) => {
+          await this.addDefaultNetworkAccounts.call(set, {
+            wallet,
+            indexedAccount,
+          });
+        },
+      }),
+  );
+
+  createKeylessWallet = contextAtomMethod(
+    async (
+      _,
+      set,
+      {
+        packSetId,
+        name,
+        avatarInfo,
+      }: {
+        packSetId: string;
+        name?: string;
+        avatarInfo?: IAvatarInfo;
+      },
+    ) =>
+      this.withFinalizeWalletSetupStep.call(set, {
+        createWalletFn: async () => {
+          const { wallet, indexedAccount } =
+            await backgroundApiProxy.serviceKeylessWallet.createKeylessWallet({
+              packSetId,
+              name,
+              avatarInfo,
+            });
+          await this.autoSelectToCreatedWallet.call(set, {
+            wallet,
+            indexedAccount,
+            isOverrideWallet: undefined,
+          });
+          return { wallet, indexedAccount, isOverrideWallet: undefined };
         },
         generatingAccountsFn: async ({ wallet, indexedAccount }) => {
           await this.addDefaultNetworkAccounts.call(set, {
@@ -1420,7 +1464,6 @@ class AccountSelectorActions extends ContextJotaiActionsBase {
       {
         num,
         sceneName,
-        sceneUrl,
       }: {
         num: number;
         sceneName: EAccountSelectorSceneName;
@@ -2051,7 +2094,6 @@ class AccountSelectorActions extends ContextJotaiActionsBase {
             (await serviceAccount.isWalletHasIndexedAccounts({
               walletId: selectedWalletId,
             }));
-          const currentFocusWallet = selectedAccount?.focusedWallet;
 
           // auto select hd hw wallet if current wallet not contains next available account
           if (!selectedWalletId || !hasIndexedAccounts) {
@@ -2291,6 +2333,7 @@ export function useAccountSelectorActions() {
   const createHWWalletWithoutHidden = actions.createHWWalletWithoutHidden.use();
   const createQrWallet = actions.createQrWallet.use();
   const createTonImportedWallet = actions.createTonImportedWallet.use();
+  const createKeylessWallet = actions.createKeylessWallet.use();
   const autoSelectNextAccount = actions.autoSelectNextAccount.use();
   const updateHwWalletsDeprecatedStatus =
     actions.updateHwWalletsDeprecatedStatus.use();
@@ -2329,6 +2372,7 @@ export function useAccountSelectorActions() {
     createHWWalletWithoutHidden,
     createQrWallet,
     createTonImportedWallet,
+    createKeylessWallet,
     updateHwWalletsDeprecatedStatus,
     autoSelectNextAccount,
     autoSelectNetworkOfOthersWalletAccount,

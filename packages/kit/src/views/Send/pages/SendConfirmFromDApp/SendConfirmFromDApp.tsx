@@ -129,7 +129,7 @@ function SendConfirmFromDApp() {
           if (encodedTxWithFee === '') {
             feeInfoEditable = false;
           } else {
-            feeInfoEditable = true;
+            feeInfoEditable = feeInfoEditable && true; // Keep false if Soroban
             newEncodedTx = encodedTxWithFee;
           }
         }

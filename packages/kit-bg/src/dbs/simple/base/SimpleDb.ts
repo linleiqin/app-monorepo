@@ -126,6 +126,15 @@ export class SimpleDb {
     return value;
   }
 
+  get swapProSelectToken() {
+    const SimpleDbEntitySwapProSelectToken = (
+      require('../entity/SimpleDbEntitySwapProSelectToken') as unknown as typeof import('../entity/SimpleDbEntitySwapProSelectToken')
+    ).SimpleDbEntitySwapProSelectToken;
+    const value = new SimpleDbEntitySwapProSelectToken();
+    Object.defineProperty(this, 'swapProSelectToken', { value });
+    return value;
+  }
+
   get localTokens() {
     const SimpleDbEntityLocalTokens = (
       require('../entity/SimpleDbEntityLocalTokens') as unknown as typeof import('../entity/SimpleDbEntityLocalTokens')
@@ -501,6 +510,24 @@ export class SimpleDb {
     ).SimpleDbEntityIpTable;
     const value = new SimpleDbEntityIpTable();
     Object.defineProperty(this, 'ipTable', { value });
+    return value;
+  }
+
+  get deFi() {
+    const SimpleDbEntityDeFi = (
+      require('../entity/SimpleDbEntityDeFi') as unknown as typeof import('../entity/SimpleDbEntityDeFi')
+    ).SimpleDbEntityDeFi;
+    const value = new SimpleDbEntityDeFi();
+    Object.defineProperty(this, 'deFi', { value });
+    return value;
+  }
+
+  get rookieGuide() {
+    const SimpleDbEntityRookieGuide = (
+      require('../entity/SimpleDbEntityRookieGuide') as unknown as typeof import('../entity/SimpleDbEntityRookieGuide')
+    ).SimpleDbEntityRookieGuide;
+    const value = new SimpleDbEntityRookieGuide();
+    Object.defineProperty(this, 'rookieGuide', { value });
     return value;
   }
 }

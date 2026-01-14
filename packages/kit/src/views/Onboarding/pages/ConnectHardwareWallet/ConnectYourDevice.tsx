@@ -51,7 +51,10 @@ import { useUserWalletProfile } from '@onekeyhq/kit/src/hooks/useUserWalletProfi
 import { useAccountSelectorActions } from '@onekeyhq/kit/src/states/jotai/contexts/accountSelector';
 import type { IDBCreateHwWalletParamsBase } from '@onekeyhq/kit-bg/src/dbs/local/types';
 import { useSettingsPersistAtom } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
-import { HARDWARE_BRIDGE_DOWNLOAD_URL } from '@onekeyhq/shared/src/config/appConfig';
+import {
+  HARDWARE_BRIDGE_DOWNLOAD_URL,
+  ONEKEY_BUY_HARDWARE_URL,
+} from '@onekeyhq/shared/src/config/appConfig';
 import { OneKeyLocalError } from '@onekeyhq/shared/src/errors';
 import {
   BleLocationServiceError,
@@ -1185,7 +1188,7 @@ export function ConnectYourDevicePage() {
   const fwUpdateActions = useFirmwareUpdateActions();
   const { isSoftwareWalletOnlyUser } = useUserWalletProfile();
   const [{ hardwareTransportType }] = useSettingsPersistAtom();
-  const [isCheckingDeviceLoading, setIsChecking] = useState(false);
+  const [_isCheckingDeviceLoading, setIsChecking] = useState(false);
 
   const handleSetupNewWalletPress = useCallback(
     ({ deviceType }: { deviceType: IDeviceType }) => {
@@ -1793,7 +1796,7 @@ export function ConnectYourDevicePage() {
             hoverStyle={{
               color: '$textInteractiveHover',
             }}
-            href="https://bit.ly/3YsKilK"
+            href={ONEKEY_BUY_HARDWARE_URL}
             target="_blank"
             size="$bodyMdMedium"
             p="$2"

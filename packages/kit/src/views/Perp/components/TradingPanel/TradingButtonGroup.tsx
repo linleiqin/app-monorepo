@@ -27,6 +27,7 @@ import {
   usePerpsTradingPreferencesAtom,
 } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
+import { parseDexCoin } from '@onekeyhq/shared/src/utils/perpsUtils';
 
 import { useOrderConfirm } from '../../hooks';
 import { useTradingCalculationsForSide } from '../../hooks/useTradingCalculationsForSide';
@@ -81,6 +82,7 @@ function SideButtonInternal({
     marginRequired: marginRequiredRaw,
     isNoEnoughMargin,
     effectivePriceBN,
+    priceError,
   } = calculations;
 
   const marginRequired = useDebounce(marginRequiredRaw, 100);
@@ -131,6 +133,7 @@ function SideButtonInternal({
       isMinimumOrderNotMetForSide ||
       isNoEnoughMargin ||
       isAccountLoading ||
+      priceError === 'bbo_unavailable' ||
       (perpsAccountStatus.canTrade &&
         (perpConfigCommon?.disablePerpActionPerp ||
           perpConfigCommon?.ipDisablePerp))
@@ -142,6 +145,7 @@ function SideButtonInternal({
     isMinimumOrderNotMetForSide,
     isNoEnoughMargin,
     isAccountLoading,
+    priceError,
     perpConfigCommon?.disablePerpActionPerp,
     perpConfigCommon?.ipDisablePerp,
   ]);
@@ -160,7 +164,8 @@ function SideButtonInternal({
       .decimalPlaces(szDecimals, BigNumber.ROUND_DOWN)
       .toFixed(szDecimals);
     const symbol = activeAsset?.coin || '';
-    return `${sizeValue} ${symbol}`;
+    const displayName = symbol ? parseDexCoin(symbol).displayName : '';
+    return `${sizeValue} ${displayName}`;
   }, [
     orderValue,
     tradingPreferences.sizeInputUnit,
@@ -170,6 +175,10 @@ function SideButtonInternal({
   ]);
 
   const buttonText = useMemo(() => {
+    if (priceError === 'bbo_unavailable')
+      return intl.formatMessage({
+        id: ETranslations.Perps_BBO_unavailable,
+      });
     if (isMinimumOrderNotMetForSide)
       return intl.formatMessage(
         {
@@ -195,6 +204,7 @@ function SideButtonInternal({
       ? intl.formatMessage({ id: ETranslations.perp_trade_long })
       : intl.formatMessage({ id: ETranslations.perp_trade_short });
   }, [
+    priceError,
     isMinimumOrderNotMetForSide,
     isNoEnoughMargin,
     side,

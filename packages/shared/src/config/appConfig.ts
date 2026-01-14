@@ -1,7 +1,3 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
-
-import App from '@onekeyhq/desktop/App';
-
 import type { EServiceEndpointEnum, IEndpointEnv } from '../../types/endpoint';
 
 export const HARDWARE_SDK_IFRAME_SRC_ONEKEYSO =
@@ -25,8 +21,11 @@ export const FIRMWARE_UPDATE_BRIDGE_GUIDE =
   'https://help.onekey.so/articles/11461117';
 
 export const HELP_CENTER_URL = 'https://help.onekey.so';
-export const HELP_CENTER_COMMON_FAQ_URL =
+export const HELP_CENTER_APP_FAQ_URL =
+  'https://help.onekey.so/collections/13034407';
+export const HELP_CENTER_HARDWARE_FAQ_URL =
   'https://help.onekey.so/collections/13034346';
+
 export const LITE_CARD_URL =
   'https://onekey.so/products/onekey-lite-hardware-wallet/';
 export const BRIDGE_STATUS_URL = 'http://127.0.0.1:21320/status/';
@@ -38,6 +37,8 @@ export const DOWNLOAD_MOBILE_APP_URL =
 export const REFERRAL_HELP_LINK = 'https://help.onekey.so/articles/11461266';
 export const COIN_CONTROL_HELP_LINK =
   'https://help.onekey.so/articles/13050014';
+export const HARDWARE_TROUBLESHOOTING_URL =
+  'https://help.onekey.so/articles/13183743';
 
 export const FRESH_ADDRESS_LEARN_MORE_URL =
   'https://help.onekey.so/articles/12620219';
@@ -90,7 +91,7 @@ export const EXT_RATE_URL = {
 };
 
 export const APP_STORE_LINK = `itms-apps://apps.apple.com/app/id1609559473?action=write-review`;
-export const PLAY_STORE_LINK = `market://details?id=so.onekey.app.wallet`;
+export const PLAY_STORE_LINK = `https://play.google.com/store/apps/details?id=so.onekey.app.wallet`;
 
 export const ONEKEY_KEY_TAG_PURCHASE_URL =
   'https://onekey.so/products/onekey-keytag/';
@@ -125,3 +126,7 @@ export const SUPPORT_URL = 'https://help.onekey.so/hc/requests/new';
 export const HYPERLIQUID_EXPLORER_URL = 'https://hypurrscan.io/address/';
 
 export const DESKTOP_ICLOUD_CONTAINER_ID = 'iCloud.so.onekey.wallet';
+
+export const ONEKEY_SIFU_URL = 'https://onekey.so/products/onekey-sifu';
+
+export const ONEKEY_BUY_HARDWARE_URL = 'https://bit.ly/3YtpXgh';

@@ -12,6 +12,7 @@ import {
   useOrientation,
 } from '@onekeyhq/components';
 import { Token } from '@onekeyhq/kit/src/components/Token';
+import { useNetworkLogoUri } from '@onekeyhq/kit/src/hooks/useNetworkLogoUri';
 import { EWatchlistFrom } from '@onekeyhq/shared/src/logger/scopes/dex';
 import platformEnv from '@onekeyhq/shared/src/platformEnv';
 import accountUtils from '@onekeyhq/shared/src/utils/accountUtils';
@@ -45,6 +46,12 @@ export function TokenDetailHeaderLeft({
     return isLandscape ? windowScreenWidth / 2 : windowScreenWidth;
   }, [isLandscape, windowScreenWidth]);
   const { md } = useMedia();
+
+  // Use hook to get network logo with async fallback
+  const effectiveNetworkLogoUri = useNetworkLogoUri({
+    logoUri: networkLogoUri,
+    networkId,
+  });
 
   const {
     handleCopyAddress,
@@ -105,13 +112,19 @@ export function TokenDetailHeaderLeft({
         <Token
           size="md"
           tokenImageUri={logoUrl}
-          networkImageUri={networkLogoUri}
+          networkImageUri={effectiveNetworkLogoUri}
           fallbackIcon="CryptoCoinOutline"
         />
 
         <YStack>
           <XStack ai="center" gap="$1">
-            <SizableText size="$bodyLgMedium" color="$text">
+            <SizableText
+              size="$bodyLgMedium"
+              color="$text"
+              numberOfLines={1}
+              maxWidth="$60"
+              flexShrink={1}
+            >
               {symbol}
             </SizableText>
             {communityRecognized ? <CommunityRecognizedBadge /> : null}

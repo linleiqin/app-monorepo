@@ -249,6 +249,11 @@ export default class ServicePassword extends ServiceBase {
   }
 
   @backgroundMethod()
+  async hasCachedPassword(): Promise<boolean> {
+    return !!this.cachedPassword;
+  }
+
+  @backgroundMethod()
   async getCachedPasswordOrDeviceParams({ walletId }: { walletId: string }) {
     const isHardware = accountUtils.isHwWallet({ walletId });
     let password: string | undefined = '';
@@ -810,10 +815,10 @@ export default class ServicePassword extends ServiceBase {
   // lock ---------------------------
   @backgroundMethod()
   async unLockApp() {
+    await passwordPersistAtom.set((v) => ({ ...v, manualLocking: false }));
     await passwordAtom.set((v) => ({
       ...v,
       unLock: true,
-      manualLocking: false,
     }));
     await this.backgroundApi.serviceApp.dispatchUnlockJob();
   }
@@ -823,7 +828,6 @@ export default class ServicePassword extends ServiceBase {
     await passwordAtom.set((v) => ({
       ...v,
       passwordVerifyStatus: { value: EPasswordVerifyStatus.DEFAULT },
-      manualLocking: false,
     }));
   }
 
@@ -841,7 +845,7 @@ export default class ServicePassword extends ServiceBase {
     }
     await this.clearCachedPassword();
     if (manual) {
-      await passwordAtom.set((v) => ({ ...v, manualLocking: true }));
+      await passwordPersistAtom.set((v) => ({ ...v, manualLocking: true }));
     }
     await passwordAtom.set((v) => ({ ...v, unLock: false }));
   }

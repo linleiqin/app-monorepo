@@ -20,7 +20,13 @@ function getChartInitScript(): string {
         },
         grid: {
           vertLines: { visible: false },
-          horzLines: { visible: false },
+          horzLines: config.showHorzGridLines
+            ? {
+                visible: true,
+                color: config.horzLineColor || '#E5E5EA',
+                style: config.horzLineStyle ?? 2,
+              }
+            : { visible: false },
         },
         crosshair: {
           mode: LightweightCharts.CrosshairMode.Normal,
@@ -46,7 +52,10 @@ function getChartInitScript(): string {
             return month + ' ' + day;
           },
         },
-        rightPriceScale: { visible: false },
+        rightPriceScale: {
+          visible: Boolean(config.showPriceScale),
+          borderVisible: false,
+        },
         leftPriceScale: { visible: false },
         handleScroll: {
           mouseWheel: false,
@@ -70,7 +79,7 @@ function getChartInitScript(): string {
         topColor: config.theme.topColor,
         bottomColor: config.theme.bottomColor,
         lineColor: config.theme.lineColor,
-        lineWidth: 2.5,
+        lineWidth: config.lineWidth ?? 3,
         lastValueVisible: false,
         priceLineVisible: false,
         priceFormat: {

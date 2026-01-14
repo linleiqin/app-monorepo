@@ -20,7 +20,6 @@ import { useOneKeyAuth } from '@onekeyhq/kit/src/components/OneKeyAuth/useOneKey
 import { Section } from '@onekeyhq/kit/src/components/Section';
 import useAppNavigation from '@onekeyhq/kit/src/hooks/useAppNavigation';
 import { useAppRoute } from '@onekeyhq/kit/src/hooks/useAppRoute';
-import { usePromiseResult } from '@onekeyhq/kit/src/hooks/usePromiseResult';
 import { usePasswordPersistAtom } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import {
   usePrimeCloudSyncPersistAtom,
@@ -33,16 +32,14 @@ import { EModalRoutes } from '@onekeyhq/shared/src/routes';
 import type { IPrimeParamList } from '@onekeyhq/shared/src/routes/prime';
 import { EPrimeFeatures, EPrimePages } from '@onekeyhq/shared/src/routes/prime';
 import { formatDistanceToNow } from '@onekeyhq/shared/src/utils/dateUtils';
+import { isNeverLockDuration } from '@onekeyhq/shared/src/utils/passwordUtils';
 import timerUtils from '@onekeyhq/shared/src/utils/timerUtils';
 
 import { AppAutoLockSettingsView } from '../../../Setting/pages/AppAutoLock';
 import { usePrimeRequirements } from '../../hooks/usePrimeRequirements';
 
 function isAutoLockValueNotAllowed(value: number) {
-  return (
-    value === Number(ELockDuration.Never) ||
-    value === Number(ELockDuration.Hour4)
-  );
+  return isNeverLockDuration(value) || value === Number(ELockDuration.Hour4);
 }
 
 function AutoLockUpdateDialogContent({

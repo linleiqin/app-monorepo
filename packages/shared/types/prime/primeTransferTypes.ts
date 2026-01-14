@@ -3,18 +3,21 @@
 import type { IBip39RevealableSeed } from '@onekeyhq/core/src/secret';
 import type { ICoreImportedCredential } from '@onekeyhq/core/src/types';
 import type { EDBAccountType } from '@onekeyhq/kit-bg/src/dbs/local/consts';
-import type {
-  IDBAccount,
-  IDBWallet,
-} from '@onekeyhq/kit-bg/src/dbs/local/types';
+import type { IDBWallet } from '@onekeyhq/kit-bg/src/dbs/local/types';
 // export type ISimpleDBBackUp = {
 //   utxoAccounts: Pick<ISimpleDbEntityUtxoData, 'utxos'>;
 //   market: Pick<ISimpleDbEntityMarktData, 'favorites'>;
 // };
 import type { IAccountDeriveTypes } from '@onekeyhq/kit-bg/src/vaults/types';
+import type { IDeviceKeyPack } from '@onekeyhq/shared/src/keylessWallet/keylessWalletTypes';
 import type { IAvatarInfo } from '@onekeyhq/shared/src/utils/emojiUtils';
 
 import type { IAllWalletAvatarImageNamesWithoutDividers } from '../../src/utils/avatarUtils';
+
+export enum EPrimeTransferDataType {
+  keylessWallet = 'keylessWallet',
+  allWallet = 'allWallet',
+}
 
 export enum EPrimeTransferServerType {
   OFFICIAL = 'official',
@@ -117,6 +120,8 @@ export type IPrimeTransferPrivateData = {
   watchingAccounts: Record<string, IPrimeTransferAccount>;
   // UUID -> ImportableHDWallet
   wallets: Record<string, IPrimeTransferHDWallet>;
+  // DeviceKeyPack for keyless wallet transfer
+  deviceKeyPack?: IDeviceKeyPack;
   // simpleDb?: {
   //   utxoAccounts?: ISimpleDbEntityUtxoData;
   //   market?: ISimpleDbEntityMarktData;

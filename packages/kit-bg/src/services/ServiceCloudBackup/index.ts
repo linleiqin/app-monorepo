@@ -48,7 +48,6 @@ import ServiceBase from '../ServiceBase';
 import { ERestoreResult } from './types';
 import {
   accountCountWithBackup,
-  filterWillRemoveBackupList,
   isAvailableBackupWithBackup,
 } from './utils/BackupUtils';
 
@@ -155,6 +154,10 @@ class ServiceCloudBackup extends ServiceBase {
       const walletId = accountUtils.parseAccountId({
         accountId: account.id,
       }).walletId;
+      if (!walletId) {
+        // eslint-disable-next-line no-continue
+        continue;
+      }
       const wallet = walletAccountMap[walletId];
       if (wallet && wallet.type !== WALLET_TYPE_HW) {
         if (wallet.type === WALLET_TYPE_IMPORTED) {

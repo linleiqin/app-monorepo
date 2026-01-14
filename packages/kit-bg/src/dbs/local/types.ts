@@ -2,6 +2,7 @@ import type {
   IBip39RevealableSeed,
   IBip39RevealableSeedEncryptHex,
 } from '@onekeyhq/core/src/secret';
+import type { EOAuthSocialLoginProvider } from '@onekeyhq/shared/src/consts/authConsts';
 import type {
   WALLET_TYPE_EXTERNAL,
   WALLET_TYPE_HD,
@@ -133,6 +134,11 @@ export type IDBWalletNextIdKeys =
   | 'accountGlobalNum'
   | 'hiddenWalletNum';
 export type IDBWalletNextIds = Partial<Record<IDBWalletNextIdKeys, number>>;
+export type IKeylessWalletDetailsInfo = {
+  keylessOwnerId: string;
+  keylessProvider: EOAuthSocialLoginProvider;
+  socialUserIdHash: string;
+};
 export type IDBWallet = IDBBaseObjectWithName & {
   type: IDBWalletType;
   backuped: boolean;
@@ -155,6 +161,9 @@ export type IDBWallet = IDBBaseObjectWithName & {
   dbIndexedAccounts?: IDBIndexedAccount[]; // readonly field
   isTemp?: boolean;
   isMocked?: boolean;
+  isKeyless?: boolean;
+  keylessDetails?: string; // JSON.stringify(keylessDetailsInfo)
+  keylessDetailsInfo?: IKeylessWalletDetailsInfo; // readonly field
   passphraseState?: string;
   walletNo: number;
   walletOrderSaved?: number; // db field
@@ -165,6 +174,7 @@ export type IDBWallet = IDBBaseObjectWithName & {
   airGapAccountsInfoRaw?: string;
   airGapAccountsInfo?: IQrWalletAirGapAccountsInfo;
   deprecated?: boolean; // hw wallet only
+  firmwareTypeAtCreated?: EFirmwareType;
 };
 export type IDBCreateHDWalletParams = {
   password: string;
@@ -174,10 +184,18 @@ export type IDBCreateHDWalletParams = {
   walletHash: string;
   walletXfp: string;
   avatar?: IAvatarInfo;
+  isKeylessWallet?: boolean;
+  keylessDetailsInfo?: IKeylessWalletDetailsInfo;
+};
+export type IDBCreateKeylessWalletParams = {
+  password: string;
+  packSetId: string;
+  name?: string;
+  avatar?: IAvatarInfo;
 };
 export type IDBCreateHwWalletParamsBase = {
   name?: string;
-  device: SearchDevice;
+  device: Omit<SearchDevice, 'commType'>;
   features: IOneKeyDeviceFeatures;
   isFirmwareVerified?: boolean;
   skipDeviceCancel?: boolean;
@@ -200,6 +218,7 @@ export type IDBCreateQRWalletParams = {
   fullXfp?: string;
   isMockedStandardHwWallet?: boolean;
   existingDeviceId?: string;
+  firmwareTypeAtCreated?: EFirmwareType;
 };
 export type IDBSetWalletNameAndAvatarParams = {
   walletId: IDBWalletId;
@@ -462,7 +481,8 @@ export enum EIndexedDBBucketNames {
   // credential = 'credential', // credential, context
   // wallet = 'wallet', // wallet, device
   account = 'account_local-db_onekey-bucket', // account
-  backupAccount = `${INDEXED_BUCKET_NAME_BACKUP_PREFIX}account_local-db_onekey-bucket`, // account
+  // NOTE: Using inline string instead of template literal for SWC/Rspack compatibility
+  backupAccount = 'backup-account_local-db_onekey-bucket', // account
   address = 'address_local-db_onekey-bucket', // address to account map
   archive = 'archive_local-db_onekey-bucket', // connected site, signed message, signed transaction
 

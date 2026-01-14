@@ -4,13 +4,15 @@ import * as React from 'react';
 
 import { Header } from '@react-navigation/elements';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDebouncedCallback } from 'use-debounce';
 
 import { useMedia } from '@onekeyhq/components/src/hooks/useStyle';
 import { useTheme } from '@onekeyhq/components/src/shared/tamagui';
 import platformEnv from '@onekeyhq/shared/src/platformEnv';
 
-import { useIsModalPage } from '../../../hocs';
+import { useIsOverlayPage } from '../../../hocs';
+import { useIsDesktopModeUIInTabPages } from '../../../hooks';
 import { Stack, XStack } from '../../../primitives';
 import { DesktopDragZoneBox } from '../../DesktopDragZoneBox';
 import { rootNavigationRef } from '../Navigator/NavigationContainer';
@@ -41,7 +43,7 @@ function getHeaderTitle(
 
 const DesktopDragZoneBoxView = platformEnv.isDesktop
   ? ({ disabled, children }: IDesktopDragZoneBoxProps) => {
-      const isModalPage = useIsModalPage();
+      const isModalPage = useIsOverlayPage();
 
       const [isFocus, setIsFocus] = useState(false);
 
@@ -80,6 +82,13 @@ const DesktopDragZoneBoxView = platformEnv.isDesktop
       );
     }
   : DesktopDragZoneBox;
+
+const useHeaderHeight = platformEnv.isNativeIOS
+  ? () => 52
+  : () => {
+      const { top } = useSafeAreaInsets();
+      return useMemo(() => 52 + top, [top]);
+    };
 
 function HeaderView({
   back: headerBack,
@@ -149,7 +158,7 @@ function HeaderView({
       headerLeft,
     ],
   );
-
+  const headerHeight = useHeaderHeight();
   const { gtMd } = useMedia();
 
   const isGtMd = gtMd && !platformEnv.isNativeAndroid;
@@ -164,6 +173,18 @@ function HeaderView({
     }
     return undefined;
   }, [isGtMd, isModelScreen]);
+
+  const isDesktopModeUI = useIsDesktopModeUIInTabPages();
+  const headerBackgroundColor = useMemo(() => {
+    if (headerTransparent) {
+      return 'transparent';
+    }
+    if (platformEnv.isWebDappMode) {
+      return '$bgApp';
+    }
+    return isDesktopModeUI ? '$bgSubdued' : '$bgApp';
+  }, [headerTransparent, isDesktopModeUI]);
+
   if (!headerShown) {
     return null;
   }
@@ -172,15 +193,13 @@ function HeaderView({
     <DesktopDragZoneBoxView disabled={isModelScreen}>
       <Stack
         alignItems="center"
-        bg={headerTransparent ? 'transparent' : '$bgApp'}
+        bg={headerBackgroundColor}
         pt={isOnboardingScreen ? '$10' : undefined}
         style={
           headerTransparent && !platformEnv.isNativeAndroid
             ? { position: 'absolute', right: 0, left: 0 }
             : {}
         }
-        // borderBottomWidth={StyleSheet.hairlineWidth}
-        // borderBottomColor="$borderSubdued"
         pointerEvents="box-none"
         {...(!isModelScreen && {
           $gtMd: platformEnv.isNativeAndroid
@@ -209,6 +228,7 @@ function HeaderView({
             headerRightContainerStyle={
               isOnboardingScreen ? { flexGrow: 0 } : headerRightContainerStyle
             }
+            headerTitleAllowFontScaling={false}
             headerRight={
               typeof headerRight === 'function'
                 ? ({ tintColor }) => {
@@ -240,7 +260,7 @@ function HeaderView({
             headerBackground={headerBackground}
             headerStyle={[
               {
-                height: 52,
+                height: headerHeight,
               },
               headerStyle,
             ]}

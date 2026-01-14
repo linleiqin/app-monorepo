@@ -50,7 +50,7 @@ type IProps = {
   data: IAccountHistoryTx[];
   isLoading?: boolean;
   tableLayout?: boolean;
-  ListHeaderComponent?: ReactElement;
+  ListHeaderComponent?: ReactElement | null;
   showHeader?: boolean;
   showFooter?: boolean;
   showIcon?: boolean;
@@ -74,6 +74,9 @@ type IProps = {
   isSingleAccount?: boolean;
   tokenMap?: Record<string, ITokenFiat>;
   ref?: ForwardedRef<typeof SectionList>;
+  plainMode?: boolean;
+  emptyTitle?: string;
+  emptyDescription?: string;
 };
 
 const ListFooterComponent = ({
@@ -280,6 +283,7 @@ function BaseTxHistoryListView(props: IProps) {
     isSingleAccount,
     tokenMap,
     ref,
+    plainMode,
   } = props;
 
   const [searchKey] = useSearchKeyAtom();
@@ -389,7 +393,7 @@ function BaseTxHistoryListView(props: IProps) {
     }
     return (
       <EmptyHistory
-        showViewInExplorer
+        showViewInExplorer={!plainMode}
         walletId={walletId}
         accountId={accountId}
         networkId={networkId}
@@ -410,13 +414,45 @@ function BaseTxHistoryListView(props: IProps) {
     isSingleAccount,
     tokenMap,
     tableLayout,
+    plainMode,
   ]);
+
+  if (plainMode) {
+    if (sections.length === 0) {
+      return EmptyComponentElement;
+    }
+
+    return (
+      <YStack>
+        {sections.map((section, index) => (
+          <YStack key={section.title}>
+            {renderSectionHeader({ section, index })}
+            {section.data.map((item, itemIndex) => (
+              <TxHistoryListItem
+                key={item.id}
+                historyTx={item}
+                index={itemIndex}
+                showIcon={showIcon}
+                onPress={onPressHistory}
+                tableLayout={tableLayout}
+                hideValue={hideValue}
+                compact={plainMode}
+              />
+            ))}
+          </YStack>
+        ))}
+      </YStack>
+    );
+  }
 
   return (
     <ListComponent
       ref={(ref ?? ListComponentRef) as any}
+      nestedScrollEnabled={platformEnv.isNativeAndroid ? inTabList : false}
       refreshControl={
-        onRefresh ? <PullToRefresh onRefresh={onRefresh} /> : undefined
+        !platformEnv.isNativeAndroid && onRefresh ? (
+          <PullToRefresh onRefresh={onRefresh} />
+        ) : undefined
       }
       // @ts-ignore
       estimatedItemSize={platformEnv.isNative ? 60 : 56}

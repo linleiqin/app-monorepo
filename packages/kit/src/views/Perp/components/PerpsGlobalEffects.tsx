@@ -1,9 +1,9 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useRef } from 'react';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { isEqual, noop } from 'lodash';
 
-import { Toast, useUpdateEffect } from '@onekeyhq/components';
+import { useUpdateEffect } from '@onekeyhq/components';
 import { DelayedRender } from '@onekeyhq/components/src/hocs/DelayedRender';
 import {
   useAccountIsAutoCreatingAtom,
@@ -30,12 +30,17 @@ import {
   EAppEventBusNames,
   appEventBus,
 } from '@onekeyhq/shared/src/eventBus/appEventBus';
+import platformEnv from '@onekeyhq/shared/src/platformEnv';
 import { ETabRoutes } from '@onekeyhq/shared/src/routes';
 import { useDebugHooksDepsChangedChecker } from '@onekeyhq/shared/src/utils/debug/debugUtils';
 import timerUtils from '@onekeyhq/shared/src/utils/timerUtils';
 import type {
   IBook,
+  IWsAllDexsAssetCtxs,
+  IWsAllDexsClearinghouseState,
   IWsAllMids,
+  IWsBbo,
+  IWsOpenOrders,
   IWsUserNonFundingLedgerUpdates,
   IWsWebData2,
 } from '@onekeyhq/shared/types/hyperliquid/sdk';
@@ -50,6 +55,7 @@ import {
 
 import backgroundApiProxy from '../../../background/instance/backgroundApiProxy';
 import { GlobalJotaiReady } from '../../../components/GlobalJotaiReady';
+import { useHandleAppStateActive } from '../../../hooks/useHandleAppStateActive';
 import useListenTabFocusState from '../../../hooks/useListenTabFocusState';
 import { usePromiseResult } from '../../../hooks/usePromiseResult';
 import { useRouteIsFocused } from '../../../hooks/useRouteIsFocused';
@@ -59,6 +65,8 @@ import {
   useOrderBookTickOptionsAtom,
   useSubscriptionActiveAtom,
 } from '../../../states/jotai/contexts/hyperliquid/atoms';
+
+import { usePerpTokenUrlSync } from './usePerpTokenUrlSync';
 
 function useSyncContextOrderBookOptionsToGlobal() {
   const [activeAsset] = usePerpsActiveAssetAtom();
@@ -133,6 +141,7 @@ function useHyperliquidEventBusListener() {
         type: EPerpsSubscriptionCategory;
         subType: ESubscriptionType;
         data: any;
+        metadata?: { source?: string; timestamp?: number };
       };
       const { subType, data } = eventPayload;
 
@@ -147,9 +156,31 @@ function useHyperliquidEventBusListener() {
             void actions.current.updateWebData2(webData2);
             break;
           }
+          case ESubscriptionType.ALL_DEXS_CLEARINGHOUSE_STATE: {
+            void actions.current.updateAllDexsClearinghouseState(
+              data as IWsAllDexsClearinghouseState,
+            );
+            break;
+          }
+
+          case ESubscriptionType.OPEN_ORDERS: {
+            void actions.current.updateOpenOrders(data as IWsOpenOrders);
+            break;
+          }
+
+          case ESubscriptionType.ALL_DEXS_ASSET_CTXS: {
+            void actions.current.updateAllDexsAssetCtxs(
+              data as IWsAllDexsAssetCtxs,
+            );
+            break;
+          }
 
           case ESubscriptionType.L2_BOOK:
             void actions.current.updateL2Book(data as IBook);
+            break;
+
+          case ESubscriptionType.BBO:
+            void actions.current.updateBbo(data as IWsBbo);
             break;
 
           case ESubscriptionType.USER_NON_FUNDING_LEDGER_UPDATES:
@@ -257,9 +288,7 @@ function useHyperliquidSession() {
 function useHyperliquidAccountSelect() {
   const { activeAccount } = useActiveAccount({ num: 0 });
   const [activePerpsAccount] = usePerpsActiveAccountAtom();
-  const [activeAsset] = usePerpsActiveAssetAtom();
   const actions = useHyperliquidActions();
-  const isFirstMountRef = useRef(true);
   const [accountIsAutoCreating] = useAccountIsAutoCreatingAtom();
   const isFocused = useRouteIsFocused();
   const [indexedAccountAddressCreationState] =
@@ -480,6 +509,8 @@ function useHyperliquidScreenLockHandler() {
         // Screen unlocked - restore status
         if (isFocusedRef.current) {
           void checkPerpsAccountStatus();
+          // Force reload TradingView Candles WebView to fix data gap after screen unlock
+          void backgroundApiProxy.serviceHyperliquidSubscription.forceReloadCandlesWebview();
         }
       } else {
         // Screen locked - dispose clients
@@ -545,6 +576,16 @@ function AutoPauseSubscriptions() {
     }
   });
 
+  const handleAppActiveFromBackground = useCallback(() => {
+    if (isFocusedRef.current) {
+      void onFocusHandler({ isFocus: true });
+    }
+  }, [onFocusHandler]);
+
+  useHandleAppStateActive(
+    platformEnv.isNative ? handleAppActiveFromBackground : undefined,
+  );
+
   const [isLocked] = useAppIsLockedAtom();
 
   useEffect(() => {
@@ -573,6 +614,7 @@ function PerpsGlobalEffectsView() {
   useHyperliquidEventBusListener();
   useHyperliquidSession();
   useHyperliquidAccountSelect();
+  usePerpTokenUrlSync();
   useHyperliquidSymbolSelect();
   useHyperliquidScreenLockHandler();
   useSyncContextOrderBookOptionsToGlobal();

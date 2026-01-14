@@ -27,15 +27,11 @@ import {
   appEventBus,
 } from '@onekeyhq/shared/src/eventBus/appEventBus';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
-import platformEnv from '@onekeyhq/shared/src/platformEnv';
 import { EOnboardingPagesV2 } from '@onekeyhq/shared/src/routes/onboardingv2';
 import type { IOnboardingParamListV2 } from '@onekeyhq/shared/src/routes/onboardingv2';
 import { HwWalletAvatarImages } from '@onekeyhq/shared/src/utils/avatarUtils';
 import deviceUtils from '@onekeyhq/shared/src/utils/deviceUtils';
-import {
-  EAccountSelectorSceneName,
-  EHardwareTransportType,
-} from '@onekeyhq/shared/types';
+import { EAccountSelectorSceneName } from '@onekeyhq/shared/types';
 import {
   EHardwareCallContext,
   EOneKeyDeviceMode,
@@ -878,6 +874,10 @@ function CheckAndUpdatePage({
                         $platform-web={{
                           boxShadow:
                             '0 0 0 1px rgba(0, 0, 0, 0.04), 0 0 2px 0 rgba(0, 0, 0, 0.08), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
+                        }}
+                        $theme-dark={{
+                          borderWidth: StyleSheet.hairlineWidth,
+                          borderColor: '$neutral2',
                         }}
                         zIndex={0}
                       />

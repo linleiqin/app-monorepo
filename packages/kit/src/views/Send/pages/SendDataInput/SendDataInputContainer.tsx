@@ -22,6 +22,7 @@ import type {
   UseFormReturn,
 } from '@onekeyhq/components';
 import {
+  Alert,
   Button,
   Dialog,
   Form,
@@ -99,6 +100,7 @@ import {
   getAccountIdOnNetwork,
   parseOnChainAmount,
 } from '../../../ScanQrCode/hooks/useParseQRCode';
+import { showSimilarAddressDialog } from '../../../SignatureConfirm/components/SimilarAddressDialog';
 import CoinControlBadge from '../../components/CoinControlBadge';
 import { SendConfirmProviderMirror } from '../../components/SendConfirmProvider/SendConfirmProviderMirror';
 
@@ -239,6 +241,7 @@ function SendDataInputContainer() {
     numericOnlyMemo,
     displayNoteForm,
     noteMaxLength,
+    supportsMemoValidation,
     displayTxMessageForm,
   ] = useMemo(() => {
     return [
@@ -248,6 +251,7 @@ function SendDataInputContainer() {
       vaultSettings?.numericOnlyMemo,
       vaultSettings?.withNote,
       vaultSettings?.noteMaxLength,
+      vaultSettings?.supportMemoValidation,
       vaultSettings?.withTxMessage,
     ];
   }, [vaultSettings]);
@@ -396,6 +400,7 @@ function SendDataInputContainer() {
   const toAddressRaw = form.watch('to.raw');
   const nftAmount = form.watch('nftAmount');
   const toIsContract = form.watch('to.isContract');
+  const toSimilarAddress = form.watch('to.similarAddress');
 
   const linkedAmount = useMemo(() => {
     let amountBN = new BigNumber(amount ?? 0);
@@ -638,7 +643,37 @@ function SendDataInputContainer() {
           if (!account) return;
           const toAddress = form.getValues('to').resolved;
           const isToContract = form.getValues('to').isContract;
+          const similarAddress = form.getValues('to').similarAddress;
           if (!toAddress) return;
+
+          if (similarAddress) {
+            const [similarAddressValidation, toAddressValidation] =
+              await Promise.all([
+                backgroundApiProxy.serviceValidator.localValidateAddress({
+                  networkId: currentAccount.networkId,
+                  address: similarAddress,
+                }),
+                backgroundApiProxy.serviceValidator.localValidateAddress({
+                  networkId: currentAccount.networkId,
+                  address: toAddress,
+                }),
+              ]);
+            try {
+              await showSimilarAddressDialog({
+                similarAddress:
+                  similarAddressValidation.displayAddress ||
+                  similarAddressValidation.normalizedAddress ||
+                  similarAddress,
+                currentAddress:
+                  toAddressValidation.displayAddress ||
+                  toAddressValidation.normalizedAddress ||
+                  toAddress,
+              });
+            } catch (e) {
+              console.error('showSimilarAddressDialog error', e);
+              return;
+            }
+          }
 
           let realAmount = amount;
 
@@ -758,6 +793,7 @@ function SendDataInputContainer() {
     [
       account,
       amount,
+      currentAccount.networkId,
       currentSelectedUtxoKeys,
       currentUtxoSelectionStrategy,
       displayTxMessageForm,
@@ -1354,15 +1390,47 @@ function SendDataInputContainer() {
     return null;
   }, [form, intl, isLoadingAssets, nft?.collectionType, nftDetails?.amount]);
 
+  const validateMemoField = useCallback(
+    async (value: string): Promise<string | undefined> => {
+      if (vaultSettings?.supportMemoValidation) {
+        try {
+          const result = await backgroundApiProxy.serviceSend.validateMemo({
+            networkId: currentAccount.networkId,
+            accountId: currentAccount.accountId,
+            memo: value,
+          });
+          if (!result.isValid) {
+            return result.errorMessage;
+          }
+          return undefined;
+        } catch (error) {
+          console.error('Vault memo validation failed:', error);
+        }
+      }
+
+      const validateErrMsg = numericOnlyMemo
+        ? intl.formatMessage({
+            id: ETranslations.send_field_only_integer,
+          })
+        : undefined;
+      const memoRegExp = numericOnlyMemo ? /^[0-9]+$/ : undefined;
+
+      if (!value || !memoRegExp) return undefined;
+      const result = !memoRegExp.test(value);
+      return result ? validateErrMsg : undefined;
+    },
+    [
+      currentAccount.accountId,
+      currentAccount.networkId,
+      intl,
+      numericOnlyMemo,
+      vaultSettings?.supportMemoValidation,
+    ],
+  );
+
   const renderMemoForm = useCallback(() => {
     if (!displayMemoForm) return null;
     const maxLength = memoMaxLength || 256;
-    const validateErrMsg = numericOnlyMemo
-      ? intl.formatMessage({
-          id: ETranslations.send_field_only_integer,
-        })
-      : undefined;
-    const memoRegExp = numericOnlyMemo ? /^[0-9]+$/ : undefined;
 
     return (
       <>
@@ -1371,22 +1439,20 @@ function SendDataInputContainer() {
           optional
           name="memo"
           rules={{
-            maxLength: {
-              value: maxLength,
-              message: intl.formatMessage(
-                {
-                  id: ETranslations.dapp_connect_msg_description_can_be_up_to_int_characters,
+            maxLength: supportsMemoValidation
+              ? undefined
+              : {
+                  value: maxLength,
+                  message: intl.formatMessage(
+                    {
+                      id: ETranslations.dapp_connect_msg_description_can_be_up_to_int_characters,
+                    },
+                    {
+                      number: maxLength,
+                    },
+                  ),
                 },
-                {
-                  number: maxLength,
-                },
-              ),
-            },
-            validate: (value) => {
-              if (!value || !memoRegExp) return undefined;
-              const result = !memoRegExp.test(value);
-              return result ? validateErrMsg : undefined;
-            },
+            validate: validateMemoField,
           }}
         >
           <TextArea
@@ -1399,7 +1465,14 @@ function SendDataInputContainer() {
         </Form.Field>
       </>
     );
-  }, [displayMemoForm, intl, media.gtMd, memoMaxLength, numericOnlyMemo]);
+  }, [
+    displayMemoForm,
+    intl,
+    media.gtMd,
+    memoMaxLength,
+    supportsMemoValidation,
+    validateMemoField,
+  ]);
 
   const renderPaymentIdForm = useCallback(() => {
     if (!displayPaymentIdForm) return null;
@@ -1816,7 +1889,16 @@ function SendDataInputContainer() {
               onInputTypeChange={handleAddressInputChangeType}
               onExtraDataChange={handleAddressInputExtraDataChange}
               hideNonBackedUpWallet
+              ignoreSimilarAddressInAddressBook
             />
+            {toSimilarAddress ? (
+              <Alert
+                type="warning"
+                title={intl.formatMessage({
+                  id: ETranslations.wallet_address_poisoning_alert,
+                })}
+              />
+            ) : null}
             {shouldShowRecentRecipients ? (
               <RecentRecipients
                 accountId={currentAccount.accountId}

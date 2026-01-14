@@ -233,6 +233,7 @@ export interface IMarketTokenTransactionsResponse {
 export interface IMarketAccountTokenTransactionParty {
   amount: string;
   address: string;
+  symbol: string;
 }
 
 export interface IMarketAccountTokenTransaction {
@@ -316,6 +317,17 @@ export interface IMarketBasicConfigFeature {
   [key: string]: unknown;
 }
 
+export interface IMarketBasicConfigLowLiquidKlineSourceToken {
+  networkId: string;
+  tokenAddress: string;
+}
+
+export interface IMarketBasicConfigHyperLiquidKlineSourceToken {
+  networkId: string;
+  tokenAddress: string;
+  symbol: string;
+}
+
 export interface IMarketBasicConfigData {
   tradingViewUrl: string;
   networkList: IMarketBasicConfigNetwork[];
@@ -327,6 +339,8 @@ export interface IMarketBasicConfigData {
     [networkId: string]: IMarketBasicConfigNetworkFeature;
   };
   feature?: IMarketBasicConfigFeature;
+  lowLiquidKlineSourceTokens?: IMarketBasicConfigLowLiquidKlineSourceToken[];
+  HyperLiquidKlineSourceTokens?: IMarketBasicConfigHyperLiquidKlineSourceToken[];
 }
 
 export interface IMarketBasicConfigResponse {
@@ -362,4 +376,37 @@ export interface IMarketAccountPortfolioItem {
 
 export interface IMarketAccountPortfolioResponse {
   list: IMarketAccountPortfolioItem[];
+}
+
+// Banner types
+export interface IMarketBannerDescription {
+  text: string;
+  fontColor: string;
+}
+
+export interface IMarketBannerItem {
+  _id: string;
+  title: string;
+  rank: number;
+  mode: number;
+  payload: string;
+  miniBundlerVersion: string;
+  backgroundColor: string;
+  tokenListId: string;
+  description?: IMarketBannerDescription;
+  tokenLogos?: string[];
+}
+
+export interface IMarketBannerListResponse {
+  total: number;
+  data: IMarketBannerItem[];
+}
+
+export interface IMarketBannerTokenListItem extends IMarketTokenListItem {
+  isNative?: boolean;
+  tokenAge?: string;
+}
+
+export interface IMarketBannerTokenListResponse {
+  list: IMarketBannerTokenListItem[];
 }

@@ -57,6 +57,7 @@ import timerUtils from '@onekeyhq/shared/src/utils/timerUtils';
 import type { INetworkAccount } from '@onekeyhq/shared/types/account';
 import { EServiceEndpointEnum } from '@onekeyhq/shared/types/endpoint';
 import type {
+  EPrimeTransferDataType,
   IE2EESocketUserInfo,
   IPrimeTransferAccount,
   IPrimeTransferData,
@@ -665,6 +666,106 @@ class ServicePrimeTransfer extends ServiceBase {
   }
 
   @backgroundMethod()
+  async updateSelfTransferType({
+    transferType,
+  }: {
+    transferType: EPrimeTransferDataType | undefined;
+  }) {
+    e2eeClientToClientApi.setSelfTransferType({ transferType });
+  }
+
+  @backgroundMethod()
+  async getRemoteTransferType(): Promise<{
+    transferType: EPrimeTransferDataType | undefined;
+  }> {
+    if (!this.e2eeClientToClientApiProxy) {
+      return { transferType: undefined };
+    }
+    const result = await this.e2eeClientToClientApiProxy.api.getTransferType();
+    return result;
+  }
+
+  /**
+   * Fix transfer direction for keyless wallet transfer.
+   * Direction should be: scanner (pairing code input side) -> scanned (QR code display side)
+   * The QR code display side is the room creator (myCreatedRoomId === pairedRoomId)
+   */
+  @backgroundMethod()
+  async fixTransferDirectionForKeylessWallet(): Promise<{
+    success: boolean;
+    message: string;
+    direction?: {
+      fromUserId: string;
+      toUserId: string;
+    };
+  }> {
+    const currentState = await primeTransferAtom.get();
+    const { pairedRoomId, myCreatedRoomId, myUserId } = currentState;
+
+    if (!pairedRoomId || !myUserId) {
+      return {
+        success: false,
+        message: 'Not in a paired room',
+      };
+    }
+
+    // Get room users
+    const roomUsers = await this.getRoomUsers({ roomId: pairedRoomId });
+    if (roomUsers.length !== 2) {
+      return {
+        success: false,
+        message: `Expected 2 users in room, got ${roomUsers.length}`,
+      };
+    }
+
+    // Find the room creator (QR code display side) - this is the toUser (receiver)
+    // The room creator is the one whose myCreatedRoomId === pairedRoomId
+    // Since we can only check our own state, we need to determine:
+    // - If I created the room, I am the receiver (toUser)
+    // - If I didn't create the room, I am the sender (fromUser)
+    const iAmRoomCreator = myCreatedRoomId === pairedRoomId;
+    const otherUser = roomUsers.find((u) => u.id !== myUserId);
+
+    if (!otherUser) {
+      return {
+        success: false,
+        message: 'Could not find the other user',
+      };
+    }
+
+    let fromUserId: string;
+    let toUserId: string;
+
+    if (iAmRoomCreator) {
+      // I created the room (QR code side), so I am the receiver
+      fromUserId = otherUser.id;
+      toUserId = myUserId;
+    } else {
+      // I joined the room (pairing code side), so I am the sender
+      fromUserId = myUserId;
+      toUserId = otherUser.id;
+    }
+
+    // Change the direction
+    await this.changeTransferDirection({
+      roomId: pairedRoomId,
+      fromUserId,
+      toUserId,
+    });
+
+    return {
+      success: true,
+      message: iAmRoomCreator
+        ? 'Fixed: I am receiver (QR code side)'
+        : 'Fixed: I am sender (pairing code side)',
+      direction: {
+        fromUserId,
+        toUserId,
+      },
+    };
+  }
+
+  @backgroundMethod()
   @toastIfError()
   async getRoomUsers({
     roomId,
@@ -757,7 +858,8 @@ class ServicePrimeTransfer extends ServiceBase {
   }: {
     isForCloudBackup?: boolean;
   } = {}): Promise<IPrimeTransferData> {
-    const { serviceAccount, serviceNetwork } = this.backgroundApi;
+    const { serviceAccount, serviceNetwork: _serviceNetwork } =
+      this.backgroundApi;
 
     const credentials = await serviceAccount.dumpCredentials();
 
@@ -778,7 +880,10 @@ class ServicePrimeTransfer extends ServiceBase {
 
     const { wallets } = await serviceAccount.getWallets();
 
-    const walletAccountMap = wallets.reduce((summary, current) => {
+    // Filter out keyless wallets
+    const filteredWallets = wallets.filter((wallet) => !wallet.isKeyless);
+
+    const walletAccountMap = filteredWallets.reduce((summary, current) => {
       summary[current.id] = current;
       return summary;
     }, {} as Record<string, IDBWallet>);
@@ -888,8 +993,18 @@ class ServicePrimeTransfer extends ServiceBase {
       const walletId = accountUtils.parseAccountId({
         accountId: account.id,
       }).walletId;
+      if (!walletId) {
+        // eslint-disable-next-line no-continue
+        continue;
+      }
+
       const wallet = walletAccountMap[walletId];
       if (wallet) {
+        // Skip accounts belonging to keyless wallets
+        if (wallet?.isKeyless) {
+          // eslint-disable-next-line no-continue
+          continue;
+        }
         const getNetworkAccountInfo = async () => {
           let networkAccount: INetworkAccount | undefined;
           const networkId = await serviceAccount.getAccountCreatedNetworkId({
@@ -1250,7 +1365,9 @@ class ServicePrimeTransfer extends ServiceBase {
       allowRawPassword: true,
     });
     const d: string = bufferUtils.bytesToUtf8(data);
-    const transferData = JSON.parse(d) as IPrimeTransferData | undefined;
+    const transferData: IPrimeTransferData | undefined = JSON.parse(d) as
+      | IPrimeTransferData
+      | undefined;
     if (!transferData) {
       throw new OneKeyLocalError('Invalid transfer data');
     }
@@ -1570,7 +1687,7 @@ class ServicePrimeTransfer extends ServiceBase {
         if (!password) {
           throw new OneKeyLocalError('Password is required');
         }
-        const decryptedCredential1 = await decryptRevealableSeed({
+        const _decryptedCredential1 = await decryptRevealableSeed({
           rs: walletCredential,
           password,
           allowRawPassword: true,
@@ -1579,7 +1696,7 @@ class ServicePrimeTransfer extends ServiceBase {
         if (!password) {
           throw new OneKeyLocalError('Password is required');
         }
-        const decryptedCredential2 = await decryptImportedCredential({
+        const _decryptedCredential2 = await decryptImportedCredential({
           credential: importedAccountCredential,
           password,
           allowRawPassword: true,
@@ -1810,8 +1927,11 @@ class ServicePrimeTransfer extends ServiceBase {
     createNetworkParams: IPrimeTransferHDWalletCreateNetworkParams;
     indexedAccountNames: IPrimeTransferHDWalletIndexedAccountNames;
   }> {
-    const { serviceAccount, serviceNetwork, servicePassword } =
-      this.backgroundApi;
+    const {
+      serviceAccount,
+      serviceNetwork,
+      servicePassword: _servicePassword,
+    } = this.backgroundApi;
 
     const defaultCustomNetworks = [
       { networkId: 'tron--0x2b6653dc', deriveType: 'default' },
@@ -1937,7 +2057,7 @@ class ServicePrimeTransfer extends ServiceBase {
     decryptedCredentialsHex,
     selectedTransferData,
     includingDefaultNetworks = false,
-    isFromCloudBackupRestore,
+    isFromCloudBackupRestore: _isFromCloudBackupRestore,
     password,
   }: {
     decryptedCredentialsHex?: string;

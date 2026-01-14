@@ -60,6 +60,7 @@ const gtMdShFrameStyle = {
 } as const;
 export interface IPopoverProps extends TMPopoverProps {
   title: string | ReactElement;
+  description?: string;
   showHeader?: boolean;
   usingSheet?: boolean;
   renderTrigger: ReactNode;
@@ -78,6 +79,7 @@ export interface IPopoverProps extends TMPopoverProps {
 }
 
 interface IPopoverContext {
+  open?: boolean;
   closePopover?: () => Promise<void>;
 }
 
@@ -158,8 +160,9 @@ const useContentDisplay = platformEnv.isNative
     };
 
 export const usePopoverContext = () => {
-  const { closePopover } = useContext(PopoverContext);
+  const { closePopover, open } = useContext(PopoverContext);
   return {
+    open,
     closePopover,
   };
 };
@@ -216,6 +219,7 @@ const getPlacement = (
 
 function RawPopover({
   title,
+  description,
   open: isOpen,
   renderTrigger,
   renderContent,
@@ -315,9 +319,10 @@ function RawPopover({
     typeof renderContent === 'function' ? renderContent : null;
   const popoverContextValue = useMemo(
     () => ({
+      open: isOpen,
       closePopover: handleClosePopover,
     }),
-    [handleClosePopover],
+    [handleClosePopover, isOpen],
   );
   const { gtMd } = useMedia();
 
@@ -458,24 +463,34 @@ function RawPopover({
                     mx="$5"
                     p="$5"
                     justifyContent="space-between"
-                    alignItems="center"
+                    alignItems="flex-start"
                     borderCurve="continuous"
                     gap="$2"
                   >
-                    {typeof title === 'string' ? (
-                      <SizableText
-                        size="$headingXl"
-                        color="$text"
-                        flexShrink={1}
-                        style={{
-                          wordBreak: 'break-all',
-                        }}
-                      >
-                        {title}
-                      </SizableText>
-                    ) : (
-                      title
-                    )}
+                    <YStack flexShrink={1}>
+                      {typeof title === 'string' ? (
+                        <SizableText
+                          size="$headingXl"
+                          color="$text"
+                          style={{
+                            wordBreak: 'break-all',
+                          }}
+                        >
+                          {title}
+                        </SizableText>
+                      ) : (
+                        title
+                      )}
+                      {description ? (
+                        <SizableText
+                          size="$bodyMd"
+                          color="$textSubdued"
+                          pt="$2"
+                        >
+                          {description}
+                        </SizableText>
+                      ) : null}
+                    </YStack>
                     <IconButton
                       icon="CrossedSmallOutline"
                       size="small"

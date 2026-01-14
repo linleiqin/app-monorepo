@@ -215,12 +215,7 @@ const LottieViewGallery = LazyLoadPage(
       '@onekeyhq/kit/src/views/Developer/pages/Gallery/Components/stories/LottieView'
     ),
 );
-const DemoRootApp = LazyLoadPage(
-  () =>
-    import(
-      '@onekeyhq/kit/src/views/Developer/pages/Gallery/Components/stories/NavigatorRoute'
-    ),
-);
+
 const PasswordDemoGallery = LazyLoadPage(
   () =>
     import(
@@ -528,6 +523,14 @@ const CloudBackupGallery = LazyLoadPage(
       '@onekeyhq/kit/src/views/Developer/pages/Gallery/Components/stories/CloudBackupGallery'
     ),
 );
+
+const KeylessWalletGallery = LazyLoadPage(
+  () =>
+    import(
+      '@onekeyhq/kit/src/views/Developer/pages/Gallery/Components/stories/KeylessWalletGallery'
+    ),
+);
+
 const TradingViewGallery = LazyLoadPage(
   () =>
     import(
@@ -580,6 +583,13 @@ const AuthGallery = LazyLoadPage(
   () =>
     import(
       '@onekeyhq/kit/src/views/Developer/pages/Gallery/Components/stories/AuthGallery'
+    ),
+);
+
+const OneKeyIDGallery = LazyLoadPage(
+  () =>
+    import(
+      '@onekeyhq/kit/src/views/Developer/pages/Gallery/Components/stories/OneKeyIDGallery'
     ),
 );
 
@@ -795,11 +805,6 @@ export const galleryScreenList: {
     component: SegmentSliderGallery,
   },
   {
-    name: EGalleryRoutes.ComponentNavigation,
-    component: DemoRootApp,
-    // options: { headerShown: false },
-  },
-  {
     name: EGalleryRoutes.ComponentSegmentControl,
     component: SegmentControlGallery,
   },
@@ -930,6 +935,10 @@ export const galleryScreenList: {
     component: CloudBackupGallery,
   },
   {
+    name: EGalleryRoutes.ComponentKeylessWallet,
+    component: KeylessWalletGallery,
+  },
+  {
     name: EGalleryRoutes.ComponentOrderBook,
     component: OrderBookGallery,
   },
@@ -1017,5 +1026,9 @@ export const galleryScreenList: {
   {
     name: EGalleryRoutes.ComponentAuth,
     component: AuthGallery,
+  },
+  {
+    name: EGalleryRoutes.ComponentOneKeyID,
+    component: OneKeyIDGallery,
   },
 ];

@@ -43,6 +43,7 @@ import type {
   ESwapTabSwitchType,
   EWrappedType,
   IFetchBuildTxResult,
+  ILMTronObject,
   IOKXTransactionObject,
   ISwapTokenBase,
   ISwapTxInfo,
@@ -211,8 +212,13 @@ export type IVaultSettings = {
    * https://support.ledger.com/hc/en-us/articles/4409603715217-What-is-a-Memo-Tag-?support=true
    */
   withMemo?: boolean;
-  memoMaxLength?: number;
+  memoMaxLength?: number; // Fallback: character-based limit (legacy)
   numericOnlyMemo?: boolean;
+  /**
+   * If true, Vault has implemented validateMemo() for precise validation
+   * Form validation will call vault.validateMemo() instead of using memoMaxLength
+   */
+  supportMemoValidation?: boolean;
 
   // dnx
   withPaymentId?: boolean;
@@ -634,6 +640,7 @@ export interface IBroadcastTransactionParams {
   signature?: string;
   rawTxType?: 'json' | 'hex';
   tronResourceRentalInfo?: ITronResourceRentalInfo;
+  useDefaultRpc?: boolean;
 }
 
 export interface IBroadcastTransactionByCustomRpcParams
@@ -654,6 +661,7 @@ export interface ISignTransactionParamsBase {
   // TODO rename externalSignOnly
   signOnly: boolean; // external account use this field to indicate sign only or sign and send
   rawTxType?: 'json' | 'hex';
+  useDefaultRpc?: boolean;
 }
 
 export type ISignAndSendTransactionParams = ISignTransactionParams;
@@ -674,6 +682,7 @@ export interface IBatchSignTransactionParamsBase {
   transferPayload: ITransferPayload | undefined;
   successfullySentTxs?: string[];
   tronResourceRentalInfo?: ITronResourceRentalInfo;
+  useDefaultRpc?: boolean;
 }
 
 export interface ISignMessageParams {
@@ -738,4 +747,8 @@ export type IBuildOkxSwapEncodedTxParams = {
   okxTx: IOKXTransactionObject;
   fromTokenInfo: ISwapTokenBase;
   type: ESwapTabSwitchType;
+};
+
+export type IBuildLMSwapEncodedTxParams = {
+  lmTx: ILMTronObject;
 };

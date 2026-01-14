@@ -1,44 +1,77 @@
 import { useMemo } from 'react';
 
+import BigNumber from 'bignumber.js';
 import { useIntl } from 'react-intl';
 
-import { YStack } from '@onekeyhq/components';
-import { useSwapProTokenMarketDetailInfoAtom } from '@onekeyhq/kit/src/states/jotai/contexts/swap';
+import { NumberSizeableText, YStack } from '@onekeyhq/components';
+import { useCurrency } from '@onekeyhq/kit/src/components/Currency';
+import {
+  useSwapProSelectTokenAtom,
+  useSwapProTokenMarketDetailInfoAtom,
+} from '@onekeyhq/kit/src/states/jotai/contexts/swap';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
-import { numberFormat } from '@onekeyhq/shared/src/utils/numberUtils';
 
 import SwapCommonInfoItem from '../../components/SwapCommonInfoItem';
 
 export const ITEM_TITLE_PROPS = { size: '$bodySm' } as const;
 export const ITEM_VALUE_PROPS = { size: '$bodySmMedium' } as const;
+export const ITEM_CONTAINER_PROPS = { py: '$0.5' } as const;
 
 const SwapProTokenDetailGroup = () => {
   const [tokenMarketDetailInfo] = useSwapProTokenMarketDetailInfoAtom();
+  const [swapProSelectToken] = useSwapProSelectTokenAtom();
   const intl = useIntl();
+  const currencyInfo = useCurrency();
   const { marketCap, volume24h, liquidity, holders } = useMemo(() => {
-    const formattedMarketCap = numberFormat(
-      tokenMarketDetailInfo?.marketCap ?? '0',
-      {
-        formatter: 'marketCap',
-      },
+    const isMarketCapAboveThreshold = new BigNumber(
+      tokenMarketDetailInfo?.marketCap || '0',
+    ).gte(10);
+    const formattedMarketCap = (
+      <NumberSizeableText
+        size={ITEM_VALUE_PROPS.size}
+        formatter={isMarketCapAboveThreshold ? 'marketCap' : 'value'}
+        formatterOptions={{ currency: currencyInfo.symbol }}
+      >
+        {tokenMarketDetailInfo?.marketCap || '0'}
+      </NumberSizeableText>
     );
-    const formattedVolume24h = numberFormat(
-      tokenMarketDetailInfo?.volume24h ?? '0',
-      {
-        formatter: 'marketCap',
-      },
+
+    const isVolume24hAboveThreshold = new BigNumber(
+      tokenMarketDetailInfo?.volume24h || '0',
+    ).gte(10);
+    const formattedVolume24h = (
+      <NumberSizeableText
+        size={ITEM_VALUE_PROPS.size}
+        formatter={isVolume24hAboveThreshold ? 'marketCap' : 'value'}
+        formatterOptions={{ currency: currencyInfo.symbol }}
+      >
+        {tokenMarketDetailInfo?.volume24h || '0'}
+      </NumberSizeableText>
     );
-    const formattedLiquidity = numberFormat(
-      tokenMarketDetailInfo?.liquidity ?? '0',
-      {
-        formatter: 'marketCap',
-      },
+    const isLiquidityAboveThreshold = new BigNumber(
+      tokenMarketDetailInfo?.liquidity || '0',
+    ).gte(10);
+    const formattedLiquidity = (
+      <NumberSizeableText
+        size={ITEM_VALUE_PROPS.size}
+        formatter={isLiquidityAboveThreshold ? 'marketCap' : 'value'}
+        formatterOptions={{ currency: currencyInfo.symbol }}
+      >
+        {tokenMarketDetailInfo?.liquidity || '0'}
+      </NumberSizeableText>
     );
-    const formattedHolders = numberFormat(
-      tokenMarketDetailInfo?.holders?.toString() ?? '0',
-      {
-        formatter: 'marketCap',
-      },
+    const isHoldersAboveThreshold = new BigNumber(
+      tokenMarketDetailInfo?.holders?.toString() || '0',
+    ).gte(10);
+    const formattedHolders = (
+      <NumberSizeableText
+        size={ITEM_VALUE_PROPS.size}
+        formatter={isHoldersAboveThreshold ? 'marketCap' : 'value'}
+      >
+        {swapProSelectToken?.isNative
+          ? '-'
+          : tokenMarketDetailInfo?.holders?.toString() || '0'}
+      </NumberSizeableText>
     );
     return {
       marketCap: formattedMarketCap,
@@ -46,34 +79,44 @@ const SwapProTokenDetailGroup = () => {
       liquidity: formattedLiquidity,
       holders: formattedHolders,
     };
-  }, [tokenMarketDetailInfo]);
+  }, [
+    tokenMarketDetailInfo?.marketCap,
+    tokenMarketDetailInfo?.volume24h,
+    tokenMarketDetailInfo?.liquidity,
+    tokenMarketDetailInfo?.holders,
+    currencyInfo.symbol,
+    swapProSelectToken?.isNative,
+  ]);
   return (
-    <YStack gap="$1.5">
+    <YStack>
       <SwapCommonInfoItem
         title={intl.formatMessage({ id: ETranslations.dexmarket_market_cap })}
-        value={marketCap}
+        valueComponent={marketCap}
         titleProps={ITEM_TITLE_PROPS}
         valueProps={ITEM_VALUE_PROPS}
+        containerProps={ITEM_CONTAINER_PROPS}
       />
       <SwapCommonInfoItem
         title={intl.formatMessage({
           id: ETranslations.dexmarket_search_result_vol,
         })}
-        value={volume24h}
+        valueComponent={volume24h}
         titleProps={ITEM_TITLE_PROPS}
         valueProps={ITEM_VALUE_PROPS}
+        containerProps={ITEM_CONTAINER_PROPS}
       />
       <SwapCommonInfoItem
         title={intl.formatMessage({ id: ETranslations.dexmarket_liquidity })}
-        value={liquidity}
+        valueComponent={liquidity}
         titleProps={ITEM_TITLE_PROPS}
         valueProps={ITEM_VALUE_PROPS}
       />
       <SwapCommonInfoItem
         title={intl.formatMessage({ id: ETranslations.dexmarket_holders })}
-        value={holders}
+        valueComponent={holders}
         titleProps={ITEM_TITLE_PROPS}
         valueProps={ITEM_VALUE_PROPS}
+        containerProps={ITEM_CONTAINER_PROPS}
       />
     </YStack>
   );

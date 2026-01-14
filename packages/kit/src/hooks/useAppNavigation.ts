@@ -80,6 +80,7 @@ function useAppNavigation<
     | IPageNavigationProp<any>
     | IModalNavigationProp<any> = IPageNavigationProp<any>,
 >() {
+  // rootNavigationRef
   const navigation = useNavigation<P>();
   const navigationRef = useRef(navigation);
   const isTabletMainView = useIsTabletMainView();
@@ -197,6 +198,13 @@ function useAppNavigation<
     [reload],
   );
 
+  const setParams: typeof navigationRef.current.setParams = useCallback(
+    (params) => {
+      navigationRef.current.setParams(params);
+    },
+    [],
+  );
+
   const reset: typeof navigationRef.current.reset = useCallback((state) => {
     navigationRef.current.reset(state);
   }, []);
@@ -264,7 +272,11 @@ function useAppNavigation<
 
   const popTo: typeof navigationRef.current.popTo = useCallback(
     (...args: any) => {
-      navigationRef.current.popTo(...args);
+      const [screen, params, options] = args;
+      navigationRef.current.navigate(screen, params, {
+        pop: true,
+        ...options,
+      });
     },
     [],
   );
@@ -280,6 +292,7 @@ function useAppNavigation<
       pushFullModal,
       pushModal,
       reset,
+      setParams,
       setOptions,
       switchTab,
       popToTop,
@@ -297,6 +310,7 @@ function useAppNavigation<
       pushModal,
       replace,
       reset,
+      setParams,
       setOptions,
     ],
   );

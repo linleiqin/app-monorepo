@@ -14,6 +14,7 @@ import {
 } from '@onekeyhq/shared/src/background/backgroundDecorators';
 import { getNetworkIdsMap } from '@onekeyhq/shared/src/config/networkIds';
 import { PERPS_NETWORK_ID } from '@onekeyhq/shared/src/consts/perp';
+import { OneKeyError } from '@onekeyhq/shared/src/errors';
 import {
   EAppEventBusNames,
   appEventBus,
@@ -38,6 +39,7 @@ import {
   HYPERLIQUID_DEPOSIT_ADDRESS,
   USDC_TOKEN_INFO,
 } from '@onekeyhq/shared/types/hyperliquid/perp.constants';
+import type { IMarketTokenDetailData } from '@onekeyhq/shared/types/marketV2';
 import type { ESigningScheme } from '@onekeyhq/shared/types/message';
 import type {
   ISwapProviderManager,
@@ -57,7 +59,6 @@ import type {
   ESwapQuoteKind,
   IFetchBuildTxParams,
   IFetchBuildTxResponse,
-  IFetchLimitMarketPrice,
   IFetchLimitOrderRes,
   IFetchQuoteResult,
   IFetchQuotesParams,
@@ -67,9 +68,10 @@ import type {
   IFetchTokenDetailParams,
   IFetchTokenListParams,
   IFetchTokensParams,
+  ILMTronObject,
   IOKXTransactionObject,
-  IPerpDepositQuoteRes,
   IPerpDepositQuoteResponse,
+  IPopularTrading,
   ISpeedSwapConfig,
   ISwapApproveAllowanceResponse,
   ISwapApproveTransaction,
@@ -522,14 +524,17 @@ export default class ServiceSwap extends ServiceBase {
           checkInscriptionProtectionEnabled && inscriptionProtection;
         params.withCheckInscription = withCheckInscription;
       }
+      let fetchSignal: AbortSignal | undefined;
+      if (direction === ESwapDirectionType.FROM) {
+        fetchSignal = this._tokenDetailAbortControllerMap.from?.signal;
+      } else if (direction === ESwapDirectionType.TO) {
+        fetchSignal = this._tokenDetailAbortControllerMap.to?.signal;
+      }
       const { data } = await client.get<IFetchResponse<ISwapToken[]>>(
         '/swap/v1/token/detail',
         {
           params,
-          signal:
-            direction === ESwapDirectionType.FROM
-              ? this._tokenDetailAbortControllerMap.from?.signal
-              : this._tokenDetailAbortControllerMap.to?.signal,
+          signal: fetchSignal,
           headers:
             await this.backgroundApi.serviceAccountProfile._getWalletTypeHeader(
               {
@@ -1887,6 +1892,21 @@ export default class ServiceSwap extends ServiceBase {
     });
   }
 
+  @backgroundMethod()
+  async buildLMSwapEncodedTx(params: {
+    accountId: string;
+    networkId: string;
+    lmTx: ILMTronObject;
+  }) {
+    const vault = await vaultFactory.getVault({
+      accountId: params.accountId,
+      networkId: params.networkId,
+    });
+    return vault.buildLiquidMeshSwapEncodedTx({
+      lmTx: params.lmTx,
+    });
+  }
+
   async getCacheSwapSupportNetworks() {
     const now = Date.now();
     if (
@@ -2160,9 +2180,9 @@ export default class ServiceSwap extends ServiceBase {
     fromToken: ISwapTokenBase;
     toToken: ISwapTokenBase;
   }) {
-    const client = await this.getClient(EServiceEndpointEnum.Swap);
-    const fromTokenFetchPromise = client.get<{ data: IFetchLimitMarketPrice }>(
-      `/swap/v1/limit-market-price`,
+    const client = await this.getClient(EServiceEndpointEnum.Utility);
+    const fromTokenFetchPromise = client.get<{ data: IMarketTokenDetailData }>(
+      `/utility/v2/market/token/detail`,
       {
         params: {
           tokenAddress: params.fromToken.contractAddress,
@@ -2170,8 +2190,8 @@ export default class ServiceSwap extends ServiceBase {
         },
       },
     );
-    const toTokenFetchPromise = client.get<{ data: IFetchLimitMarketPrice }>(
-      `/swap/v1/limit-market-price`,
+    const toTokenFetchPromise = client.get<{ data: IMarketTokenDetailData }>(
+      `/utility/v2/market/token/detail`,
       {
         params: {
           tokenAddress: params.toToken.contractAddress,
@@ -2185,8 +2205,8 @@ export default class ServiceSwap extends ServiceBase {
         toTokenFetchPromise,
       ]);
       return {
-        fromTokenPrice: fromTokenRes.data?.price,
-        toTokenPrice: toTokenRes.data?.price,
+        fromTokenPrice: fromTokenRes.data?.token?.price,
+        toTokenPrice: toTokenRes.data?.token?.price,
       };
     } catch (error) {
       console.error(error);
@@ -2199,6 +2219,20 @@ export default class ServiceSwap extends ServiceBase {
 
   @backgroundMethod()
   async fetchSpeedSwapConfig(params: { networkId: string }) {
+    const defaultConfig = {
+      provider: '',
+      speedConfig: {
+        slippage: 0.5,
+        spenderAddress: '',
+        defaultTokens: [],
+        defaultLimitTokens: [],
+        swapMevNetConfig: mevSwapNetworks,
+      },
+      supportSpeedSwap: false,
+      onlySupportCrossChain: false,
+      onlySupportSingleChain: false,
+      speedDefaultSelectToken: swapDefaultSetTokens['evm--1'].toToken,
+    };
     try {
       const client = await this.getClient(EServiceEndpointEnum.Swap);
       const res = await client.get<{ data: ISpeedSwapConfig }>(
@@ -2207,20 +2241,10 @@ export default class ServiceSwap extends ServiceBase {
           params: { networkId: params.networkId },
         },
       );
-      return res.data.data;
+      return res?.data?.data || defaultConfig;
     } catch (error) {
       console.error(error);
-      return {
-        provider: '',
-        speedConfig: {
-          slippage: 0.5,
-          spenderAddress: '',
-          defaultTokens: [],
-          swapMevNetConfig: mevSwapNetworks,
-        },
-        supportSpeedSwap: false,
-        speedDefaultSelectToken: swapDefaultSetTokens['evm--1'].toToken,
-      };
+      return defaultConfig;
     }
   }
 
@@ -2453,9 +2477,12 @@ export default class ServiceSwap extends ServiceBase {
       return data?.data;
     } catch (e) {
       if (axios.isCancel(e)) {
-        // eslint-disable-next-line no-restricted-syntax
-        throw new Error('perp deposit quote cancel', {
-          cause: ESwapFetchCancelCause.SWAP_PERP_DEPOSIT_QUOTE_CANCEL,
+        throw new OneKeyError({
+          message: 'perp deposit quote cancel',
+          autoToast: false,
+          data: {
+            cause: ESwapFetchCancelCause.SWAP_PERP_DEPOSIT_QUOTE_CANCEL,
+          },
         });
       }
       throw e;
@@ -2593,5 +2620,42 @@ export default class ServiceSwap extends ServiceBase {
         void this.perpDepositOrderFetchLoop(params);
       }, this.perpDepositOrderFetchLoopIntervalTimeout);
     }
+  }
+
+  @backgroundMethod()
+  async fetchPopularTrading(
+    params: { limit?: number; saveToLocal?: boolean } | undefined,
+  ) {
+    try {
+      const client = await this.getClient(EServiceEndpointEnum.Swap);
+      const { data } = await client.get<IFetchResponse<IPopularTrading[]>>(
+        '/swap/v1/popular/tokens',
+      );
+
+      let result = data?.data ?? [];
+
+      if (params?.limit) {
+        result = result.slice(0, params.limit);
+      }
+      if (params?.saveToLocal) {
+        void this.updateLocalPopularTrading(result);
+      }
+      return result;
+    } catch (e) {
+      console.error(e);
+      return [];
+    }
+  }
+
+  @backgroundMethod()
+  async updateLocalPopularTrading(popularTrading: IPopularTrading[]) {
+    await this.backgroundApi.simpleDb.swapConfigs.updatePopularTrading(
+      popularTrading,
+    );
+  }
+
+  @backgroundMethod()
+  async getLocalPopularTrading() {
+    return this.backgroundApi.simpleDb.swapConfigs.getPopularTrading();
   }
 }

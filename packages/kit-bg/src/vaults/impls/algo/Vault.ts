@@ -306,6 +306,7 @@ export default class Vault extends VaultBase {
 
       if (nativeToken) {
         const amount = nativeTx.amt?.toString() || '0';
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         const to = sdkAlgo.encodeAddress(nativeTx.rcv!);
         const transfer: IDecodedTxTransferInfo = {
           from: sender,
@@ -329,9 +330,11 @@ export default class Vault extends VaultBase {
     }
 
     if (nativeTx.type === sdkAlgo.TransactionType.axfer) {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const to = sdkAlgo.encodeAddress(nativeTx.arcv!);
       const token = await this.backgroundApi.serviceToken.getToken({
         networkId: this.networkId,
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         tokenIdOnNetwork: nativeTx.xaid!.toString(),
         accountId: this.accountId,
       });
@@ -580,20 +583,21 @@ export default class Vault extends VaultBase {
     return result;
   }
 
-  override async activateToken(params: {
-    token: IAccountToken;
-  }): Promise<boolean> {
-    if (params.token.isNative) {
-      return Promise.resolve(true);
-    }
+  override async activateToken(params: { token: IAccountToken }): Promise<{
+    token?: IAccountToken;
+    isActivated: boolean;
+  }> {
     const { token } = params;
+    if (token.isNative) {
+      return Promise.resolve({ isActivated: true });
+    }
     const dbAccount = await this.getAccount();
     const client = await this.getClient();
     const { assets } = await client.accountInformation(dbAccount.address);
 
     for (const { 'asset-id': assetId } of assets) {
       if (assetId === parseInt(token.address, 10)) {
-        return Promise.resolve(true);
+        return Promise.resolve({ isActivated: true });
       }
     }
 
@@ -616,7 +620,7 @@ export default class Vault extends VaultBase {
           unsignedTxs: [unsignedTx],
           transferPayload: undefined,
         });
-      return !!signedTx.signedTx.txid;
+      return { isActivated: !!signedTx.signedTx.txid };
       // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     } catch (e: any) {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
@@ -634,6 +638,7 @@ export default class Vault extends VaultBase {
   override async getCustomRpcEndpointStatus(
     params: IMeasureRpcStatusParams,
   ): Promise<IMeasureRpcStatusResult> {
+    // eslint-disable-next-line spellcheck/spell-checker
     const client = new sdkAlgo.Algodv2('', params.rpcUrl, 443);
     const start = performance.now();
     const { 'last-round': latestBlock } = await client.status().do();
@@ -651,6 +656,7 @@ export default class Vault extends VaultBase {
     if (!rpcUrl) {
       throw new OneKeyInternalError('rpcUrl is required');
     }
+    // eslint-disable-next-line spellcheck/spell-checker
     const client = new sdkAlgo.Algodv2('', rpcUrl, 443);
     const { txId } = await client
       .sendRawTransaction(Buffer.from(signedTx.rawTx, 'base64'))

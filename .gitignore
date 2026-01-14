@@ -6,12 +6,14 @@ __generated__
 .DS_Store
 .idea/
 .vscode/
+.cursor/debug.log
 .chat/
 .claude/PRPs
 .claude/settings.local.json
 .clauderc
 .tmp/
-
+*.private_ai_docs.md
+.cursor/plans/
 dist
 build-electron
 .next
@@ -94,3 +96,5 @@ apps/mobile/android/build-logic/privacy-security-plugins/bin/main/onekey/privacy
 /apps/mobile/out-dir-bundle-zip
 /apps/mobile/ios/go-install
 /apps/mobile/ios/tmp-oc-test
+
+debug.log

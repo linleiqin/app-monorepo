@@ -34,7 +34,14 @@ const WithdrawOptions = () => {
   >();
   const intl = useIntl();
   const appNavigation = useAppNavigation();
-  const { accountId, networkId, protocolInfo, tokenInfo } = appRoute.params;
+  const {
+    accountId,
+    networkId,
+    protocolInfo,
+    tokenInfo,
+    onSuccess: externalOnSuccess,
+    isInModalContext,
+  } = appRoute.params;
   const symbol = tokenInfo?.token.symbol || '';
   const provider = protocolInfo?.provider || '';
   const { result, isLoading, run } = usePromiseResult(
@@ -71,8 +78,10 @@ const WithdrawOptions = () => {
         fromPage: EModalStakingRoutes.WithdrawOptions,
         allowPartialWithdraw: stakingConfig?.allowPartialWithdraw,
         onSuccess: () => {
-          // pop to portfolio details page
-          setTimeout(() => appNavigation.pop(), 4);
+          if (!isInModalContext) {
+            appNavigation.popStack();
+          }
+          externalOnSuccess?.();
         },
       });
     },
@@ -83,6 +92,8 @@ const WithdrawOptions = () => {
       protocolInfo,
       tokenInfo,
       stakingConfig?.allowPartialWithdraw,
+      externalOnSuccess,
+      isInModalContext,
     ],
   );
 

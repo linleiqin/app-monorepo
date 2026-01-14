@@ -7,8 +7,10 @@ import timerUtils from '../utils/timerUtils';
 
 export const HYPER_LIQUID_ORIGIN = 'https://app.hyperliquid.xyz';
 export const HYPER_LIQUID_WEBVIEW_TRADE_URL = `${HYPER_LIQUID_ORIGIN}/trade?isOneKeyBuiltInPerpView=true`;
+
+export const PERPS_ROUTE_PATH = '/perps';
 export const HYPERLIQUID_AGENT_CREDENTIAL_PREFIX = 'hyperliquid-agent';
-export const HYPERLIQUID_REFERRAL_CODE = '1KGO';
+export const HYPERLIQUID_REFERRAL_CODE = '1KREF';
 export const HYPERLIQUID_AGENT_TTL_DEFAULT = timerUtils.getTimeDurationMs({
   month: 1,
 });

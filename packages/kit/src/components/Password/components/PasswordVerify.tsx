@@ -23,7 +23,7 @@ import {
   onVisibilityStateChange,
   useForm,
 } from '@onekeyhq/components';
-import { usePasswordAtom } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
+import { usePasswordPersistAtom } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import biologyAuth from '@onekeyhq/shared/src/biologyAuth';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import { checkBiometricAuthChanged } from '@onekeyhq/shared/src/modules3rdParty/check-biometric-auth-changed';
@@ -57,6 +57,7 @@ interface IPasswordVerifyProps {
   };
   alertText?: string;
   confirmBtnDisabled?: boolean;
+  pageMode?: boolean;
 }
 
 export interface IPasswordVerifyForm {
@@ -65,6 +66,7 @@ export interface IPasswordVerifyForm {
 }
 
 function PasswordVerify({
+  pageMode,
   isEnable,
   alertText,
   confirmBtnDisabled,
@@ -111,7 +113,7 @@ function PasswordVerify({
   const passwordInput = form.watch(
     passwordMode === EPasswordMode.PASSWORD ? 'password' : 'passCode',
   );
-  const [{ manualLocking }] = usePasswordAtom();
+  const [{ manualLocking }] = usePasswordPersistAtom();
   const { icon: biologyAuthIconName, title: authTitle } =
     useBiometricAuthInfo();
 
@@ -346,6 +348,9 @@ function PasswordVerify({
                 form.setValue('passCode', pin);
                 form.clearErrors('passCode');
                 setPassCodeClear(false);
+                if (pageMode) {
+                  onPasswordChange(pin);
+                }
               }}
               editable={Boolean(
                 status.value !== EPasswordVerifyStatus.VERIFYING &&

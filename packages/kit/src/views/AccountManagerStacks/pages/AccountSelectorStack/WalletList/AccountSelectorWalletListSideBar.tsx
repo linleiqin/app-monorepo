@@ -14,6 +14,7 @@ import {
 } from '@onekeyhq/components';
 import { HeaderIconButton } from '@onekeyhq/components/src/layouts/Navigation/Header';
 import backgroundApiProxy from '@onekeyhq/kit/src/background/instance/backgroundApiProxy';
+import { useHardwareWalletConnectStatus } from '@onekeyhq/kit/src/hooks/useHardwareWalletConnectStatus';
 import { usePromiseResult } from '@onekeyhq/kit/src/hooks/usePromiseResult';
 import {
   useAccountSelectorActions,
@@ -34,7 +35,6 @@ import {
 import { defaultLogger } from '@onekeyhq/shared/src/logger/logger';
 import platformEnv from '@onekeyhq/shared/src/platformEnv';
 import accountUtils from '@onekeyhq/shared/src/utils/accountUtils';
-import deviceUtils from '@onekeyhq/shared/src/utils/deviceUtils';
 
 import { useAccountSelectorRoute } from '../../../router/useAccountSelectorRoute';
 
@@ -74,7 +74,7 @@ export function AccountSelectorWalletListSideBarPerfTest({
 }: IWalletListProps) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const actions = useAccountSelectorActions(); // make render twice first time
-  const { selectedAccount } = useSelectedAccount({ num }); // make render twice first time
+  const { selectedAccount: _selectedAccount } = useSelectedAccount({ num }); // make render twice first time
 
   defaultLogger.accountSelector.perf.renderWalletListSideBar({
     selectedAccount: {} as any,
@@ -88,13 +88,17 @@ export function AccountSelectorWalletListSideBar({
   hideNonBackedUpWallet,
 }: IWalletListProps) {
   const { serviceAccount } = backgroundApiProxy;
-  const { bottom } = useSafeAreaInsets();
+  const { bottom, top } = useSafeAreaInsets();
   const actions = useAccountSelectorActions();
   const route = useAccountSelectorRoute();
   // const linkNetwork = route.params?.linkNetwork;
   const isEditableRouteParams = route.params?.editable;
   const { selectedAccount } = useSelectedAccount({ num });
   const focusWalletChanged = useRef<boolean>(false);
+
+  // Detect connected hardware wallets via WebUSB
+  // Note: connectedDevices reference is stable - only changes when device list actually changes
+  const { connectedDevices } = useHardwareWalletConnectStatus();
 
   const [layoutRefreshTS, setLayoutRefreshTS] = useState(0);
   useEffect(() => {
@@ -136,31 +140,20 @@ export function AccountSelectorWalletListSideBar({
         ignoreEmptySingletonWalletAccounts: true,
         ignoreNonBackedUpWallets: hideNonBackedUpWallet,
       });
-      const wallets = await Promise.all(
-        r.wallets.map(async (wallet) => {
-          const isHwWallet = accountUtils.isHwWallet({
-            walletId: wallet.id,
-          });
-          const isQrWallet = accountUtils.isQrWallet({
-            walletId: wallet.id,
-          });
-          const isHwOrQrWallet = isQrWallet || isHwWallet;
 
-          const firmwareTypeBadge = isHwOrQrWallet
-            ? await deviceUtils.getFirmwareType({
-                features: wallet.associatedDeviceInfo?.featuresInfo,
-              })
-            : undefined;
+      const wallets = r.wallets.map((wallet) => {
+        const isQrWallet = accountUtils.isQrWallet({
+          walletId: wallet.id,
+        });
 
-          const badge = isQrWallet ? 'QR' : undefined;
+        const badge = isQrWallet ? 'QR' : undefined;
 
-          return {
-            ...wallet,
-            firmwareTypeBadge,
-            badge,
-          };
-        }),
-      );
+        return {
+          ...wallet,
+          badge,
+        };
+      });
+
       return {
         wallets,
       };
@@ -334,6 +327,19 @@ export function AccountSelectorWalletListSideBar({
   const listViewRef =
     useRef<ISortableListViewRef<IAccountSelectorWalletInfo>>(null);
 
+  // Pre-compute wallet connection status map for stable reference
+  const walletConnectionMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    wallets.forEach((wallet) => {
+      const isHwWallet = accountUtils.isHwWallet({ walletId: wallet.id });
+      const deviceId = wallet.associatedDeviceInfo?.deviceId;
+      const isConnected =
+        isHwWallet && deviceId ? connectedDevices.has(deviceId) : false;
+      map.set(wallet.id, isConnected);
+    });
+    return map;
+  }, [wallets, connectedDevices]);
+
   const isShowCloseButton = md && !platformEnv.isNativeIOS;
   return (
     <Stack
@@ -342,6 +348,7 @@ export function AccountSelectorWalletListSideBar({
       $gtMd={{
         w: '$32',
       }}
+      pt={platformEnv.isNativeAndroid ? top : undefined}
       bg="$bgSubdued"
       borderRightWidth={StyleSheet.hairlineWidth}
       borderRightColor="$neutral3"
@@ -400,25 +407,24 @@ export function AccountSelectorWalletListSideBar({
           });
         }}
         extraData={[selectedAccount.focusedWallet, reloadWalletsHook]}
-        renderItem={({ item, drag, dragProps }) => {
-          return (
-            <Stack pb="$3" dataSet={dragProps}>
-              <WalletListItem
-                key={item.id}
-                wallet={item}
-                focusedWallet={selectedAccount.focusedWallet}
-                onWalletPress={onWalletPress}
-                onWalletLongPress={drag}
-                testID={`wallet-${item.id}`}
-                badge={item.badge}
-                isEditMode={isEditableRouteParams}
-                shouldShowCreateHiddenWalletButtonFn={
-                  shouldShowCreateHiddenWalletButtonFn
-                }
-              />
-            </Stack>
-          );
-        }}
+        renderItem={({ item, drag, dragProps }) => (
+          <Stack pb="$3" dataSet={dragProps}>
+            <WalletListItem
+              key={item.id}
+              wallet={item}
+              focusedWallet={selectedAccount.focusedWallet}
+              onWalletPress={onWalletPress}
+              onWalletLongPress={drag}
+              testID={`wallet-${item.id}`}
+              badge={item.badge}
+              isEditMode={isEditableRouteParams}
+              shouldShowCreateHiddenWalletButtonFn={
+                shouldShowCreateHiddenWalletButtonFn
+              }
+              isConnected={walletConnectionMap.get(item.id) ?? false}
+            />
+          </Stack>
+        )}
       />
       {/* Others */}
       {isEditableRouteParams ? (
@@ -426,7 +432,7 @@ export function AccountSelectorWalletListSideBar({
           p="$2"
           borderTopWidth={StyleSheet.hairlineWidth}
           borderTopColor="$borderSubdued"
-          mb={bottom}
+          mb={Math.max(bottom, 8)}
         >
           <AccountSelectorCreateWalletButton />
           {/* <OthersWalletItem onWalletPress={onWalletPress} num={num} /> */}

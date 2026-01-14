@@ -119,6 +119,67 @@ const ImportKeyTag = LazyLoadPage(
   false,
   <OnboardingLayoutFallback />,
 );
+const KeylessWalletRecovery = LazyLoadPage(
+  () => import('../pages/KeylessWalletRecovery'),
+  undefined,
+  false,
+  <OnboardingLayoutFallback />,
+);
+const KeylessWalletCreation = LazyLoadPage(
+  () => import('../pages/KeylessWalletCreation'),
+  undefined,
+  false,
+  <OnboardingLayoutFallback />,
+);
+const OneKeyIDLogin = LazyLoadPage(
+  () => import('../pages/OneKeyIDLoginPage'),
+  undefined,
+  false,
+  <OnboardingLayoutFallback />,
+);
+const CreatePin = LazyLoadPage(
+  () => import('../pages/CreatePinPage'),
+  undefined,
+  false,
+  <OnboardingLayoutFallback />,
+);
+const ConfirmPin = LazyLoadPage(
+  () => import('../pages/ConfirmPinPage'),
+  undefined,
+  false,
+  <OnboardingLayoutFallback />,
+);
+const CreatePasscode = LazyLoadPage(
+  () => import('../pages/CreatePasscodePage'),
+  undefined,
+  false,
+  <OnboardingLayoutFallback />,
+);
+const VerifyPin = LazyLoadPage(
+  () => import('../pages/VerifyPinPage'),
+  undefined,
+  false,
+  <OnboardingLayoutFallback />,
+);
+const ResetPin = LazyLoadPage(
+  () => import('../pages/ResetPinPage'),
+  undefined,
+  false,
+  <OnboardingLayoutFallback />,
+);
+const NewPinCreated = LazyLoadPage(
+  () => import('../pages/NewPinCreatedPage'),
+  undefined,
+  false,
+  <OnboardingLayoutFallback />,
+);
+
+const MoreAction = LazyLoadPage(
+  () => import('../pages/MoreAction'),
+  undefined,
+  false,
+  <OnboardingLayoutFallback />,
+);
 
 const hiddenHeaderOptions = {
   headerShown: false,
@@ -221,6 +282,56 @@ export const OnboardingRouterV2: IModalFlowNavigatorConfig<
   {
     name: EOnboardingPagesV2.ImportKeyTag,
     component: ImportKeyTag,
+    options: hiddenHeaderOptions,
+  },
+  {
+    name: EOnboardingPagesV2.KeylessWalletRecovery,
+    component: KeylessWalletRecovery,
+    options: hiddenHeaderOptions,
+  },
+  {
+    name: EOnboardingPagesV2.KeylessWalletCreation,
+    component: KeylessWalletCreation,
+    options: hiddenHeaderOptions,
+  },
+  {
+    name: EOnboardingPagesV2.OneKeyIDLogin,
+    component: OneKeyIDLogin,
+    options: hiddenHeaderOptions,
+  },
+  {
+    name: EOnboardingPagesV2.CreatePin,
+    component: CreatePin,
+    options: hiddenHeaderOptions,
+  },
+  {
+    name: EOnboardingPagesV2.ConfirmPin,
+    component: ConfirmPin,
+    options: hiddenHeaderOptions,
+  },
+  {
+    name: EOnboardingPagesV2.CreatePasscode,
+    component: CreatePasscode,
+    options: hiddenHeaderOptions,
+  },
+  {
+    name: EOnboardingPagesV2.VerifyPin,
+    component: VerifyPin,
+    options: hiddenHeaderOptions,
+  },
+  {
+    name: EOnboardingPagesV2.ResetPin,
+    component: ResetPin,
+    options: hiddenHeaderOptions,
+  },
+  {
+    name: EOnboardingPagesV2.NewPinCreated,
+    component: NewPinCreated,
+    options: hiddenHeaderOptions,
+  },
+  {
+    name: EOnboardingPagesV2.MoreAction,
+    component: MoreAction,
     options: hiddenHeaderOptions,
   },
 ];

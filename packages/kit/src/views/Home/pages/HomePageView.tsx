@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { CanceledError } from 'axios';
 import { useIntl } from 'react-intl';
-import { type LayoutChangeEvent } from 'react-native';
 
+import type { ITabContainerRef } from '@onekeyhq/components';
 import {
   Icon,
   Page,
@@ -35,24 +36,57 @@ import { NetworkAlert } from '../../../components/NetworkAlert';
 import { TabPageHeader } from '../../../components/TabPageHeader';
 import { WebDappEmptyView } from '../../../components/WebDapp/WebDappEmptyView';
 import { usePromiseResult } from '../../../hooks/usePromiseResult';
+import { runAfterTokensDone } from '../../../hooks/useRunAfterTokensDone';
 import {
   useAccountOverviewActions,
   useApprovalsInfoAtom,
 } from '../../../states/jotai/contexts/accountOverview';
 import { useActiveAccount } from '../../../states/jotai/contexts/accountSelector';
+import { deferHeavyWorkUntilUIIdle } from '../../../utils/deferHeavyWork';
+import { NetworkUnsupportedWarning } from '../../Staking/components/ProtocolDetails/NetworkUnsupportedWarning';
 import { HomeSupportedWallet } from '../components/HomeSupportedWallet';
 import { NotBackedUpEmpty } from '../components/NotBakcedUp';
+import { PullToRefresh, onHomePageRefresh } from '../components/PullToRefresh';
 
 import { ApprovalListContainerWithProvider } from './ApprovalListContainer';
 import { HomeHeaderContainer } from './HomeHeaderContainer';
 import { NFTListContainerWithProvider } from './NFTListContainer';
+import { PortfolioContainerWithProvider } from './PortfolioContainer';
 import { TabHeaderSettings } from './TabHeaderSettings';
-import { TokenListContainerWithProvider } from './TokenListContainer';
 import { TxHistoryListContainerWithProvider } from './TxHistoryContainer';
 import WalletContentWithAuth from './WalletContentWithAuth';
 
+import type { LayoutChangeEvent } from 'react-native';
+
 const networksSupportBulkRevokeApproval =
   getNetworksSupportBulkRevokeApproval();
+
+interface IAndroidScrollContainerProps {
+  children: React.ReactNode;
+}
+const AndroidScrollContainer = platformEnv.isNativeAndroid
+  ? ({ children }: IAndroidScrollContainerProps) => {
+      const [height, setHeight] = useState(0);
+      const handleLayout = (event: LayoutChangeEvent) => {
+        setHeight(event.nativeEvent.layout.height);
+      };
+      return (
+        <YStack flex={1} onLayout={handleLayout}>
+          {height > 0 ? (
+            <ScrollView
+              nestedScrollEnabled
+              refreshControl={<PullToRefresh onRefresh={onHomePageRefresh} />}
+              contentContainerStyle={{ height }}
+            >
+              {children}
+            </ScrollView>
+          ) : null}
+        </YStack>
+      );
+    }
+  : ({ children }: IAndroidScrollContainerProps) => {
+      return children;
+    };
 
 export function HomePageView({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -78,6 +112,11 @@ export function HomePageView({
 
   const [{ hasRiskApprovals }] = useApprovalsInfoAtom();
   const { updateApprovalsInfo } = useAccountOverviewActions().current;
+  const tabsRef = useRef<ITabContainerRef | null>(null);
+  const hasRiskApprovalsRef = useRef(hasRiskApprovals);
+  useEffect(() => {
+    hasRiskApprovalsRef.current = hasRiskApprovals;
+  }, [hasRiskApprovals]);
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const addressType = deriveInfo?.labelKey
@@ -112,26 +151,6 @@ export function HomePageView({
       networkAccounts: a,
     };
   }, [network, indexedAccount]);
-
-  usePromiseResult(async () => {
-    if (network?.id && account?.id) {
-      const resp =
-        await backgroundApiProxy.serviceApproval.fetchAccountApprovals({
-          networkId: network.id,
-          accountId: account.id,
-          indexedAccountId: indexedAccount?.id,
-          accountAddress: account.address,
-        });
-
-      const riskApprovals = resp.contractApprovals.filter(
-        (item) => item.isRiskContract,
-      );
-
-      updateApprovalsInfo({
-        hasRiskApprovals: !!(riskApprovals && riskApprovals.length > 0),
-      });
-    }
-  }, [network?.id, indexedAccount?.id, account, updateApprovalsInfo]);
 
   const { vaultSettings, networkAccounts } = result.result ?? {};
 
@@ -168,6 +187,67 @@ export function HomePageView({
     account?.createAtNetwork,
   ]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    // Keep the red-dot state from becoming stale across account/network switches.
+    if (hasRiskApprovalsRef.current) {
+      updateApprovalsInfo({ hasRiskApprovals: false });
+    }
+
+    const run = async (_trigger: string) => {
+      if (!isBulkRevokeApprovalEnabled) return;
+      if (!account?.id || !network?.id) return;
+
+      await deferHeavyWorkUntilUIIdle();
+      if (cancelled) return;
+
+      try {
+        const resp =
+          await backgroundApiProxy.serviceApproval.fetchAccountApprovals({
+            networkId: network.id,
+            accountId: account.id,
+            indexedAccountId: indexedAccount?.id,
+            accountAddress: account.address,
+          });
+        if (cancelled) return;
+        updateApprovalsInfo({
+          hasRiskApprovals: resp.contractApprovals.some(
+            (i) => i.isRiskContract,
+          ),
+        });
+      } catch (error) {
+        if (error instanceof CanceledError) {
+          return;
+        }
+        console.error(error);
+      }
+    };
+
+    const cleanup = runAfterTokensDone({
+      enabled: isBulkRevokeApprovalEnabled,
+      fallbackDelayMs: 12_000,
+      deferWhileRefreshing: true,
+      retryDelayMs: 2000,
+      maxWaitMs: 30_000,
+      networkId: network?.id,
+      matchNetworkId: true,
+      onRun: run,
+    });
+
+    return () => {
+      cancelled = true;
+      cleanup();
+    };
+  }, [
+    account?.address,
+    account?.id,
+    indexedAccount?.id,
+    isBulkRevokeApprovalEnabled,
+    network?.id,
+    updateApprovalsInfo,
+  ]);
+
   const isRequiredValidation = vaultSettings?.validationRequired;
   const softwareAccountDisabled = vaultSettings?.softwareAccountDisabled;
   const supportedDeviceTypes = vaultSettings?.supportedDeviceTypes;
@@ -202,11 +282,11 @@ export function HomePageView({
   const tabConfigs = useMemo(() => {
     return [
       {
-        id: EHomeWalletTab.Tokens,
+        id: EHomeWalletTab.Portfolio,
         name: intl.formatMessage({
-          id: ETranslations.global_crypto,
+          id: ETranslations.global_portfolio,
         }),
-        component: <TokenListContainerWithProvider />,
+        component: <PortfolioContainerWithProvider />,
       },
       isNFTEnabled
         ? {
@@ -262,7 +342,7 @@ export function HomePageView({
   const tabs = useMemo(() => {
     if (isWalletNotBackedUp) {
       return (
-        <ScrollView h="100%">
+        <ScrollView h="100%" nestedScrollEnabled={platformEnv.isNativeAndroid}>
           {renderHeader()}
           <NotBackedUpEmpty />
         </ScrollView>
@@ -273,6 +353,7 @@ export function HomePageView({
     }-${isNFTEnabled ? '1' : '0'}-${isBulkRevokeApprovalEnabled ? '1' : '0'}`;
     return (
       <Tabs.Container
+        ref={tabsRef as any}
         key={key}
         allowHeaderOverscroll
         width={tabContainerWidth}
@@ -307,6 +388,16 @@ export function HomePageView({
     tabContainerWidth,
   ]);
 
+  const handleSwitchWalletHomeTab = useCallback(
+    (payload: { id: EHomeWalletTab }) => {
+      const name = tabConfigs.find((i) => i.id === payload.id)?.name;
+      if (name) {
+        tabsRef.current?.jumpToTab(name);
+      }
+    },
+    [tabConfigs],
+  );
+
   useEffect(() => {
     void Icon.prefetch('CloudOffOutline');
   }, []);
@@ -319,14 +410,55 @@ export function HomePageView({
     appEventBus.on(EAppEventBusNames.WalletUpdate, clearCache);
     appEventBus.on(EAppEventBusNames.AccountUpdate, clearCache);
     appEventBus.on(EAppEventBusNames.AddressBookUpdate, clearCache);
+    appEventBus.on(
+      EAppEventBusNames.SwitchWalletHomeTab,
+      handleSwitchWalletHomeTab,
+    );
     return () => {
       appEventBus.off(EAppEventBusNames.WalletUpdate, clearCache);
       appEventBus.off(EAppEventBusNames.AccountUpdate, clearCache);
       appEventBus.off(EAppEventBusNames.AddressBookUpdate, clearCache);
+      appEventBus.off(
+        EAppEventBusNames.SwitchWalletHomeTab,
+        handleSwitchWalletHomeTab,
+      );
     };
-  }, []);
+  }, [handleSwitchWalletHomeTab]);
+
+  const { result: accountNetworkNotSupported } = usePromiseResult(
+    async () => {
+      if (!network?.id) return undefined;
+      const checkResult =
+        await backgroundApiProxy.serviceAccount.checkAccountNetworkNotSupported(
+          {
+            walletId: wallet?.id,
+            accountId: account?.id,
+            accountImpl: account?.impl,
+            activeNetworkId: network.id,
+            featuresInfoCache: device?.featuresInfo,
+          },
+        );
+
+      return !!checkResult?.networkImpl;
+    },
+    [account?.id, account?.impl, wallet?.id, network?.id, device?.featuresInfo],
+    { initResult: undefined },
+  );
 
   const homePageContent = useMemo(() => {
+    if (accountNetworkNotSupported) {
+      return (
+        <YStack height="100%">
+          <Stack flex={1} justifyContent="center">
+            <NetworkUnsupportedWarning
+              networkId={network?.id ?? ''}
+              emptyStyle
+            />
+          </Stack>
+        </YStack>
+      );
+    }
+
     if (
       (softwareAccountDisabled &&
         accountUtils.isHdWallet({
@@ -375,6 +507,7 @@ export function HomePageView({
 
     return tabs;
   }, [
+    accountNetworkNotSupported,
     softwareAccountDisabled,
     wallet?.id,
     supportedDeviceTypes,
@@ -414,7 +547,11 @@ export function HomePageView({
     );
 
     if (wallet) {
-      content = homePageContent;
+      content = platformEnv.isNative ? (
+        <AndroidScrollContainer>{homePageContent}</AndroidScrollContainer>
+      ) : (
+        homePageContent
+      );
       // This is a temporary hack solution, need to fix the layout of headerLeft and headerRight
     }
     return (
@@ -426,16 +563,6 @@ export function HomePageView({
             <TabPageHeader sceneName={sceneName} tabRoute={ETabRoutes.Home} />
           )}
           <NetworkAlert />
-          {/* {
-            // The upgrade reminder does not need to be displayed on the Url Account page
-            sceneName === EAccountSelectorSceneName.home ? (
-              <>
-                <UpdateReminder />
-                <HomeFirmwareUpdateReminder />
-                <WalletXfpStatusReminder />
-              </>
-            ) : null
-          } */}
           {content}
           {platformEnv.isNative ? (
             <YStack
@@ -462,5 +589,7 @@ export function HomePageView({
     homePageContent,
   ]);
 
-  return useMemo(() => <Page fullPage>{homePage}</Page>, [homePage]);
+  return useMemo(() => {
+    return <Page fullPage>{homePage}</Page>;
+  }, [homePage]);
 }

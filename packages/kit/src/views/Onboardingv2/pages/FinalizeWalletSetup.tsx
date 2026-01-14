@@ -22,7 +22,7 @@ import {
   SizableText,
   XStack,
   YStack,
-  useThemeValue,
+  useTheme,
 } from '@onekeyhq/components';
 import type { IAppEventBusPayload } from '@onekeyhq/shared/src/eventBus/appEventBus';
 import {
@@ -113,10 +113,10 @@ const MatrixBackground = ({
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
-const STEPS_DATA: Record<
-  EFinalizeWalletSetupSteps,
-  { pathData: string; title: string } | null
-> = {
+type IStepData = { pathData: string; title: string } | null;
+
+// Regular wallet setup steps
+const STEPS_DATA: Partial<Record<EFinalizeWalletSetupSteps, IStepData>> = {
   [EFinalizeWalletSetupSteps.CreatingWallet]: {
     pathData:
       'M7 12V35C7 38.3138 9.6863 41 13 41H35C38.3138 41 41 38.3138 41 35V23C41 19.6863 38.3138 17 35 17H33M7 12C7 14.7614 9.23858 17 12 17H33M7 12C7 9.23858 9.23858 7 12 7H28.6666C31.06 7 33 8.9401 33 11.3333V17M35 29C35 31.2091 33.2091 33 31 33C28.7909 33 27 31.2091 27 29C27 26.7909 28.7909 25 31 25C33.2091 25 35 26.7909 35 29Z',
@@ -154,15 +154,16 @@ function FinalizeWalletSetupPage({
   EOnboardingPagesV2.FinalizeWalletSetup
 >) {
   const {
-    activeAccount: { wallet },
+    activeAccount: { wallet: _wallet },
   } = useActiveAccount({ num: 0 });
   const intl = useIntl();
   const navigation = useAppNavigation();
-  const [bgAppColor, borderDisabledColor, borderActiveColor] = useThemeValue([
-    '$bgApp',
-    '$borderDisabled',
-    '$borderActive',
-  ]);
+  const theme = useTheme();
+  const bgAppColor = theme.bgApp.val;
+  const borderDisabledColor = theme.borderDisabled.val;
+  const borderActiveColor = theme.borderActive.val;
+  const neutral1Color = theme.neutral1.val;
+  const neutral4Color = theme.neutral4.val;
   const [setupError, setSetupError] = useState<
     | {
         messageId: ETranslations;
@@ -173,20 +174,22 @@ function FinalizeWalletSetupPage({
   const created = useRef(false);
   const mnemonic = route?.params?.mnemonic;
   const mnemonicType = route?.params?.mnemonicType;
+  const keylessPackSetId = route?.params?.keylessPackSetId;
   const deviceData = route?.params?.deviceData;
   const isFirmwareVerified = route?.params?.isFirmwareVerified;
   const isWalletBackedUp = route?.params?.isWalletBackedUp;
+  const isKeylessWallet = route?.params?.isKeylessWallet;
+  const keylessDetailsInfo = route?.params?.keylessDetailsInfo;
 
-  const [currentStep, setCurrentStep] = useState<EFinalizeWalletSetupSteps>(
-    EFinalizeWalletSetupSteps.CreatingWallet,
-  );
+  const initialStep = EFinalizeWalletSetupSteps.CreatingWallet;
+
+  const [currentStep, setCurrentStep] =
+    useState<EFinalizeWalletSetupSteps>(initialStep);
   const progress = useSharedValue(0);
   const pathLength = 150;
 
   // 队列管理
-  const stepQueue = useRef<EFinalizeWalletSetupSteps[]>([
-    EFinalizeWalletSetupSteps.CreatingWallet,
-  ]);
+  const stepQueue = useRef<EFinalizeWalletSetupSteps[]>([initialStep]);
   const isProcessing = useRef(false);
 
   const animatedProps = useAnimatedProps(() => {
@@ -304,6 +307,8 @@ function FinalizeWalletSetupPage({
             await actions.current.createHDWallet({
               mnemonic,
               isWalletBackedUp,
+              isKeylessWallet,
+              keylessDetailsInfo,
             });
           },
         });
@@ -314,6 +319,12 @@ function FinalizeWalletSetupPage({
           device: deviceData.device as SearchDevice,
           isFirmwareVerified,
         });
+      } else if (keylessPackSetId && !created.current) {
+        // Create keyless wallet
+        await actions.current.createKeylessWallet({
+          packSetId: keylessPackSetId,
+        });
+        created.current = true;
       }
     } catch (error) {
       console.error('createWallet error:', error);
@@ -335,9 +346,12 @@ function FinalizeWalletSetupPage({
     mnemonic,
     deviceData,
     isFirmwareVerified,
+    keylessPackSetId,
     mnemonicType,
     actions,
     isWalletBackedUp,
+    isKeylessWallet,
+    keylessDetailsInfo,
     goNextStep,
     connectDevice,
     createHWWallet,
@@ -379,12 +393,12 @@ function FinalizeWalletSetupPage({
 
   const retrySetup = useCallback(() => {
     setSetupError(undefined);
-    setCurrentStep(EFinalizeWalletSetupSteps.CreatingWallet);
+    setCurrentStep(initialStep);
     stepQueueIndex.current = 0;
     setTimeout(() => {
       void createWallet();
     });
-  }, [createWallet]);
+  }, [createWallet, initialStep]);
 
   const currentStepData =
     STEPS_DATA[currentStep] ||
@@ -536,7 +550,7 @@ function FinalizeWalletSetupPage({
                     }}
                   >
                     <LinearGradient
-                      colors={['$neutral1', '$neutral4']}
+                      colors={[neutral1Color, neutral4Color]}
                       start={{ x: 1, y: 0 }}
                       end={{ x: 1, y: 1 }}
                       w="$14"
@@ -610,6 +624,13 @@ function FinalizeWalletSetupPage({
             </YStack>
           ) : null}
         </OnboardingLayout.Body>
+        <OnboardingLayout.Footer>
+          <SizableText size="$bodySm" color="$textSubdued">
+            {intl.formatMessage({
+              id: ETranslations.do_not_exit_app_during_setup,
+            })}
+          </SizableText>
+        </OnboardingLayout.Footer>
       </OnboardingLayout>
     </Page>
   );

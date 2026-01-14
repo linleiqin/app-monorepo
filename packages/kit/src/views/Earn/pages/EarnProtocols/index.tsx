@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useIntl } from 'react-intl';
 
@@ -7,6 +7,7 @@ import {
   Empty,
   SizableText,
   Skeleton,
+  Stack,
   XStack,
   YStack,
   useMedia,
@@ -138,15 +139,18 @@ function BasicEarnProtocols({ route }: { route: IRouteProps }) {
         render: (item) => {
           return (
             <XStack jc="center" ai="center">
-              <Token
-                size="md"
-                borderRadius="$2"
-                mr="$3"
-                tokenImageUri={item.provider.logoURI}
-              />
-              <YStack mr="$2">
-                <XStack ai="center" gap="$2">
-                  <SizableText size="$bodyLgMedium">
+              <Stack mr="$3">
+                <Token
+                  size="md"
+                  borderRadius="$2"
+                  tokenImageUri={item.provider.logoURI}
+                  showNetworkIcon={!isDesktopLayout}
+                  networkId={item.network.networkId}
+                />
+              </Stack>
+              <YStack mr="$2" flex={1} minWidth={0}>
+                <XStack ai="center" gap="$2" minWidth={0}>
+                  <SizableText size="$bodyLgMedium" flexShrink={0}>
                     {normalizeToEarnProvider(item.provider.name)}
                   </SizableText>
                   {item.provider.badges?.map((badge) => (
@@ -155,12 +159,19 @@ function BasicEarnProtocols({ route }: { route: IRouteProps }) {
                       key={badge.tag}
                       badgeType={badge.badgeType}
                       badgeSize="sm"
+                      flexShrink={1}
+                      minWidth={0}
                     >
                       <Badge.Text>{badge.tag}</Badge.Text>
                     </Badge>
                   ))}
                 </XStack>
-                {item?.provider?.description ? (
+                {isDesktopLayout && item?.provider?.vaultName ? (
+                  <SizableText size="$bodySmMedium" color="$textSubdued">
+                    {item.provider.vaultName}
+                  </SizableText>
+                ) : null}
+                {!isDesktopLayout && item?.provider?.description ? (
                   <SizableText size="$bodySmMedium" color="$textSubdued">
                     {item.provider.description}
                   </SizableText>
@@ -199,7 +210,7 @@ function BasicEarnProtocols({ route }: { route: IRouteProps }) {
       },
       {
         key: 'yield',
-        label: intl.formatMessage({ id: ETranslations.global_apr }),
+        label: intl.formatMessage({ id: ETranslations.defi_apr_apy }),
         flex: 2,
         align: 'flex-end',
         render: (item) => (
@@ -212,7 +223,7 @@ function BasicEarnProtocols({ route }: { route: IRouteProps }) {
         ),
       },
     ];
-  }, [intl]);
+  }, [intl, isDesktopLayout]);
 
   const content = useMemo(() => {
     if (isLoading) {
@@ -330,6 +341,7 @@ function BasicEarnProtocols({ route }: { route: IRouteProps }) {
       sceneName={EAccountSelectorSceneName.home}
       tabRoute={ETabRoutes.Earn}
       pageTitle={customHeaderLeft}
+      customHeaderRightItems={platformEnv.isNative ? <></> : undefined}
       breadcrumbProps={{
         items: [
           {

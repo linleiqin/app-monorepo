@@ -7,6 +7,7 @@ import TronWeb from 'tronweb';
 import {
   TRON_SOURCE_FLAG_MAINNET,
   TRON_SOURCE_FLAG_TESTNET,
+  TRON_TX_EXPIRATION_TIME,
 } from '@onekeyhq/core/src/chains/tron/constants';
 import type {
   IDecodedTxExtraTron,
@@ -74,6 +75,7 @@ import type {
   IBuildAccountAddressDetailParams,
   IBuildDecodedTxParams,
   IBuildEncodedTxParams,
+  IBuildLMSwapEncodedTxParams,
   IBuildOkxSwapEncodedTxParams,
   IBuildUnsignedTxParams,
   IGetPrivateKeyFromImportedParams,
@@ -137,6 +139,36 @@ export default class Vault extends VaultBase {
     throw new OneKeyInternalError();
   }
 
+  async _extendTxExpiration({
+    transaction,
+    expiration,
+  }: {
+    transaction: Types.Transaction;
+    expiration: number;
+  }) {
+    try {
+      const [extendedTransaction] =
+        await this.backgroundApi.serviceAccountProfile.sendProxyRequest<Types.Transaction>(
+          {
+            networkId: this.networkId,
+            body: [
+              {
+                route: 'tronweb',
+                params: {
+                  method: 'transactionBuilder.extendExpiration',
+                  params: [transaction, expiration],
+                },
+              },
+            ],
+          },
+        );
+      return extendedTransaction;
+    } catch (e) {
+      console.error('extendTxExpiration ERROR:', e);
+      return transaction;
+    }
+  }
+
   async _buildEncodedTxFromApprove(params: IBuildEncodedTxParams) {
     const { approveInfo } = params;
     const { owner, spender, amount, tokenInfo, isMax } =
@@ -191,7 +223,10 @@ export default class Vault extends VaultBase {
         'Unable to build token approve transaction',
       );
     }
-    return transaction;
+    return this._extendTxExpiration({
+      transaction,
+      expiration: TRON_TX_EXPIRATION_TIME,
+    });
   }
 
   async _buildEncodedTxFromTransfer(
@@ -254,7 +289,10 @@ export default class Vault extends VaultBase {
             'Unable to build token transfer transaction',
           );
         }
-        return transaction;
+        return this._extendTxExpiration({
+          transaction,
+          expiration: TRON_TX_EXPIRATION_TIME,
+        });
       }
 
       try {
@@ -282,7 +320,10 @@ export default class Vault extends VaultBase {
               ],
             },
           );
-        return transaction;
+        return await this._extendTxExpiration({
+          transaction,
+          expiration: TRON_TX_EXPIRATION_TIME,
+        });
       } catch (e) {
         if (typeof e === 'string' && e.endsWith('balance is not sufficient.')) {
           throw new InsufficientBalance({
@@ -634,7 +675,10 @@ export default class Vault extends VaultBase {
             'Unable to build token approve transaction',
           );
         }
-        return transaction;
+        return await this._extendTxExpiration({
+          transaction,
+          expiration: TRON_TX_EXPIRATION_TIME,
+        });
       } catch (e) {
         console.error('updateTokenApproveInfo ERROR:', e);
         return encodedTx;
@@ -679,7 +723,10 @@ export default class Vault extends VaultBase {
             ],
           },
         );
-      return transaction;
+      return this._extendTxExpiration({
+        transaction,
+        expiration: TRON_TX_EXPIRATION_TIME,
+      });
     }
 
     return Promise.resolve(encodedTx);
@@ -895,7 +942,82 @@ export default class Vault extends VaultBase {
       transaction.txID = txID.slice(2);
     }
 
-    return transaction;
+    return this._extendTxExpiration({
+      transaction,
+      expiration: TRON_TX_EXPIRATION_TIME,
+    });
+  }
+
+  override async buildLiquidMeshSwapEncodedTx(
+    params: IBuildLMSwapEncodedTxParams,
+  ): Promise<IEncodedTxTron> {
+    const { lmTx } = params;
+    const { from, to, value, data } = lmTx;
+
+    const convertEvmToTronAddress = (address: string): string => {
+      if (address.toLowerCase().startsWith('0x')) {
+        return TronWeb.utils.address.fromHex(`41${address.slice(2)}`);
+      }
+      return address;
+    };
+
+    const ownerAddress = convertEvmToTronAddress(from);
+    const contractAddress = convertEvmToTronAddress(to);
+
+    const callValue = parseInt(value, 16);
+
+    const functionSelector = data.slice(2, 10);
+
+    const signatureDataHex = functionSelector;
+
+    const [{ result, transaction }] =
+      await this.backgroundApi.serviceAccountProfile.sendProxyRequest<{
+        result: { result: boolean };
+        transaction: Types.Transaction;
+      }>({
+        networkId: this.networkId,
+        body: [
+          {
+            route: 'tronweb',
+            params: {
+              method: 'transactionBuilder.triggerSmartContract',
+              params: [
+                contractAddress,
+                signatureDataHex,
+                {
+                  feeLimit: 300_000_000,
+                  callValue,
+                },
+                [],
+                ownerAddress,
+              ],
+            },
+          },
+        ],
+      });
+
+    if (!result) {
+      throw new OneKeyInternalError(
+        'Unable to build LiquidMesh swap transaction',
+      );
+    }
+
+    (
+      transaction.raw_data.contract[0].parameter
+        .value as Types.TriggerSmartContract
+    ).data = data.slice(2);
+
+    const txPb = TronWeb.utils.transaction.txJsonToPb(transaction);
+    const txRawDataHex = TronWeb.utils.transaction.txPbToRawDataHex(txPb);
+    const txID = TronWeb.utils.transaction.txPbToTxID(txPb);
+
+    transaction.raw_data_hex = txRawDataHex;
+    transaction.txID = txID.slice(2);
+
+    return this._extendTxExpiration({
+      transaction,
+      expiration: TRON_TX_EXPIRATION_TIME,
+    });
   }
 
   async _createResourceRentalOrder(params: {

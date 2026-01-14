@@ -5,10 +5,12 @@ import { useIntl } from 'react-intl';
 import { Tabs, YStack } from '@onekeyhq/components';
 import { isHoldersTabSupported } from '@onekeyhq/shared/src/consts/marketConsts';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
+import networkUtils from '@onekeyhq/shared/src/utils/networkUtils';
 import {
   NUMBER_FORMATTER,
   formatDisplayNumber,
 } from '@onekeyhq/shared/src/utils/numberUtils';
+import type { IMarketAccountPortfolioItem } from '@onekeyhq/shared/types/marketV2';
 
 import { useTokenDetail } from '../../../hooks/useTokenDetail';
 import { Holders } from '../components/Holders';
@@ -40,9 +42,17 @@ function DesktopInformationTabsHeader(props: TabBarProps<string>) {
   );
 }
 
-export function DesktopInformationTabs() {
+interface IDesktopInformationTabsProps {
+  portfolioData: IMarketAccountPortfolioItem[];
+  isRefreshing?: boolean;
+}
+
+export function DesktopInformationTabs({
+  portfolioData,
+  isRefreshing,
+}: IDesktopInformationTabsProps) {
   const intl = useIntl();
-  const { tokenAddress, networkId, tokenDetail } = useTokenDetail();
+  const { tokenAddress, networkId, tokenDetail, isNative } = useTokenDetail();
   const { handleTabChange } = useBottomTabAnalytics();
   const { accountAddress } = useNetworkAccountAddress(networkId);
 
@@ -61,8 +71,8 @@ export function DesktopInformationTabs() {
   }, [intl, tokenDetail?.holders]);
 
   const tabs = useMemo(() => {
-    // Check if current network supports holders tab
-    const shouldShowHoldersTab = isHoldersTabSupported(networkId);
+    // Check if current network supports holders tab (not available for native tokens)
+    const shouldShowHoldersTab = !isNative && isHoldersTabSupported(networkId);
     // Check if there's an account address available
     const shouldShowPortfolioTab = !!accountAddress;
 
@@ -86,8 +96,8 @@ export function DesktopInformationTabs() {
           })}
         >
           <Portfolio
-            tokenAddress={tokenAddress}
-            networkId={networkId}
+            portfolioData={portfolioData}
+            isRefreshing={isRefreshing}
             accountAddress={accountAddress}
           />
         </Tabs.Tab>
@@ -99,13 +109,23 @@ export function DesktopInformationTabs() {
       ),
     ].filter(Boolean);
     return items;
-  }, [intl, tokenAddress, networkId, holdersTabName, accountAddress]);
+  }, [
+    networkId,
+    accountAddress,
+    intl,
+    tokenAddress,
+    portfolioData,
+    isRefreshing,
+    holdersTabName,
+    isNative,
+  ]);
 
   const renderTabBar = useCallback(({ ...props }: any) => {
     return <DesktopInformationTabsHeader {...props} />;
   }, []);
 
-  if (!tokenAddress || !networkId) {
+  // Hide tabs for BTC network
+  if (!networkId || networkUtils.isBTCNetwork(networkId)) {
     return null;
   }
 

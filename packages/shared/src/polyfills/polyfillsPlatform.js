@@ -5,6 +5,15 @@
 /* eslint-disable global-require, no-restricted-syntax, import/no-unresolved */
 require('./setimmediateShim');
 
+// Promise.allSettled polyfill - must be injected before any code uses it
+// Hermes engine may have Promise but lack allSettled on some devices
+if (typeof Promise.allSettled !== 'function') {
+  console.log('Shims Injected log: Promise.allSettled');
+  // Use the promise library's implementation
+  const PromisePolyfill = require('promise/setimmediate/es6-extensions');
+  Promise.allSettled = PromisePolyfill.allSettled.bind(Promise);
+}
+
 require('./intlShim');
 require('react-native-url-polyfill/auto');
 const platformEnv = require('@onekeyhq/shared/src/platformEnv');
@@ -279,6 +288,15 @@ if (platformEnv.isNative) {
       return newBuffer;
     };
   }
+}
+
+// Polyfill crypto.subtle for React Native
+// This must be loaded AFTER the crypto polyfill (line 145-154) because it extends the crypto object.
+// Purpose: Enable Supabase Auth PKCE flow to use SHA-256 code_challenge (s256 method)
+// instead of falling back to plain method when crypto.subtle is unavailable.
+// @see @supabase/auth-js GoTrueClient.ts - checks crypto.subtle.digest for PKCE support
+if (platformEnv.isNative) {
+  require('@onekeyhq/shared/src/appCrypto/cryptoSubtlePolyfill');
 }
 
 console.log('polyfillsPlatform.native shim loaded');

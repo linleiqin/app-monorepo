@@ -14,13 +14,20 @@ import {
   TokenDetailHeader,
   TokenSupplementaryInfo,
 } from '../components';
+import { usePortfolioData } from '../components/InformationTabs/components/Portfolio/hooks/usePortfolioData';
+import { useNetworkAccountAddress } from '../components/InformationTabs/hooks/useNetworkAccountAddress';
 import { DesktopInformationTabs } from '../components/InformationTabs/layout/DesktopInformationTabs';
 import { useTokenDetail } from '../hooks/useTokenDetail';
 
 export function DesktopLayout() {
   const { tokenAddress, networkId, tokenDetail, isNative, websocketConfig } =
     useTokenDetail();
-
+  const { accountAddress } = useNetworkAccountAddress(networkId);
+  const { portfolioData, isRefreshing } = usePortfolioData({
+    tokenAddress,
+    networkId,
+    accountAddress,
+  });
   return (
     <XStack flex={1}>
       {/* Left column */}
@@ -42,42 +49,41 @@ export function DesktopLayout() {
         </Stack>
 
         {/* Info tabs */}
-        {!isNative ? (
-          <Stack h="30vh">
-            <DesktopInformationTabs />
-          </Stack>
-        ) : null}
+        <Stack h="30vh">
+          <DesktopInformationTabs
+            portfolioData={portfolioData}
+            isRefreshing={isRefreshing}
+          />
+        </Stack>
       </YStack>
 
       {/* Right column */}
-      {!isNative ? (
-        <Stack w={320}>
-          <ScrollView>
-            <Stack w={320} pb={platformEnv.isWeb ? '$12' : undefined}>
-              <Stack px="$5" py="$4">
-                <SwapPanel
-                  swapToken={{
-                    networkId,
-                    contractAddress: tokenDetail?.address || '',
-                    symbol: tokenDetail?.symbol || '',
-                    decimals: tokenDetail?.decimals || 0,
-                    logoURI: tokenDetail?.logoUrl,
-                    price: tokenDetail?.price,
-                  }}
-                />
-              </Stack>
-
-              <Divider mx="$5" my="$2" />
-
-              <TokenActivityOverview />
-
-              <Divider mx="$5" />
-
-              <TokenSupplementaryInfo />
+      <Stack w={320}>
+        <ScrollView>
+          <Stack w={320} pb={platformEnv.isWeb ? '$12' : undefined}>
+            <Stack px="$5" py="$4">
+              <SwapPanel
+                swapToken={{
+                  networkId,
+                  contractAddress: tokenDetail?.address || '',
+                  symbol: tokenDetail?.symbol || '',
+                  decimals: tokenDetail?.decimals || 0,
+                  logoURI: tokenDetail?.logoUrl,
+                  price: tokenDetail?.price,
+                }}
+              />
             </Stack>
-          </ScrollView>
-        </Stack>
-      ) : null}
+
+            <Divider mx="$5" my="$2" />
+
+            <TokenActivityOverview />
+
+            <Divider mx="$5" />
+
+            <TokenSupplementaryInfo />
+          </Stack>
+        </ScrollView>
+      </Stack>
     </XStack>
   );
 }

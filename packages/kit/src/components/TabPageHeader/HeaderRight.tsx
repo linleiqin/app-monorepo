@@ -1,44 +1,33 @@
-import { type ReactNode, useCallback, useMemo } from 'react';
+import type { ReactNode } from 'react';
+import { useMemo } from 'react';
 
 import { useIntl } from 'react-intl';
 import { StyleSheet } from 'react-native';
 
 import {
   Button,
-  NavBackButton,
   SizableText,
   XStack,
   YStack,
-  rootNavigationRef,
-  useIsWebHorizontalLayout,
   useMedia,
 } from '@onekeyhq/components';
-import {
-  HeaderButtonGroup,
-  HeaderIconButton,
-} from '@onekeyhq/components/src/layouts/Navigation/Header';
+import { HeaderButtonGroup } from '@onekeyhq/components/src/layouts/Navigation/Header';
 import { NetworkSelectorTriggerHome } from '@onekeyhq/kit/src/components/AccountSelector/NetworkSelectorTrigger';
-import { UniversalSearchInput } from '@onekeyhq/kit/src/components/TabPageHeader/UniversalSearchInput';
+import { LegacyUniversalSearchInput } from '@onekeyhq/kit/src/components/TabPageHeader/LegacyUniversalSearchInput';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import platformEnv from '@onekeyhq/shared/src/platformEnv';
 import { ETabRoutes } from '@onekeyhq/shared/src/routes/tab';
-import { ETabMarketRoutes } from '@onekeyhq/shared/src/routes/tabMarket';
 import { EAccountSelectorSceneName } from '@onekeyhq/shared/types';
 
 import TabCountButton from '../../views/Discovery/components/MobileBrowser/TabCountButton';
 import { HistoryIconButton } from '../../views/Discovery/pages/components/HistoryIconButton';
+import { MoreActionButton } from '../MoreActionButton';
 
 import {
-  DownloadButton,
   GiftAction,
   HeaderNotificationIconButton,
-  LanguageButton,
-  OneKeyIdButton,
-  ThemeButton,
   WalletConnectionForWeb,
 } from './components';
-import { MoreActionButton } from './MoreActionButton';
-import { UrlAccountPageHeader } from './urlAccountPageHeader';
 
 export function MoreAction() {
   return <MoreActionButton key="more-action" />;
@@ -54,7 +43,7 @@ export function SelectorTrigger() {
   );
 }
 
-function DepositAction() {
+export function DepositAction() {
   const { gtMd } = useMedia();
   const intl = useIntl();
   return gtMd ? null : (
@@ -96,7 +85,7 @@ export function SearchInput({
     size = platformEnv.isWeb ? gtXl : gtLg;
   }
 
-  return <UniversalSearchInput size={size ? 'large' : 'small'} />;
+  return <LegacyUniversalSearchInput size={size ? 'large' : 'small'} />;
 }
 
 export function HeaderRight({
@@ -116,9 +105,6 @@ export function HeaderRight({
     fixedItems: ReactNode;
   }) => ReactNode;
 }) {
-  const isHorizontal = useIsWebHorizontalLayout();
-  const { gtXl, gtMd } = useMedia();
-
   const items = useMemo(() => {
     if (customHeaderRightItems) {
       return customHeaderRightItems;
@@ -126,27 +112,14 @@ export function HeaderRight({
 
     const fixedItems = (
       <>
-        {isHorizontal ? (
-          <HeaderNotificationIconButton testID="header-right-notification" />
-        ) : null}
+        <HeaderNotificationIconButton testID="header-right-notification" />
         <MoreAction />
-        {isHorizontal ? (
-          <OneKeyIdButton testID="header-right-onekey-id" />
-        ) : null}
-        {isHorizontal && platformEnv.isWebDappMode ? <DownloadButton /> : null}
-        {isHorizontal && platformEnv.isWebDappMode && gtXl ? (
-          <LanguageButton />
-        ) : null}
-        {isHorizontal && platformEnv.isWebDappMode && gtXl ? (
-          <ThemeButton />
-        ) : null}
       </>
     );
 
     const earnItems = (
       <>
         <GiftAction copyAsUrl />
-        <WalletConnectionForWeb tabRoute={tabRoute} />
         {fixedItems}
       </>
     );
@@ -157,70 +130,42 @@ export function HeaderRight({
 
     switch (tabRoute) {
       case ETabRoutes.Home: {
-        const isUrlWallet =
-          platformEnv.isWebDappMode &&
-          sceneName === EAccountSelectorSceneName.homeUrlAccount;
-
-        const urlAccountBackButton =
-          isUrlWallet && gtMd && platformEnv.isWebDappMode ? (
-            <NavBackButton
-              onPress={() => {
-                rootNavigationRef.current?.navigate(ETabRoutes.Market, {
-                  screen: ETabMarketRoutes.TabMarket,
-                });
-              }}
-            />
-          ) : null;
+        if (
+          platformEnv.isNative &&
+          sceneName === EAccountSelectorSceneName.homeUrlAccount
+        ) {
+          return <SelectorTrigger />;
+        }
 
         return (
           <>
-            {urlAccountBackButton}
-            {isHorizontal ? (
-              <SearchInput isUrlWallet={isUrlWallet} />
-            ) : undefined}
-            {isHorizontal ? undefined : <SelectorTrigger />}
-            {isUrlWallet && gtMd && platformEnv.isWebDappMode ? (
-              <UrlAccountPageHeader />
-            ) : (
-              <WalletConnectionForWeb tabRoute={tabRoute} />
-            )}
+            <SelectorTrigger />
             {fixedItems}
           </>
         );
       }
-      case ETabRoutes.Swap:
-        return (
-          <>
-            <WalletConnectionForWeb tabRoute={tabRoute} />
-            {fixedItems}
-          </>
-        );
       case ETabRoutes.WebviewPerpTrade:
         return (
           <>
             <WalletConnectionForWeb tabRoute={tabRoute} />
-            {fixedItems}
           </>
         );
       case ETabRoutes.Market:
+        return <>{fixedItems}</>;
+      case ETabRoutes.Discovery:
+        if (selectedHeaderTab === ETranslations.global_earn) {
+          return (
+            <>
+              <GiftAction copyAsUrl />
+            </>
+          );
+        }
         return (
           <>
-            {isHorizontal ? <SearchInput /> : undefined}
-            <WalletConnectionForWeb tabRoute={tabRoute} />
-            {fixedItems}
-          </>
-        );
-      case ETabRoutes.Discovery:
-        return selectedHeaderTab === ETranslations.global_earn ? (
-          earnItems
-        ) : (
-          <>
             <HistoryIconButton />
-            {isHorizontal || !platformEnv.isNative ? undefined : (
+            {platformEnv.isNative ? (
               <TabCountButton testID="browser-header-tabs" />
-            )}
-            <WalletConnectionForWeb tabRoute={tabRoute} />
-            {fixedItems}
+            ) : null}
           </>
         );
       case ETabRoutes.Earn:
@@ -228,7 +173,6 @@ export function HeaderRight({
       case ETabRoutes.Perp:
         return (
           <>
-            <WalletConnectionForWeb tabRoute={tabRoute} />
             <DepositAction />
           </>
         );
@@ -239,13 +183,10 @@ export function HeaderRight({
     }
   }, [
     customHeaderRightItems,
-    isHorizontal,
-    gtXl,
     tabRoute,
     renderCustomHeaderRightItems,
     selectedHeaderTab,
     sceneName,
-    gtMd,
   ]);
   const width = useMemo(() => {
     if (platformEnv.isNative) {
@@ -256,14 +197,15 @@ export function HeaderRight({
     }
     return '100%';
   }, []);
-  return (
+  return items ? (
     <HeaderButtonGroup
       testID="Wallet-Page-Header-Right"
       className="app-region-no-drag"
       width={width}
       jc={platformEnv.isNative ? undefined : 'flex-end'}
+      flexShrink={platformEnv.isNative ? undefined : 1}
     >
       {items}
     </HeaderButtonGroup>
-  );
+  ) : null;
 }

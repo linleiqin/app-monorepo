@@ -2,10 +2,16 @@ import { useMemo } from 'react';
 
 import { useIntl } from 'react-intl';
 
-import { Icon, SizableText, XStack, YStack } from '@onekeyhq/components';
+import type { IYStackProps } from '@onekeyhq/components';
+import {
+  Icon,
+  NumberSizeableText,
+  SizableText,
+  XStack,
+  YStack,
+} from '@onekeyhq/components';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import networkUtils from '@onekeyhq/shared/src/utils/networkUtils';
-import { numberFormat } from '@onekeyhq/shared/src/utils/numberUtils';
 import type { ISwapToken } from '@onekeyhq/shared/types/swap/types';
 
 import { useCurrency } from '../../../components/Currency';
@@ -14,27 +20,18 @@ import { Token } from '../../../components/Token';
 interface ISwapProPositionItemProps {
   token: ISwapToken;
   onPress: (token: ISwapToken) => void;
+  disabled?: boolean;
+  props?: IYStackProps;
 }
 
-const SwapProPositionItem = ({ token, onPress }: ISwapProPositionItemProps) => {
+const SwapProPositionItem = ({
+  token,
+  onPress,
+  disabled,
+  props,
+}: ISwapProPositionItemProps) => {
   const intl = useIntl();
   const currencyInfo = useCurrency();
-  const formatBalance = useMemo(() => {
-    return numberFormat(token.balanceParsed ?? '0', {
-      formatter: 'balance',
-    });
-  }, [token.balanceParsed]);
-  const formatFiatValue = useMemo(() => {
-    return numberFormat(token.fiatValue ?? '0', {
-      formatter: 'value',
-      formatterOptions: {
-        currency: currencyInfo.symbol,
-      },
-    });
-  }, [token.fiatValue, currencyInfo.symbol]);
-  const balanceValue = useMemo(() => {
-    return `${formatBalance}(${formatFiatValue})`;
-  }, [formatBalance, formatFiatValue]);
 
   const tokenNetworkImageUri = useMemo(() => {
     if (token.networkLogoURI) {
@@ -48,7 +45,13 @@ const SwapProPositionItem = ({ token, onPress }: ISwapProPositionItemProps) => {
   }, [token.networkLogoURI, token.networkId]);
 
   return (
-    <YStack py="$3" gap="$4" onPress={() => onPress(token)}>
+    <YStack
+      py="$3"
+      gap="$4"
+      onPress={disabled ? undefined : () => onPress(token)}
+      opacity={disabled ? 0.5 : 1}
+      {...(props && { ...props })}
+    >
       <XStack alignItems="center" gap="$2">
         <Token
           size="sm"
@@ -62,7 +65,20 @@ const SwapProPositionItem = ({ token, onPress }: ISwapProPositionItemProps) => {
         <SizableText size="$bodyMd" color="$textSubdued">
           {intl.formatMessage({ id: ETranslations.global_balance })}
         </SizableText>
-        <SizableText size="$bodyMdMedium">{balanceValue}</SizableText>
+        <XStack>
+          <NumberSizeableText size="$bodyMdMedium" formatter="balance">
+            {token.balanceParsed}
+          </NumberSizeableText>
+          <SizableText size="$bodyMdMedium">(</SizableText>
+          <NumberSizeableText
+            size="$bodyMdMedium"
+            formatter="value"
+            formatterOptions={{ currency: currencyInfo.symbol }}
+          >
+            {token.fiatValue}
+          </NumberSizeableText>
+          <SizableText size="$bodyMdMedium">)</SizableText>
+        </XStack>
       </XStack>
     </YStack>
   );

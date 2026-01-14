@@ -1,17 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { useIsFocused } from '@react-navigation/native';
+import { useIntl } from 'react-intl';
 
-import { Page, Stack, YStack, useMedia } from '@onekeyhq/components';
+import {
+  Page,
+  SizableText,
+  Stack,
+  YStack,
+  useMedia,
+} from '@onekeyhq/components';
 import { TabletHomeContainer } from '@onekeyhq/kit/src/components/TabletHomeContainer';
 import { FLOAT_NAV_BAR_Z_INDEX } from '@onekeyhq/shared/src/consts/zIndexConsts';
+import { ETranslations } from '@onekeyhq/shared/src/locale';
 import platformEnv from '@onekeyhq/shared/src/platformEnv';
 import { ETabRoutes } from '@onekeyhq/shared/src/routes/tab';
 import { EAccountSelectorSceneName } from '@onekeyhq/shared/types';
 
+import { LazyPageContainer } from '../../../components/LazyPageContainer';
 import { TabPageHeader } from '../../../components/TabPageHeader';
-import { usePerpFeatureGuard } from '../../../hooks/usePerpFeatureGuard';
-import { HyperliquidTermsOverlay } from '../components/HyperliquidTerms';
+import { useNativePerpFeatureGuard } from '../../../hooks/usePerpFeatureGuard';
 import { PerpContentFooter } from '../components/PerpContentFooter';
 import { PerpsGlobalEffects } from '../components/PerpsGlobalEffects';
 import { PerpsHeaderRight } from '../components/TradingPanel/components/PerpsHeaderRight';
@@ -32,6 +40,15 @@ function PerpLayout() {
   return <PerpMobileLayout />;
 }
 
+function PerpBodyContent() {
+  return (
+    <Stack position="relative" flex={1}>
+      <PerpLayout />
+      <PerpContentFooter />
+    </Stack>
+  );
+}
+
 function PerpContent() {
   const [tabPageHeight, setTabPageHeight] = useState(
     platformEnv.isNativeIOS ? 143 : 92,
@@ -41,11 +58,20 @@ function PerpContent() {
     const height = e.nativeEvent.layout.height - 20;
     setTabPageHeight(height);
   }, []);
+  const intl = useIntl();
 
   const header = (
     <TabPageHeader
       sceneName={EAccountSelectorSceneName.home}
       tabRoute={ETabRoutes.Perp}
+      headerPx="$4"
+      customHeaderLeftItems={
+        platformEnv.isWebDappMode ? undefined : (
+          <SizableText size="$headingXl">
+            {intl.formatMessage({ id: ETranslations.global_perp })}
+          </SizableText>
+        )
+      }
       customHeaderRightItems={
         <PerpsAccountSelectorProviderMirror>
           <PerpsProviderMirror>
@@ -78,32 +104,15 @@ function PerpContent() {
         header
       )}
       <Page.Body>
-        <Stack position="relative" flex={1}>
-          <PerpLayout />
-          <HyperliquidTermsOverlay />
-          <PerpContentFooter />
-        </Stack>
+        <LazyPageContainer>
+          <PerpBodyContent />
+        </LazyPageContainer>
       </Page.Body>
     </Page>
   );
 }
 
 function PerpView() {
-  const isFocused = useIsFocused();
-  const [isMounted, setIsMounted] = useState(false);
-  const isMountedRef = useRef(false);
-  useEffect(() => {
-    if (isMountedRef.current) {
-      return;
-    }
-    if (isFocused) {
-      isMountedRef.current = true;
-      setIsMounted(true);
-    }
-  }, [isFocused]);
-  if (!isMounted) {
-    return null;
-  }
   return shouldOpenExpandExtPerp ? (
     <ExtPerp />
   ) : (
@@ -120,7 +129,7 @@ function ExtPerpNull() {
 }
 
 export default function Perp() {
-  const canRenderPerp = usePerpFeatureGuard();
+  const canRenderPerp = useNativePerpFeatureGuard();
   if (!canRenderPerp) {
     return shouldOpenExpandExtPerp ? <ExtPerpNull /> : null;
   }
