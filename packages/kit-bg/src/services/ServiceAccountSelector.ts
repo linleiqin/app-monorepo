@@ -123,7 +123,7 @@ class ServiceAccountSelector extends ServiceBase {
           swapMap[num] = swapDataMerged;
           if (swapMap && swapMap[num]) {
             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            swapMap[num]!.networkId = usedNetworkId;
+            swapMap[num].networkId = usedNetworkId;
           }
         }
       };
@@ -283,15 +283,15 @@ class ServiceAccountSelector extends ServiceBase {
       }) || Boolean(account && !indexedAccountId);
     const isQrWallet = Boolean(
       wallet?.id &&
-        accountUtils.isQrWallet({
-          walletId: wallet?.id || '',
-        }),
+      accountUtils.isQrWallet({
+        walletId: wallet?.id || '',
+      }),
     );
     const isHwWallet = Boolean(
       wallet?.id &&
-        accountUtils.isHwWallet({
-          walletId: wallet?.id || '',
-        }),
+      accountUtils.isHwWallet({
+        walletId: wallet?.id || '',
+      }),
     );
     const universalAccountName = (() => {
       // hd account or others account

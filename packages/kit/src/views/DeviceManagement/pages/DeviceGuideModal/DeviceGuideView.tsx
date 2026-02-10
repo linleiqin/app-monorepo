@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { useIsFocused } from '@react-navigation/core';
 import { useIntl } from 'react-intl';
@@ -10,6 +10,7 @@ import {
   EVideoResizeMode,
   Image,
   LinearGradient,
+  Page,
   SizableText,
   Stack,
   Video,
@@ -18,15 +19,14 @@ import {
   useMedia,
   useSafeAreaInsets,
 } from '@onekeyhq/components';
-import useAppNavigation from '@onekeyhq/kit/src/hooks/useAppNavigation';
 import { useIsFirstFocused } from '@onekeyhq/kit/src/hooks/useIsFirstFocused';
 import { useThemeVariant } from '@onekeyhq/kit/src/hooks/useThemeVariant';
 import { ONEKEY_BUY_HARDWARE_URL } from '@onekeyhq/shared/src/config/appConfig';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
-import { EModalRoutes, EOnboardingPages } from '@onekeyhq/shared/src/routes';
+import { useNavigateToPickYourDevicePage } from '@onekeyhq/kit/src/views/Onboarding/hooks/useToOnBoardingPage';
 
 import type { ImageSourcePropType } from 'react-native';
-import type { ReactVideoSource } from 'react-native-video';
+import type { OnProgressData, ReactVideoSource } from 'react-native-video';
 
 const LightPosterImage =
   require('./assets/mydevice_hero_poster_light.jpg') as ImageSourcePropType;
@@ -56,7 +56,7 @@ function VideoContainer() {
 
   const maskStyle = useMemo(() => {
     const gradient = gtMd
-      ? 'linear-gradient(90deg, transparent 0%, black 70%)'
+      ? 'linear-gradient(90deg, transparent 0%, black 80%)'
       : 'linear-gradient(180deg, transparent 15%, black 70%)';
 
     return {
@@ -64,6 +64,17 @@ function VideoContainer() {
       WebkitMaskImage: gradient,
     };
   }, [gtMd]);
+
+  const isVideoLoadedRef = useRef(isVideoLoaded);
+  isVideoLoadedRef.current = isVideoLoaded;
+  const handleVideoLoad = useCallback((e: OnProgressData) => {
+    if (isVideoLoadedRef.current) {
+      return;
+    }
+    if (e.currentTime > 0) {
+      setIsVideoLoaded(true);
+    }
+  }, []);
 
   return (
     <Stack
@@ -81,7 +92,7 @@ function VideoContainer() {
       bottom="20%"
       $gtMd={{
         bottom: 0,
-        left: 0,
+        left: '25%',
         top: 0,
         right: 0,
       }}
@@ -91,9 +102,24 @@ function VideoContainer() {
         position="absolute"
         width="100%"
         height="100%"
-        $platform-web={maskStyle}
+        $platform-web={{
+          ...maskStyle,
+        }}
       >
-        {/* Show poster image as fallback while video is loading */}
+        <Video
+          muted
+          autoPlay
+          repeat
+          rate={0.8}
+          position="absolute"
+          width="100%"
+          height="100%"
+          controls={false}
+          playInBackground={false}
+          resizeMode={EVideoResizeMode.COVER}
+          source={videoSource}
+          onProgress={handleVideoLoad}
+        />
         {!isVideoLoaded ? (
           <Image
             position="absolute"
@@ -103,20 +129,6 @@ function VideoContainer() {
             source={posterSource}
           />
         ) : null}
-        <Video
-          muted
-          autoPlay
-          repeat
-          position="absolute"
-          width="100%"
-          height="100%"
-          controls={false}
-          playInBackground={false}
-          resizeMode={EVideoResizeMode.COVER}
-          source={videoSource}
-          onLoad={() => setIsVideoLoaded(true)}
-        />
-        {/* Native gradient overlay - fades video to background */}
         <LinearGradient
           colors={[
             'transparent',
@@ -182,7 +194,7 @@ function DescriptionInfo() {
 
 function ButtonContainer() {
   const intl = useIntl();
-  const appNavigation = useAppNavigation();
+  const toOnBoardingPage = useNavigateToPickYourDevicePage();
   const { gtMd } = useMedia();
 
   const handleBuyButtonPress = useCallback(async () => {
@@ -198,25 +210,18 @@ function ButtonContainer() {
   }, []);
 
   const onAddDevice = useCallback(async () => {
-    appNavigation.pushModal(EModalRoutes.OnboardingModal, {
-      screen: EOnboardingPages.ConnectYourDevice,
-    });
-  }, [appNavigation]);
+    void toOnBoardingPage();
+  }, [toOnBoardingPage]);
 
   if (gtMd) {
     return (
-      <XStack
-        gap="$3"
-        flexWrap="wrap"
-        flexDirection="row"
-        justifyContent="flex-start"
-      >
+      <XStack gap="$3" flexDirection="row" justifyContent="flex-start">
         <Button
           size="medium"
           borderRadius="$full"
           variant="primary"
-          minWidth={160}
           onPress={onAddDevice}
+          px="$4"
         >
           {intl.formatMessage({
             id: ETranslations.global_connect_hardware_wallet,
@@ -231,6 +236,7 @@ function ButtonContainer() {
           bg="$neutral2"
           iconAfter="ArrowTopRightOutline"
           onPress={handleBuyButtonPress}
+          px="$4"
           $platform-web={{
             style: {
               backdropFilter: 'blur(16px)',
@@ -238,21 +244,20 @@ function ButtonContainer() {
             },
           }}
         >
-          {intl.formatMessage({ id: ETranslations.global_buy_one })}
-          OneKey
+          {intl.formatMessage({ id: ETranslations.global_buy })} OneKey
         </Button>
       </XStack>
     );
   }
 
   return (
-    <YStack width="100%" gap="$4" p="$5" testID="blank-page-mobile-buttons">
+    <YStack width="100%" gap="$4" py="$5" testID="blank-page-mobile-buttons">
       <Button size="large" variant="primary" onPress={onAddDevice}>
         {intl.formatMessage({
           id: ETranslations.global_connect_hardware_wallet,
         })}
       </Button>
-      <XStack h="$9" px="$5" justifyContent="center" alignItems="center">
+      <XStack h="$9" justifyContent="center" alignItems="center">
         <SizableText size="$bodyMd" color="$textSubdued">
           {intl.formatMessage({
             id: ETranslations.global_onekey_prompt_dont_have_yet,
@@ -281,43 +286,44 @@ function DeviceGuideViewContent() {
   return (
     <YStack
       w="100%"
-      h="100%"
+      flex={1}
       gap="$8"
       bg="$bgApp"
       testID="blank-page"
       pb={bottom}
+      zIndex={0}
     >
       <VideoContainer />
 
-      <XStack
-        h="100%"
-        w="100%"
-        justifyContent="space-between"
-        alignItems={undefined}
-        flexDirection="column-reverse"
-        px="0px"
-        position="relative"
-        zIndex={1}
-        $gtMd={{
-          alignItems: 'center',
-          flexDirection: 'row',
-          px: '10%',
-        }}
-      >
-        <YStack
-          gap="$0"
-          maxWidth={undefined}
+      <Page.Container flex={1} position="relative" zIndex={1}>
+        <XStack
+          h="100%"
+          w="100%"
+          justifyContent="space-between"
           alignItems={undefined}
+          flexDirection="column-reverse"
+          px="0px"
           $gtMd={{
-            gap: '$10',
-            maxWidth: 400,
-            alignItems: 'flex-start',
+            alignItems: 'center',
+            flexDirection: 'row',
           }}
         >
-          <DescriptionInfo />
-          <ButtonContainer />
-        </YStack>
-      </XStack>
+          <YStack
+            gap="$0"
+            maxWidth={undefined}
+            alignItems={undefined}
+            $gtMd={{
+              gap: '$10',
+              maxWidth: 480,
+              alignItems: 'flex-start',
+              marginTop: -48,
+            }}
+          >
+            <DescriptionInfo />
+            <ButtonContainer />
+          </YStack>
+        </XStack>
+      </Page.Container>
     </YStack>
   );
 }

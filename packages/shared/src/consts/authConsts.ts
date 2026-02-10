@@ -1,5 +1,3 @@
-/* eslint-disable spellcheck/spell-checker */
-
 const _IS_DEV = process.env.NODE_ENV !== 'production';
 
 /**
@@ -106,7 +104,7 @@ export const OAUTH_TOKEN_KEY_ID_TOKEN = 'id_token';
 // Google OAuth
 export const GOOGLE_OAUTH_AUTHORIZE_URL =
   'https://accounts.google.com/o/oauth2/auth';
-export const GOOGLE_OAUTH_TOKENINFO_URL =
+export const GOOGLE_OAUTH_TOKEN_INFO_URL =
   'https://oauth2.googleapis.com/tokeninfo';
 export const GOOGLE_OAUTH_USERINFO_URL =
   'https://www.googleapis.com/oauth2/v3/userinfo';
@@ -166,8 +164,10 @@ const GOOGLE_OAUTH_CLIENT_IOS =
 
 // test
 // const GOOGLE_OAUTH_CLIENT_WEB =
+// oxlint-disable-next-line @cspell/spellchecker
 //   '244450898872-vmpg9dgocpqtqhm5pk42u4s6hvprogp6.apps.googleusercontent.com';
 // const GOOGLE_OAUTH_CLIENT_IOS =
+// oxlint-disable-next-line @cspell/spellchecker
 //   '244450898872-5uo9r8ekdc82huckjcr4br67edvf3vlg.apps.googleusercontent.com';
 
 // ================================================
@@ -191,21 +191,26 @@ export const SUPABASE_PUBLIC_API_KEY =
 // Keyless Supabase
 // -----------------------------------------------
 
-// --- onekeyprod
+// --- onekey prod
 export const KEYLESS_SUPABASE_PROJECT_URL = 'https://auth.onekey.so'; // onekeytest
+// export const KEYLESS_SUPABASE_PUBLIC_API_KEY =
+// oxlint-disable-next-line @cspell/spellchecker
+//   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzY3NzU4MzUwLCJleHAiOjE5MjU0MzgzNTB9.n-g7Amu-dMVpBgQ8i8gSYFjBvbDPC55ZqYIttPh8CYk';
 export const KEYLESS_SUPABASE_PUBLIC_API_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzY3NzU4MzUwLCJleHAiOjE5MjU0MzgzNTB9.n-g7Amu-dMVpBgQ8i8gSYFjBvbDPC55ZqYIttPh8CYk';
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzY5MTc1MzMxLCJleHAiOjE5MjY4NTUzMzF9.d0Zd8eBV8L_EcKDXiJRNTEYGw-dX6IdyDCr0nvOiLqg';
 
 // --- onekeytest
 // export const KEYLESS_SUPABASE_PROJECT_URL =
 //   'https://supabase.onekey-internal.com'; // onekeytest
 // export const KEYLESS_SUPABASE_PUBLIC_API_KEY =
+// oxlint-disable-next-line @cspell/spellchecker
 //   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzY3NTg3OTE4LCJleHAiOjE5MjUyNjc5MTh9.F69Rgt30To2V0Rij1nbTpjkHyAv6VpWGz3a81rkpM0U';
 
-// --- localtest
+// --- local test
 // export const KEYLESS_SUPABASE_PROJECT_URL =
 //   'https://wtspqckturkzhstyjabx.supabase.co';
 // export const KEYLESS_SUPABASE_PUBLIC_API_KEY =
+// oxlint-disable-next-line @cspell/spellchecker
 //   'sb_publishable_So24RIupCcXUHaKo1gM4VA_uOBbgjoN';
 
 // ================================================
@@ -229,17 +234,20 @@ export const JUICEBOX_CONFIG: IJuiceBoxConfigJSON = {
     {
       id: '37ce3a59ff08d57b77bac0b8451ff2d8',
       address: 'https://production-juicebox.onekey-safe.com',
+      // address: 'https://career-publisher-interaction-cfr.trycloudflare.com',
     },
     {
       id: '6b47cc201434428be7beee2190f95685',
       address: 'https://juice.rpcbox.com',
+      // address:
+      // 'https://created-portsmouth-smallest-eligibility.trycloudflare.com',
     },
   ],
   register_threshold: 2, // At least 2 realms must succeed to register
   recover_threshold: 2, // At least 2 realms must succeed to recover
   pin_hashing_mode: 'Standard2019',
 };
-export const JUICEBOX_ALLOWED_GUESSES = 10; // Number of allowed PIN guess attempts
+export const JUICEBOX_ALLOWED_GUESSES = 7; // Number of allowed PIN guess attempts
 
 // Keyless Backend Share Payload Encryption
 // Fixed encryption key for keyless backend share payload encryption
@@ -248,6 +256,9 @@ export const KEYLESS_BACKEND_SHARE_PAYLOAD_ENCRYPTION_KEY =
 // Prefix to identify encrypted payloads (required for decryption)
 export const KEYLESS_BACKEND_SHARE_PAYLOAD_ENCRYPTION_PREFIX =
   'backend_share_enc_v1:';
+
+// Keyless encryption iterations (PBKDF2 iterations for key derivation)
+export const KEYLESS_ENCRYPTION_ITERATIONS = 600_000;
 
 // Keyless AES-GCM AAD (Additional Authenticated Data)
 // Bind ciphertext to its intended usage context to prevent cross-purpose substitution.

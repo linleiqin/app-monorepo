@@ -339,14 +339,14 @@ const SetTpslForm = memo(
               // Long + above
               errorMessage = appLocale.intl.formatMessage({
                 // invalid => invalid
-                // eslint-disable-next-line spellcheck/spell-checker
+                // oxlint-disable-next-line @cspell/spellchecker
                 id: ETranslations.perp_invaild_tp_desc_1,
               });
             } else {
               // Short + below
               errorMessage = appLocale.intl.formatMessage({
                 // invalid => invalid
-                // eslint-disable-next-line spellcheck/spell-checker
+                // oxlint-disable-next-line @cspell/spellchecker
                 id: ETranslations.perp_invaild_tp_desc_2,
               });
             }
@@ -373,14 +373,14 @@ const SetTpslForm = memo(
               // Long + below
               errorMessage = appLocale.intl.formatMessage({
                 // invalid => invalid
-                // eslint-disable-next-line spellcheck/spell-checker
+                // oxlint-disable-next-line @cspell/spellchecker
                 id: ETranslations.perp_invaild_sl_desc_1,
               });
             } else {
               // Short + above
               errorMessage = appLocale.intl.formatMessage({
                 // invalid => invalid
-                // eslint-disable-next-line spellcheck/spell-checker
+                // oxlint-disable-next-line @cspell/spellchecker
                 id: ETranslations.perp_invaild_sl_desc_2,
               });
             }
@@ -492,7 +492,6 @@ const SetTpslForm = memo(
                     size="$bodyMd"
                     color="$green9"
                     ml="$2"
-                    cursor="pointer"
                     onPress={() => handleCancelOrder(tpOrder)}
                   >
                     {appLocale.intl.formatMessage({
@@ -561,7 +560,6 @@ const SetTpslForm = memo(
                     size="$bodyMd"
                     color="$green9"
                     ml="$2"
-                    cursor="pointer"
                     onPress={() => handleCancelOrder(slOrder)}
                   >
                     {appLocale.intl.formatMessage({

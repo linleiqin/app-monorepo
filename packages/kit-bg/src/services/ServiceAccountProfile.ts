@@ -340,6 +340,7 @@ class ServiceAccountProfile extends ServiceBase {
     enableAddressDeriveInfo,
     walletAccountItem,
     ignoreSimilarAddressInAddressBook,
+    enableCheckSimilarAddressInAddressBook,
   }: IQueryCheckAddressArgs): Promise<IAddressQueryResult> {
     const { serviceValidator, serviceSetting } = this.backgroundApi;
 
@@ -359,7 +360,7 @@ class ServiceAccountProfile extends ServiceBase {
         address = displayAddress;
         result.validAddress = address;
       }
-    } catch (e) {
+    } catch (_e) {
       // noop
     }
 
@@ -550,6 +551,28 @@ class ServiceAccountProfile extends ServiceBase {
       }
     }
 
+    if (
+      !result.similarAddress &&
+      !result.addressBookId &&
+      !result.walletAccountId &&
+      enableCheckSimilarAddressInAddressBook
+    ) {
+      const addressBookItems =
+        await this.backgroundApi.serviceAddressBook.dangerouslyGetItemsWithoutSafeCheck(
+          {
+            networkId: !networkUtils.isEvmNetwork({ networkId })
+              ? networkId
+              : undefined,
+          },
+        );
+      for (const item of addressBookItems) {
+        if (accountUtils.isSimilarAddress(item.address, resolveAddress)) {
+          result.similarAddress = item.address;
+          break;
+        }
+      }
+    }
+
     // Check if address is in allowlist
     if (enableAllowListValidation) {
       // Skip allowlist check if it's user's own account
@@ -704,12 +727,15 @@ class ServiceAccountProfile extends ServiceBase {
       if (!currencyInfo) {
         throw new OneKeyLocalError('Currency not found');
       }
-      usdValue = Object.entries(value).reduce((acc, [n, v]) => {
-        acc[n] = new BigNumber(v)
-          .div(new BigNumber(currencyInfo.value))
-          .toFixed();
-        return acc;
-      }, {} as Record<string, string>);
+      usdValue = Object.entries(value).reduce(
+        (acc, [n, v]) => {
+          acc[n] = new BigNumber(v)
+            .div(new BigNumber(currencyInfo.value))
+            .toFixed();
+          return acc;
+        },
+        {} as Record<string, string>,
+      );
     }
 
     const usdAccountValue = {
@@ -863,6 +889,9 @@ class ServiceAccountProfile extends ServiceBase {
     accountId?: string;
   }) {
     if (walletId) {
+      if (accountUtils.isKeylessWallet({ walletId })) {
+        return ERequestWalletTypeEnum.KEYLESS_WALLET;
+      }
       if (accountUtils.isHdWallet({ walletId })) {
         return ERequestWalletTypeEnum.HD;
       }
@@ -884,6 +913,9 @@ class ServiceAccountProfile extends ServiceBase {
       }
     }
     if (accountId) {
+      if (accountUtils.isKeylessAccount({ accountId })) {
+        return ERequestWalletTypeEnum.KEYLESS_WALLET;
+      }
       if (accountUtils.isHdAccount({ accountId })) {
         return ERequestWalletTypeEnum.HD;
       }

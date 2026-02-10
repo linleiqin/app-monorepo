@@ -85,7 +85,7 @@ function ManagersSection({
   noPadding?: boolean;
 }) {
   return managers?.items?.length ? (
-    <XStack gap="$1" alignItems="center" px={noPadding ? '$0' : '$5'}>
+    <XStack gap="$1" alignItems="center" px={noPadding ? '$0' : '$pagePadding'}>
       {managers.items.map((item, index) => (
         <Fragment key={index}>
           <XStack gap="$1" alignItems="center">
@@ -387,7 +387,7 @@ const DetailsPartComponent = ({
   const now = useMemo(() => Date.now(), []);
 
   return (
-    <YStack flex={6} gap="$5" px="$5">
+    <YStack flex={6} gap="$5" px="$pagePadding">
       <PageFrame
         LoadingSkeleton={OverviewSkeleton}
         loading={
@@ -516,7 +516,8 @@ const EarnProtocolDetailsPage = ({ route }: { route: IRouteProps }) => {
       } = routeParams;
       const networkId = EarnNetworkUtils.getNetworkIdByName(network);
       const symbol = normalizeToEarnSymbol(symbolParam);
-      const provider = normalizeToEarnProvider(providerParam);
+      // Only use normalizeToEarnProvider for validation, keep provider lowercase for API calls
+      const normalizedProvider = normalizeToEarnProvider(providerParam);
 
       if (!networkId) {
         throw new OneKeyLocalError(`Unknown network: ${String(network)}`);
@@ -524,7 +525,7 @@ const EarnProtocolDetailsPage = ({ route }: { route: IRouteProps }) => {
       if (!symbol) {
         throw new OneKeyLocalError(`Unknown symbol: ${String(symbolParam)}`);
       }
-      if (!provider) {
+      if (!normalizedProvider) {
         throw new OneKeyLocalError(
           `Unknown provider: ${String(providerParam)}`,
         );
@@ -533,7 +534,7 @@ const EarnProtocolDetailsPage = ({ route }: { route: IRouteProps }) => {
       return {
         networkId,
         symbol,
-        provider,
+        provider: normalizedProvider.toLowerCase(), // Keep lowercase for API consistency
         vault,
       };
     }

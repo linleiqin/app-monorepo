@@ -41,8 +41,15 @@ import timerUtils from '@onekeyhq/shared/src/utils/timerUtils';
 import { getTokenPriceChangeStyle } from '@onekeyhq/shared/src/utils/tokenUtils';
 import type { IMarketTokenListItem } from '@onekeyhq/shared/types/marketV2';
 
+import { useNavigateToMarketTab } from '../../../Market/hooks';
+import { getNativeTokenInfo } from '../../../Market/MarketHomeV2/components/MarketTokenList/utils/tokenListHelpers';
+import { EMarketHomeTab } from '../../../Market/MarketHomeV2/types';
 import { RichBlock } from '../RichBlock/RichBlock';
 import { RichTable } from '../RichTable';
+
+function getTokenKey(token: { chainId: string; contractAddress: string }) {
+  return `${token.chainId}:${token.contractAddress}`;
+}
 
 interface IFavoriteTokenDisplay {
   chainId: string;
@@ -63,7 +70,7 @@ function RecommendCardItem({
 }: {
   token: IFavoriteTokenDisplay;
   checked: boolean;
-  onChange: (checked: boolean, contractAddress: string) => void;
+  onChange: (checked: boolean, tokenKey: string) => void;
 }) {
   const { sharedFrameStyles } = useMemo(
     () =>
@@ -87,11 +94,11 @@ function RecommendCardItem({
       borderRadius="$3"
       borderWidth={1}
       borderColor="$neutral3"
-      onPress={() => onChange(!checked, token.contractAddress)}
+      onPress={() => onChange(!checked, getTokenKey(token))}
       ai="center"
       $sm={{
         px: '$2.5',
-        py: '$1.5',
+        py: '$2.5',
       }}
     >
       <XStack gap="$3" ai="center" flexShrink={1}>
@@ -156,6 +163,7 @@ function PopularTrading({ tableLayout }: { tableLayout?: boolean }) {
   const intl = useIntl();
   const currencyInfo = useCurrency();
   const navigation = useAppNavigation();
+  const navigateToMarketTab = useNavigateToMarketTab();
   const [favoriteTokens, setFavoriteTokens] = useState<IFavoriteTokenDisplay[]>(
     [],
   );
@@ -209,7 +217,7 @@ function PopularTrading({ tableLayout }: { tableLayout?: boolean }) {
                   showNetworkIcon
                 />
                 <YStack>
-                  <SizableText size="$bodyMdMedium">
+                  <SizableText size="$bodyLgMedium">
                     {record.symbol}
                   </SizableText>
                   <SizableText size="$bodyMd" color="$textSubdued">
@@ -225,7 +233,7 @@ function PopularTrading({ tableLayout }: { tableLayout?: boolean }) {
           title: intl.formatMessage({ id: ETranslations.global_price }),
           render: (_: unknown, record: IFavoriteTokenDisplay) => (
             <NumberSizeableText
-              size="$bodyMdMedium"
+              size="$bodyLgMedium"
               formatter="price"
               formatterOptions={{ currency: currencyInfo?.symbol }}
             >
@@ -246,7 +254,7 @@ function PopularTrading({ tableLayout }: { tableLayout?: boolean }) {
                 formatter="priceChange"
                 formatterOptions={{ showPlusMinusSigns }}
                 color={changeColor}
-                size="$bodyMdMedium"
+                size="$bodyLgMedium"
               >
                 {record.priceChange24h ?? '-'}
               </NumberSizeableText>
@@ -258,7 +266,7 @@ function PopularTrading({ tableLayout }: { tableLayout?: boolean }) {
           title: intl.formatMessage({ id: ETranslations.global_market_cap }),
           render: (_: unknown, record: IFavoriteTokenDisplay) => (
             <NumberSizeableText
-              size="$bodyMdMedium"
+              size="$bodyLgMedium"
               formatter="marketCap"
               formatterOptions={{ currency: currencyInfo?.symbol }}
             >
@@ -385,7 +393,15 @@ function PopularTrading({ tableLayout }: { tableLayout?: boolean }) {
           return;
         }
 
-        targetList = recommendedTokens.slice(0, displayCount).map((token) => ({
+        const seen = new Set<string>();
+        const uniqueTokens = recommendedTokens.filter((token) => {
+          const key = getTokenKey(token);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
+        targetList = uniqueTokens.slice(0, displayCount).map((token) => ({
           chainId: token.chainId,
           contractAddress: token.contractAddress,
           isNative: token.isNative ?? false,
@@ -404,21 +420,21 @@ function PopularTrading({ tableLayout }: { tableLayout?: boolean }) {
       const tokenMap = new Map<string, IMarketTokenListItem>();
       response.list.forEach((item: IMarketTokenListItem) => {
         const networkId = item.networkId ?? item.chainId ?? '';
-        let address = item.address ?? '';
-
-        if (address.length < 30) {
-          address = '';
-        }
-
-        const key = `${networkId}:${address.toLowerCase()}`;
+        const { normalizedAddress } = getNativeTokenInfo(
+          item.isNative,
+          item.address,
+        );
+        const key = `${networkId}:${normalizedAddress}`;
         tokenMap.set(key, item);
       });
 
       const displayTokens: IFavoriteTokenDisplay[] = targetList
         .map((targetItem) => {
-          const key = `${
-            targetItem.chainId
-          }:${targetItem.contractAddress.toLowerCase()}`;
+          const { normalizedAddress } = getNativeTokenInfo(
+            targetItem.isNative,
+            targetItem.contractAddress,
+          );
+          const key = `${targetItem.chainId}:${normalizedAddress}`;
           const item = tokenMap.get(key);
 
           if (!item) {
@@ -458,18 +474,15 @@ function PopularTrading({ tableLayout }: { tableLayout?: boolean }) {
     }
   }, [hasUserFavorites, favoriteTokens]);
 
-  // Handle checkbox toggle
   const handleRecommendItemChange = useCallback(
-    (checked: boolean, contractAddress: string) => {
-      const token = favoriteTokens.find(
-        (t) => t.contractAddress === contractAddress,
-      );
+    (checked: boolean, tokenKey: string) => {
+      const token = favoriteTokens.find((t) => getTokenKey(t) === tokenKey);
       if (!token) return;
 
       setSelectedTokens((prev) =>
         checked
           ? [...prev, token]
-          : prev.filter((i) => i.contractAddress !== contractAddress),
+          : prev.filter((t) => getTokenKey(t) !== tokenKey),
       );
     },
     [favoriteTokens],
@@ -513,7 +526,7 @@ function PopularTrading({ tableLayout }: { tableLayout?: boolean }) {
       // Notify Market page to refresh watchlist
       appEventBus.emit(EAppEventBusNames.RefreshMarketWatchList, undefined);
       await refreshData();
-    } catch (error) {
+    } catch (_error) {
       Toast.error({
         title: intl.formatMessage({
           id: ETranslations.global_an_error_occurred,
@@ -539,7 +552,7 @@ function PopularTrading({ tableLayout }: { tableLayout?: boolean }) {
         // Notify Market page to refresh watchlist
         appEventBus.emit(EAppEventBusNames.RefreshMarketWatchList, undefined);
         await refreshData();
-      } catch (error) {
+      } catch (_error) {
         Toast.error({
           title: intl.formatMessage({
             id: ETranslations.global_an_error_occurred,
@@ -577,10 +590,9 @@ function PopularTrading({ tableLayout }: { tableLayout?: boolean }) {
     [navigation, marketTab],
   );
 
-  // Render card layout for empty state (no user favorites)
   const renderEmptyStateCards = useCallback(() => {
     const isTokenSelected = (token: IFavoriteTokenDisplay) =>
-      selectedTokens.some((t) => t.contractAddress === token.contractAddress);
+      selectedTokens.some((t) => getTokenKey(t) === getTokenKey(token));
 
     const renderCardItem = (token: IFavoriteTokenDisplay) => (
       <RecommendCardItem
@@ -591,8 +603,7 @@ function PopularTrading({ tableLayout }: { tableLayout?: boolean }) {
       />
     );
 
-    // Mobile: 2 rows x 2 items each
-    if (platformEnv.isNative) {
+    if (!tableLayout) {
       return (
         <YStack gap="$2.5" width="100%">
           {[0, 1].map((rowIndex) => (
@@ -606,23 +617,17 @@ function PopularTrading({ tableLayout }: { tableLayout?: boolean }) {
       );
     }
 
-    // Desktop: 4 items in one row
     return (
       <XStack gap="$3" width="100%">
         {favoriteTokens.map(renderCardItem)}
       </XStack>
     );
-  }, [favoriteTokens, selectedTokens, handleRecommendItemChange]);
+  }, [favoriteTokens, selectedTokens, handleRecommendItemChange, tableLayout]);
 
   // Navigate to Market favorites tab
   const handleViewMore = useCallback(() => {
-    rootNavigationRef.current?.navigate(ERootRoutes.Main, {
-      screen: marketTab,
-      params: {
-        screen: ETabMarketRoutes.TabMarket,
-      },
-    });
-  }, [marketTab]);
+    navigateToMarketTab({ tabToSelect: EMarketHomeTab.Watchlist });
+  }, [navigateToMarketTab]);
 
   // Render table/list layout for user favorites
   const renderUserFavoritesList = useCallback(() => {
@@ -637,30 +642,28 @@ function PopularTrading({ tableLayout }: { tableLayout?: boolean }) {
           columns={columns}
           keyExtractor={(item) => `${item.chainId}-${item.contractAddress}`}
           estimatedItemSize={56}
-          rowProps={
-            tableLayout
-              ? undefined
-              : {
-                  py: '$0',
-                  px: '$0',
-                }
-          }
+          rowProps={{
+            mx: '$2',
+            px: '$3',
+          }}
+          headerRowProps={{
+            px: '$3',
+            mx: '$2',
+          }}
           onRow={(record) => ({
             onPress: () => handleTokenPress(record),
           })}
         />
         {showViewMoreButton ? (
-          <XStack py="$3" jc="center" ai="center">
+          <XStack pt="$3" px="$pagePadding" jc="center" ai="center">
             <Button
-              size="small"
               variant="secondary"
               iconAfter="ChevronRightSmallOutline"
               onPress={handleViewMore}
+              flexGrow={1}
+              flexBasis={0}
               $md={
                 {
-                  flexGrow: 1,
-                  flexBasis: 0,
-                  size: 'medium',
                   borderRadius: '$full',
                   hoverStyle: { bg: 'transparent' },
                   pressStyle: { bg: 'transparent' },
@@ -714,7 +717,6 @@ function PopularTrading({ tableLayout }: { tableLayout?: boolean }) {
           listCount={displayCount}
           listContainerProps={{ py: '$0' }}
           listHeaderProps={{ px: '$3' }}
-          itemProps={{ px: tableLayout ? '$3' : '$0', mx: '$0' }}
         />
       );
     }
@@ -732,7 +734,6 @@ function PopularTrading({ tableLayout }: { tableLayout?: boolean }) {
     isLoading,
     renderEmptyStateCards,
     renderUserFavoritesList,
-    tableLayout,
   ]);
 
   if (initializedRef.current && isEmpty(favoriteTokens)) {
@@ -743,11 +744,12 @@ function PopularTrading({ tableLayout }: { tableLayout?: boolean }) {
     <RichBlock
       title={intl.formatMessage({ id: ETranslations.global_favorites })}
       headerActions={headerActions}
+      headerContainerProps={{ px: '$pagePadding' }}
+      contentContainerProps={
+        !hasUserFavorites ? { px: '$pagePadding' } : undefined
+      }
       content={renderContent()}
-      contentContainerProps={{
-        px: tableLayout && hasUserFavorites ? '$2' : '$0',
-      }}
-      plainContentContainer={!tableLayout || !hasUserFavorites}
+      plainContentContainer
     />
   );
 }

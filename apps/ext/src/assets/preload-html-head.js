@@ -1,10 +1,16 @@
-/* eslint-disable unicorn/prefer-global-this */
+// oxlint-disable unicorn/prefer-global-this
+
 /*
 - packages/shared/src/web/index.html.ejs
 - packages/kit/src/store/reducers/settings.ts # setThemePreloadToLocalStorage
 - apps/ext/src/assets/preload-html-head.js
  */
 (function () {
+  // Keep startup time stamp for ext without relying on inline scripts (blocked by CSP).
+  if (typeof window.$$onekeyStartupTimeAt === 'undefined') {
+    window.$$onekeyStartupTimeAt = Date.now();
+  }
+
   // $$onekeyPerfTrace start ----------------------------------------------
   window.$$onekeyPerfTrace = {
     timeline: [],
@@ -31,6 +37,26 @@
     name: 'APP_START: preload-html-head.js start',
   });
   // $$onekeyPerfTrace end ----------------------------------------------
+
+  // Record html render time for ext without inline scripts.
+  // (The element exists by DOMContentLoaded at the latest.)
+  try {
+    document.addEventListener(
+      'DOMContentLoaded',
+      () => {
+        const rootElement = document.getElementById('root');
+        if (rootElement) {
+          rootElement.setAttribute(
+            'data-html-render-time',
+            Date.now().toString(),
+          );
+        }
+      },
+      { once: true },
+    );
+  } catch (_error) {
+    // noop
+  }
 
   // themePreload start ----------------------------------------------
   const theme = localStorage.getItem('ONEKEY_THEME_PRELOAD');
@@ -103,7 +129,7 @@ window.removeEventListener('resize',handler);
 
   try {
     optimizeResize();
-  } catch (error) {
+  } catch (_error) {
     // const e = error as Error | undefined;
   } finally {
     // noop

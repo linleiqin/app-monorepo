@@ -14,23 +14,26 @@ import {
   Icon,
   IconButton,
   SizableText,
+  Skeleton,
   XStack,
   YStack,
   useMedia,
 } from '@onekeyhq/components';
 import useAppNavigation from '@onekeyhq/kit/src/hooks/useAppNavigation';
-import { usePrevious } from '@onekeyhq/kit/src/hooks/usePrevious';
 import { useSettingsPersistAtom } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import earnUtils from '@onekeyhq/shared/src/utils/earnUtils';
 import { EEarnLabels } from '@onekeyhq/shared/types/staking';
-import type { IEarnText, IEarnTooltip } from '@onekeyhq/shared/types/staking';
+import type {
+  IBorrowAlert,
+  IEarnText,
+  IEarnTooltip,
+} from '@onekeyhq/shared/types/staking';
 
 import { EarnActionIcon } from '../../Staking/components/ProtocolDetails/EarnActionIcon';
 import { EarnText } from '../../Staking/components/ProtocolDetails/EarnText';
 import { EarnTooltip } from '../../Staking/components/ProtocolDetails/EarnTooltip';
 import { PendingIndicator } from '../../Staking/components/StakingActivityIndicator';
-import { useEarnAccount } from '../../Staking/hooks/useEarnAccount';
 import {
   buildBorrowTag,
   isBorrowTag,
@@ -41,11 +44,6 @@ import { BorrowNavigation } from '../borrowUtils';
 import { useBorrowHealthFactor } from '../hooks/useBorrowHealthFactor';
 import { useBorrowRewards } from '../hooks/useBorrowRewards';
 import { useUniversalBorrowClaim } from '../hooks/useUniversalBorrowHooks';
-import {
-  createBorrowRefreshScope,
-  registerBorrowRefreshHandler,
-  requestBorrowRefresh,
-} from '../refresh/borrowRefreshCoordinator';
 
 import { BorrowBonusTooltip } from './BorrowBonusTooltip';
 import { showBorrowClaimRewardsDialog } from './BorrowClaimRewardsDialog';
@@ -57,25 +55,35 @@ const OverviewItem = ({
   action,
   tooltip,
   needDivider,
+  isLoading,
 }: {
   title: IEarnText;
-  text: IEarnText;
+  text?: IEarnText;
   action?: React.ReactNode;
   tooltip?: IEarnTooltip | React.ReactNode;
   needDivider?: boolean;
+  isLoading?: boolean;
 }) => {
   return (
     <>
       <YStack gap="$1" flexShrink={0}>
         <EarnText text={title} size="$bodyMd" color="$textSubdued" />
         <XStack gap="$2" ai="center">
-          <EarnText text={text} size="$headingLg" color="$textText" />
-          {isValidElement(tooltip) ? (
-            tooltip
+          {isLoading ? (
+            <Skeleton w={60} h="$6" borderRadius="$2" />
           ) : (
-            <EarnTooltip tooltip={tooltip as IEarnTooltip} />
+            <>
+              {text ? (
+                <EarnText text={text} size="$headingLg" color="$textText" />
+              ) : null}
+              {isValidElement(tooltip) ? (
+                tooltip
+              ) : (
+                <EarnTooltip tooltip={tooltip as IEarnTooltip} />
+              )}
+              {action}
+            </>
           )}
-          {action}
         </XStack>
       </YStack>
       {needDivider ? (
@@ -87,20 +95,15 @@ const OverviewItem = ({
 
 export const Overview = ({
   showBottomSpacing = true,
+  isActive = true,
+  onHealthFactorAlertsChange,
 }: {
   showBottomSpacing?: boolean;
+  isActive?: boolean;
+  onHealthFactorAlertsChange?: (alerts?: IBorrowAlert[]) => void;
 }) => {
-  const {
-    reserves,
-    market,
-    reservesLoading,
-    pendingTxs,
-    refreshRewardsRef,
-    refreshReservesRef,
-  } = useBorrowContext();
-  const { earnAccount } = useEarnAccount({
-    networkId: market?.networkId,
-  });
+  const { reserves, market, earnAccount, pendingTxs, setRefreshAllBorrowData } =
+    useBorrowContext();
   const intl = useIntl();
   const [settings] = useSettingsPersistAtom();
   const navigation = useAppNavigation();
@@ -112,21 +115,9 @@ export const Overview = ({
   const provider = market?.provider;
   const networkId = market?.networkId;
   const marketAddress = market?.marketAddress;
-  const earnAccountId = earnAccount?.accountId ?? earnAccount?.account?.id;
-  const refreshScope = useMemo(
-    () =>
-      createBorrowRefreshScope({
-        accountId: earnAccountId,
-        networkId,
-        provider,
-        marketAddress,
-      }),
-    [earnAccountId, marketAddress, networkId, provider],
-  );
-
-  useEffect(() => {
-    setIsManualRefreshing(false);
-  }, [refreshScope]);
+  const earnAccountData = earnAccount.data;
+  const earnAccountId =
+    earnAccountData?.accountId ?? earnAccountData?.account?.id;
 
   const historyLabel = useMemo(
     () => intl.formatMessage({ id: ETranslations.global_history }),
@@ -148,7 +139,6 @@ export const Overview = ({
 
   // Calculate pending count and claim IDs from pending transactions
   const pendingCount = pendingTxs.length;
-  const prevPendingCount = usePrevious(pendingCount);
   const pendingClaimIds = useMemo(
     () =>
       pendingTxs
@@ -167,16 +157,29 @@ export const Overview = ({
   );
 
   // Fetch health factor separately with 30s polling
-  const { healthFactorData, refresh: refreshHealthFactor } =
-    useBorrowHealthFactor({
-      networkId,
-      provider,
-      marketAddress,
-      accountId: earnAccountId,
-      enabled: !!(networkId && provider && marketAddress && earnAccountId),
-    });
+  const {
+    healthFactorData,
+    isLoading: isHealthFactorLoading,
+    refresh: refreshHealthFactor,
+  } = useBorrowHealthFactor({
+    networkId,
+    provider,
+    marketAddress,
+    accountId: earnAccountId,
+    enabled:
+      isActive && !!(networkId && provider && marketAddress && earnAccountId),
+  });
+  const healthFactorAlerts = healthFactorData?.alerts;
 
-  const { borrowRewards, refresh: refreshBorrowRewards } = useBorrowRewards({
+  useEffect(() => {
+    onHealthFactorAlertsChange?.(healthFactorAlerts);
+  }, [healthFactorAlerts, onHealthFactorAlertsChange]);
+
+  const {
+    borrowRewards,
+    isLoading: isRewardsLoading,
+    refresh: refreshBorrowRewards,
+  } = useBorrowRewards({
     networkId,
     provider,
     marketAddress,
@@ -189,69 +192,37 @@ export const Overview = ({
     accountId: earnAccountId ?? '',
   });
 
+  const refreshReserves = reserves.refresh;
   const refreshBorrowData = useCallback(async () => {
     const tasks: Array<Promise<void>> = [];
-    if (refreshReservesRef.current) {
-      tasks.push(refreshReservesRef.current());
-    }
+    tasks.push(refreshReserves());
     tasks.push(refreshBorrowRewards(), refreshHealthFactor());
     await Promise.all(tasks);
-  }, [refreshBorrowRewards, refreshHealthFactor, refreshReservesRef]);
+  }, [refreshBorrowRewards, refreshHealthFactor, refreshReserves]);
 
-  useEffect(() => {
-    if (prevPendingCount === undefined || pendingCount >= prevPendingCount) {
-      return undefined;
-    }
-    let isActive = true;
-    setIsManualRefreshing(true);
-    void refreshBorrowData().finally(() => {
-      if (isActive) {
-        setIsManualRefreshing(false);
-      }
-    });
-    return () => {
-      isActive = false;
-    };
-  }, [pendingCount, prevPendingCount, refreshBorrowData]);
-
-  useEffect(() => {
-    refreshRewardsRef.current = refreshBorrowRewards;
-  }, [refreshBorrowRewards, refreshRewardsRef]);
-
-  useEffect(() => {
-    if (!refreshScope) return;
-    return registerBorrowRefreshHandler(refreshScope, async (request) => {
-      const shouldShowRefreshing = [
-        'manual',
-        'txSuccess',
-        'pendingCompleted',
-      ].includes(request.reason);
-      if (shouldShowRefreshing) {
-        setIsManualRefreshing(true);
-      }
+  const requestRefresh = useCallback(
+    async (_reason: 'manual' | 'txSuccess') => {
+      setIsManualRefreshing(true);
       try {
         await refreshBorrowData();
       } finally {
-        if (shouldShowRefreshing) {
-          setIsManualRefreshing(false);
-        }
+        setIsManualRefreshing(false);
       }
-    });
-  }, [refreshBorrowData, refreshScope]);
-
-  const requestRefresh = useCallback(
-    (reason: 'manual' | 'txSuccess') => {
-      if (!refreshScope) return;
-      if (reason === 'manual' || reason === 'txSuccess') {
-        setIsManualRefreshing(true);
-      }
-      requestBorrowRefresh({
-        scope: refreshScope,
-        reason,
-      });
     },
-    [refreshScope, setIsManualRefreshing],
+    [refreshBorrowData],
   );
+
+  const refreshBorrowDataForPending = useCallback(
+    () => requestRefresh('txSuccess'),
+    [requestRefresh],
+  );
+
+  useEffect(() => {
+    setRefreshAllBorrowData(refreshBorrowDataForPending);
+    return () => {
+      setRefreshAllBorrowData(() => Promise.resolve());
+    };
+  }, [refreshBorrowDataForPending, setRefreshAllBorrowData]);
 
   const handleHistoryPress = useCallback(() => {
     if (!provider || !networkId || !marketAddress || !earnAccountId) return;
@@ -303,6 +274,7 @@ export const Overview = ({
           protocol: earnUtils.getEarnProviderName({ providerName: provider }),
           protocolLogoURI: market?.logoURI,
           tags: [
+            EEarnLabels.Borrow,
             buildBorrowTag({
               provider,
               action: 'claim',
@@ -328,6 +300,7 @@ export const Overview = ({
           protocol: earnUtils.getEarnProviderName({ providerName: provider }),
           protocolLogoURI: market?.logoURI,
           tags: [
+            EEarnLabels.Borrow,
             buildBorrowTag({
               provider,
               action: 'claim',
@@ -343,7 +316,6 @@ export const Overview = ({
           onSuccess: () => requestRefresh('txSuccess'),
         });
       },
-      onClose: () => requestRefresh('manual'),
     });
   }, [
     borrowRewards?.button,
@@ -372,7 +344,7 @@ export const Overview = ({
             <XStack ai="center" gap="$3" mb="$1.5">
               <EarnText
                 text={
-                  reserves?.overview?.netWorth ?? {
+                  reserves.data?.overview?.netWorth ?? {
                     text: amountPlaceholder,
                     color: '$textDisabled',
                   }
@@ -385,14 +357,14 @@ export const Overview = ({
                 iconSize="$6"
                 variant="tertiary"
                 size="small"
-                loading={reservesLoading || isManualRefreshing}
+                loading={reserves.loading || isManualRefreshing}
                 onPress={() => requestRefresh('manual')}
               />
             </XStack>
-            {reserves?.overview?.netApy ? (
+            {reserves.data?.overview?.netApy ? (
               <XStack ai="center" gap="$1">
                 <EarnText
-                  text={reserves.overview.netApy}
+                  text={reserves.data.overview.netApy}
                   size="$bodyMdMedium"
                   color="$textText"
                 />
@@ -406,14 +378,15 @@ export const Overview = ({
               </SizableText>
             )}
           </YStack>
-          <XStack ai="center" gap="$3">
+          <XStack ai="center" gap="$3" pr="$2.5">
             {pendingCount > 0 ? (
               <PendingIndicator
                 num={pendingCount}
                 onPress={handleHistoryPress}
               />
             ) : null}
-            {!reserves?.overview?.history?.disabled && pendingCount === 0 ? (
+            {!reserves.data?.overview?.history?.disabled &&
+            pendingCount === 0 ? (
               <XStack
                 ai="center"
                 gap="$1"
@@ -436,33 +409,39 @@ export const Overview = ({
         {/* Grid: Health factor + Platform bonus + Claimable rewards */}
         <YStack gap="$4">
           <XStack gap="$6">
-            {healthFactorData?.healthFactor ? (
-              <YStack gap="$1" flex={1}>
-                <SizableText size="$bodyMd" color="$textSubdued">
-                  {labels.healthFactor}
-                </SizableText>
-                <XStack ai="center" gap="$1">
-                  <EarnText
-                    text={
-                      healthFactorData.healthFactor.text ?? {
-                        text: '-',
-                        color: '$textDisabled',
+            <YStack gap="$1" flex={1}>
+              <SizableText size="$bodyMd" color="$textSubdued">
+                {labels.healthFactor}
+              </SizableText>
+              <XStack ai="center" gap="$1">
+                {isHealthFactorLoading && !healthFactorData ? (
+                  <Skeleton w={60} h="$6" borderRadius="$2" />
+                ) : (
+                  <>
+                    <EarnText
+                      text={
+                        healthFactorData?.healthFactor?.text ?? {
+                          text: '-',
+                          color: '$textDisabled',
+                        }
                       }
-                    }
-                    size="$headingLg"
-                    color="$textText"
-                  />
-                  <XStack mt="$1">
-                    <BorrowHealthFactorTooltip
-                      detail={
-                        healthFactorData.healthFactor.button?.data
-                          .healthFactorDetail
-                      }
+                      size="$headingLg"
+                      color="$textText"
                     />
-                  </XStack>
-                </XStack>
-              </YStack>
-            ) : null}
+                    {healthFactorData?.healthFactor ? (
+                      <XStack mt="$1">
+                        <BorrowHealthFactorTooltip
+                          detail={
+                            healthFactorData.healthFactor.button?.data
+                              .healthFactorDetail
+                          }
+                        />
+                      </XStack>
+                    ) : null}
+                  </>
+                )}
+              </XStack>
+            </YStack>
             <YStack gap="$1" flex={1}>
               <SizableText size="$bodyMd" color="$textSubdued">
                 {labels.platformBonus}
@@ -470,7 +449,7 @@ export const Overview = ({
               <XStack ai="center" gap="$1">
                 <EarnText
                   text={
-                    reserves?.overview?.platformBonus?.totalReceived
+                    reserves.data?.overview?.platformBonus?.totalReceived
                       .description ?? {
                       text: amountPlaceholder,
                       color: '$textDisabled',
@@ -481,7 +460,7 @@ export const Overview = ({
                 />
                 <XStack mt="$1">
                   <BorrowBonusTooltip
-                    data={reserves?.overview?.platformBonus}
+                    data={reserves.data?.overview?.platformBonus}
                     accountId={earnAccountId}
                     networkId={networkId}
                     provider={provider}
@@ -491,37 +470,52 @@ export const Overview = ({
               </XStack>
             </YStack>
           </XStack>
-          {borrowRewards ? (
-            <YStack gap="$1">
-              <EarnText
-                text={borrowRewards.title}
-                size="$bodyMd"
-                color="$textSubdued"
-              />
-              <XStack ai="center" gap="$1">
-                <EarnText
-                  text={borrowRewards.description}
-                  size="$headingLg"
-                  color="$textText"
-                />
-                {!borrowRewards.button.disabled ? (
-                  <Button
-                    p="0"
-                    ai="center"
-                    size="small"
-                    variant="link"
-                    onPress={handleShowRewardsDialog}
-                  >
-                    <EarnText
-                      size="$bodyMdMedium"
-                      color="$textInfo"
-                      text={borrowRewards.button.text}
-                    />
-                  </Button>
-                ) : null}
-              </XStack>
-            </YStack>
-          ) : null}
+          <YStack gap="$1">
+            <EarnText
+              text={
+                borrowRewards?.title ?? {
+                  text: intl.formatMessage({
+                    id: ETranslations.defi_claimable_rewards,
+                  }),
+                }
+              }
+              size="$bodyMd"
+              color="$textSubdued"
+            />
+            <XStack ai="center" gap="$1">
+              {isRewardsLoading && !borrowRewards ? (
+                <Skeleton w={80} h="$6" borderRadius="$2" />
+              ) : (
+                <>
+                  <EarnText
+                    text={
+                      borrowRewards?.description ?? {
+                        text: amountPlaceholder,
+                        color: '$textDisabled',
+                      }
+                    }
+                    size="$headingLg"
+                    color="$textText"
+                  />
+                  {borrowRewards && !borrowRewards.button.disabled ? (
+                    <Button
+                      p="0"
+                      ai="center"
+                      size="small"
+                      variant="link"
+                      onPress={handleShowRewardsDialog}
+                    >
+                      <EarnText
+                        size="$bodyMdMedium"
+                        color="$textInfo"
+                        text={borrowRewards.button.text}
+                      />
+                    </Button>
+                  ) : null}
+                </>
+              )}
+            </XStack>
+          </YStack>
         </YStack>
       </YStack>
     );
@@ -534,7 +528,7 @@ export const Overview = ({
         needDivider
         title={{ text: labels.netWorth }}
         text={
-          reserves?.overview?.netWorth ?? {
+          reserves.data?.overview?.netWorth ?? {
             text: amountPlaceholder,
             color: '$textDisabled',
           }
@@ -544,7 +538,7 @@ export const Overview = ({
             icon="RefreshCcwOutline"
             variant="tertiary"
             size="small"
-            loading={reservesLoading || isManualRefreshing}
+            loading={reserves.loading || isManualRefreshing}
             onPress={() => requestRefresh('manual')}
           />
         }
@@ -554,44 +548,50 @@ export const Overview = ({
         needDivider
         title={{ text: labels.netApy }}
         text={
-          reserves?.overview?.netApy ?? { text: '-', color: '$textDisabled' }
+          reserves.data?.overview?.netApy ?? {
+            text: '-',
+            color: '$textDisabled',
+          }
         }
       />
-      {healthFactorData?.healthFactor ? (
-        <OverviewItem
-          needDivider
-          title={{ text: labels.healthFactor }}
-          text={
-            healthFactorData.healthFactor.text ?? {
-              text: amountPlaceholder,
-              color: '$textDisabled',
-            }
-          }
-          tooltip={
+      <OverviewItem
+        needDivider
+        title={{ text: labels.healthFactor }}
+        text={
+          isHealthFactorLoading && !healthFactorData
+            ? undefined
+            : (healthFactorData?.healthFactor?.text ?? {
+                text: '-',
+                color: '$textDisabled',
+              })
+        }
+        isLoading={isHealthFactorLoading ? !healthFactorData : undefined}
+        tooltip={
+          healthFactorData?.healthFactor ? (
             <BorrowHealthFactorTooltip
               detail={
                 healthFactorData.healthFactor.button?.data.healthFactorDetail
               }
             />
-          }
-        />
-      ) : null}
+          ) : undefined
+        }
+      />
       <OverviewItem
-        needDivider={!!borrowRewards}
+        needDivider
         title={
-          reserves?.overview?.platformBonus?.data?.title ?? {
+          reserves.data?.overview?.platformBonus?.data?.title ?? {
             text: labels.platformBonus,
           }
         }
         text={
-          reserves?.overview?.platformBonus?.totalReceived.description ?? {
+          reserves.data?.overview?.platformBonus?.totalReceived.description ?? {
             text: amountPlaceholder,
             color: '$textDisabled',
           }
         }
         tooltip={
           <BorrowBonusTooltip
-            data={reserves?.overview?.platformBonus}
+            data={reserves.data?.overview?.platformBonus}
             accountId={earnAccountId}
             networkId={networkId}
             provider={provider}
@@ -599,37 +599,49 @@ export const Overview = ({
           />
         }
       />
-      {borrowRewards ? (
-        <OverviewItem
-          title={borrowRewards?.title}
-          text={borrowRewards?.description}
-          action={
-            !borrowRewards.button.disabled ? (
-              <Button
-                p="0"
-                ai="center"
-                size="small"
-                variant="link"
-                onPress={handleShowRewardsDialog}
-              >
-                <EarnText
-                  size="$bodyMdMedium"
-                  color="$textInfo"
-                  text={borrowRewards.button.text}
-                />
-              </Button>
-            ) : null
+      <OverviewItem
+        title={
+          borrowRewards?.title ?? {
+            text: intl.formatMessage({
+              id: ETranslations.defi_claimable_rewards,
+            }),
           }
-        />
-      ) : null}
+        }
+        text={
+          isRewardsLoading && !borrowRewards
+            ? undefined
+            : (borrowRewards?.description ?? {
+                text: amountPlaceholder,
+                color: '$textDisabled',
+              })
+        }
+        isLoading={isRewardsLoading ? !borrowRewards : undefined}
+        action={
+          borrowRewards && !borrowRewards.button.disabled ? (
+            <Button
+              p="0"
+              ai="center"
+              size="small"
+              variant="link"
+              onPress={handleShowRewardsDialog}
+            >
+              <EarnText
+                size="$bodyMdMedium"
+                color="$textInfo"
+                text={borrowRewards.button.text}
+              />
+            </Button>
+          ) : null
+        }
+      />
 
-      <XStack ml="auto" ai="center" gap="$3">
+      <XStack ml="auto" ai="center" gap="$3" pr="$2.5">
         {pendingCount > 0 ? (
           <PendingIndicator num={pendingCount} onPress={handleHistoryPress} />
         ) : null}
-        {!reserves?.overview?.history?.disabled && pendingCount === 0 ? (
+        {!reserves.data?.overview?.history?.disabled && pendingCount === 0 ? (
           <EarnActionIcon
-            actionIcon={reserves?.overview?.history}
+            actionIcon={reserves.data?.overview?.history}
             onHistory={handleHistoryPress}
           />
         ) : null}

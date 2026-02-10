@@ -41,8 +41,13 @@ function InPageHeader({
       return <UrlAccountPageHeader />;
     }
   }, [sceneName, tabRoute]);
+
+  if (!item) {
+    return null;
+  }
+
   return (
-    <XStack px="$5" pt="$5" pb="$2.5" bg="$bgApp" borderRadius="$4">
+    <XStack px="$pagePadding" pt="$5" pb="$2.5" bg="$bgApp" borderRadius="$4">
       {item}
     </XStack>
   );
@@ -166,6 +171,8 @@ export function TabPageHeader({
         sceneName={sceneName}
         hideSearch={hideSearch}
         selectedHeaderTab={selectedHeaderTab}
+        customHeaderLeftItems={customHeaderLeftItems}
+        customHeaderRightItems={customHeaderRightItems}
         renderCustomHeaderRightItems={renderCustomHeaderRightItems}
         headerPx={headerPx}
       />

@@ -16,6 +16,7 @@ import {
   perpsActiveAssetAtom,
   perpsActiveAssetCtxAtom,
   perpsActiveAssetDataAtom,
+  perpsDepositOrderAtom,
 } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
 import type { IAccountDeriveTypes } from '@onekeyhq/kit-bg/src/vaults/types';
 import { PERPS_FILTERED_LEDGER_TYPES } from '@onekeyhq/shared/src/consts/perp';
@@ -26,9 +27,11 @@ import { EModalRoutes } from '@onekeyhq/shared/src/routes';
 import { EModalPerpRoutes } from '@onekeyhq/shared/src/routes/perp';
 import { memoFn } from '@onekeyhq/shared/src/utils/cacheUtils';
 import {
+  findTokensByAlias,
   formatPriceToSignificantDigits,
   resolveTradingSize,
 } from '@onekeyhq/shared/src/utils/perpsUtils';
+import type { ITokenSearchAliases } from '@onekeyhq/shared/src/utils/perpsUtils';
 import timerUtils from '@onekeyhq/shared/src/utils/timerUtils';
 import type { IPerpsAssetPosition } from '@onekeyhq/shared/types/hyperliquid';
 import type * as HL from '@onekeyhq/shared/types/hyperliquid/sdk';
@@ -51,6 +54,7 @@ import {
   perpsAllMidsAtom,
   perpsLedgerUpdatesAtom,
   perpsOpenOrdersByCoinAtomCache,
+  perpsTokenSearchAliasesAtom,
   subscriptionActiveAtom,
   tradingFormAtom,
   tradingLoadingAtom,
@@ -150,21 +154,48 @@ class ContextJotaiActionsHyperliquid extends ContextJotaiActionsBase {
 
   updateAllAssetsFiltered = contextAtomMethod(
     (
-      _,
+      get,
       set,
-      data: { allAssetsByDex: HL.IPerpsUniverse[][]; query: string },
+      data: {
+        allAssetsByDex: HL.IPerpsUniverse[][];
+        query: string;
+        tokenSearchAliases?: ITokenSearchAliases;
+      },
     ) => {
-      const { allAssetsByDex, query } = data;
+      const { allAssetsByDex, query, tokenSearchAliases } = data;
       const searchQuery = query?.trim()?.toLowerCase();
+
+      // Update tokenSearchAliases atom if provided
+      if (tokenSearchAliases !== undefined) {
+        set(perpsTokenSearchAliasesAtom(), tokenSearchAliases);
+      }
+
+      // Pre-compute alias matched symbols using server aliases
+      const currentAliases =
+        tokenSearchAliases ?? get(perpsTokenSearchAliasesAtom());
+      const aliasMatchedSymbols = searchQuery
+        ? new Set(findTokensByAlias(searchQuery, currentAliases))
+        : new Set<string>();
+
       const assetsByDex = allAssetsByDex.map((assets) => {
         if (!searchQuery) {
           return assets.filter((token) => !token.isDelisted);
         }
-        return assets.filter(
-          (token) =>
-            token.name?.toLowerCase().includes(searchQuery) &&
-            !token.isDelisted,
-        );
+        return assets.filter((token) => {
+          if (token.isDelisted) return false;
+
+          // 1. Match token.name (original logic)
+          if (token.name?.toLowerCase().includes(searchQuery)) {
+            return true;
+          }
+
+          // 2. Match alias
+          if (aliasMatchedSymbols.has(token.name)) {
+            return true;
+          }
+
+          return false;
+        });
       });
 
       set(perpsAllAssetsFilteredAtom(), {
@@ -189,7 +220,7 @@ class ContextJotaiActionsHyperliquid extends ContextJotaiActionsBase {
           const size = parseFloat(pos.position?.szi || '0');
           return Math.abs(size) > 0;
         })
-        .sort(
+        .toSorted(
           (a, b) =>
             parseFloat(b.position.positionValue || '0') -
             parseFloat(a.position.positionValue || '0'),
@@ -286,7 +317,7 @@ class ContextJotaiActionsHyperliquid extends ContextJotaiActionsBase {
           const size = parseFloat(pos.position?.szi ?? '0');
           return Math.abs(size) > 0;
         })
-        .sort((a, b) => {
+        .toSorted((a, b) => {
           const af = parseFloat(a.position?.cumFunding?.allTime ?? '0');
           const bf = parseFloat(b.position?.cumFunding?.allTime ?? '0');
           if (bf !== af) return bf - af;
@@ -378,7 +409,7 @@ class ContextJotaiActionsHyperliquid extends ContextJotaiActionsBase {
 
         if (isSnapshot) {
           const sortedUpdates = [...incomingUpdates]
-            .sort((a, b) => b.time - a.time)
+            .toSorted((a, b) => b.time - a.time)
             .slice(0, 200);
           set(perpsLedgerUpdatesAtom(), {
             accountAddress: activeAccountAddress,
@@ -396,7 +427,7 @@ class ContextJotaiActionsHyperliquid extends ContextJotaiActionsBase {
           );
           const mergedUpdates = [...newUpdates, ...existingUpdates];
           const sortedUpdates = mergedUpdates
-            .sort((a, b) => b.time - a.time)
+            .toSorted((a, b) => b.time - a.time)
             .slice(0, 200);
 
           set(perpsLedgerUpdatesAtom(), {
@@ -404,6 +435,44 @@ class ContextJotaiActionsHyperliquid extends ContextJotaiActionsBase {
             updates: sortedUpdates,
             isSubscribed: true,
           });
+
+          // Check for deposit/send updates and match with pending orders
+          // Hyperliquid use 'send' type for deposit confirmations
+          const depositUpdates = newUpdates.filter(
+            (update) =>
+              update.delta.type === 'deposit' ||
+              (update.delta.type as string) === 'send',
+          );
+          if (depositUpdates.length > 0) {
+            const perpDepositOrder = await perpsDepositOrderAtom.get();
+            const pendingOrders = perpDepositOrder.orders.filter(
+              (order) => order.toTxId,
+            );
+
+            if (pendingOrders.length > 0) {
+              const matchedOrderIds = new Set<string>();
+
+              for (const depositUpdate of depositUpdates) {
+                const matchedOrder = pendingOrders.find(
+                  (order) => order.toTxId === depositUpdate.hash,
+                );
+
+                if (matchedOrder) {
+                  matchedOrderIds.add(matchedOrder.fromTxId);
+                }
+              }
+
+              // Remove matched orders from the atom
+              if (matchedOrderIds.size > 0) {
+                await perpsDepositOrderAtom.set((prev) => ({
+                  ...prev,
+                  orders: prev.orders.filter(
+                    (order) => !matchedOrderIds.has(order.fromTxId),
+                  ),
+                }));
+              }
+            }
+          }
         }
       } else {
         set(perpsLedgerUpdatesAtom(), {

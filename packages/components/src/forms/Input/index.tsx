@@ -391,6 +391,7 @@ function BaseInput(
   useAutoScrollToTop(inputRef, autoScrollTopDelayMs);
 
   useImperativeHandle(forwardedRef, () => ({
+    // oxlint-disable-next-line no-misused-spread
     ...inputRef.current,
     focus: () => {
       inputRef.current?.focus();
@@ -483,6 +484,7 @@ function BaseInput(
       <Group.Item>
         <InputComponent
           unstyled
+          // @ts-expect-error - ref type mismatch between platforms
           ref={inputRef}
           keyboardType={keyboardType}
           flex={1}
@@ -513,7 +515,6 @@ function BaseInput(
           {...readOnlyStyle}
           {...InputComponentStyle}
           {...props}
-          // @ts-expect-error
           onPaste={platformEnv.isNative ? onPaste : undefined}
           onChangeText={
             isNumberKeyboardType ? onNumberPadChangeText : onChangeText

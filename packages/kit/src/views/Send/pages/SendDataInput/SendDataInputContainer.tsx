@@ -872,10 +872,10 @@ function SendDataInputContainer() {
       const isNative = tokenDetails?.info.isNative;
 
       const minTransferAmount = isNative
-        ? vaultSettings?.nativeMinTransferAmount ??
+        ? (vaultSettings?.nativeMinTransferAmount ??
           vaultSettings?.minTransferAmount ??
-          '0'
-        : vaultSettings?.minTransferAmount ?? '0';
+          '0')
+        : (vaultSettings?.minTransferAmount ?? '0');
 
       if (isUseFiat) {
         // Use effective balance (considers selected UTXOs)
@@ -1890,6 +1890,7 @@ function SendDataInputContainer() {
               onExtraDataChange={handleAddressInputExtraDataChange}
               hideNonBackedUpWallet
               ignoreSimilarAddressInAddressBook
+              enableCheckSimilarAddressInAddressBook
             />
             {toSimilarAddress ? (
               <Alert

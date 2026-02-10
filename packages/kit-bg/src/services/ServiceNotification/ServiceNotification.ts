@@ -187,6 +187,7 @@ export default class ServiceNotification extends ServiceBase {
       await notificationsDevSettingsPersistAtom.get();
     const msgId =
       messageInfo.extras?.params?.msgId || messageInfo.extras?.msgId;
+
     defaultLogger.notification.common.notificationReceived({
       messageInfo,
       notificationId: msgId,
@@ -424,9 +425,12 @@ export default class ServiceNotification extends ServiceBase {
         result.desktopNotification;
       delete result?.desktopNotification;
       clearTimeout(this.clearDesktopNotificationCacheTimer);
-      this.clearDesktopNotificationCacheTimer = setTimeout(() => {
-        this.desktopNotificationCache = {};
-      }, timerUtils.getTimeDurationMs({ minute: 3 }));
+      this.clearDesktopNotificationCacheTimer = setTimeout(
+        () => {
+          this.desktopNotificationCache = {};
+        },
+        timerUtils.getTimeDurationMs({ minute: 3 }),
+      );
     }
     return result;
   }
@@ -560,7 +564,7 @@ export default class ServiceNotification extends ServiceBase {
                 dbAccount: account,
               },
             );
-          } catch (error) {
+          } catch (_error) {
             //
           }
           if (networkAccount?.addressDetail?.displayAddress) {
@@ -1251,7 +1255,8 @@ export default class ServiceNotification extends ServiceBase {
     const result = await client.post<
       IApiClientResponse<INotificationPushMessageListItem[]>
     >('/notification/v1/message/list', topicTypes ? { topicTypes } : undefined);
-    return result?.data?.data || [];
+    const data = result?.data?.data || [];
+    return data;
   }
 
   @backgroundMethod()

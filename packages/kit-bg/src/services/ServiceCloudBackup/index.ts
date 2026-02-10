@@ -141,10 +141,13 @@ class ServiceCloudBackup extends ServiceBase {
     const { wallets } = await serviceAccount.getWallets();
     defaultLogger.cloudBackup.getDataForBackupScene.getWallets(wallets.length);
 
-    const walletAccountMap = wallets.reduce((summary, current) => {
-      summary[current.id] = current;
-      return summary;
-    }, {} as Record<string, IDBWallet>);
+    const walletAccountMap = wallets.reduce(
+      (summary, current) => {
+        summary[current.id] = current;
+        return summary;
+      },
+      {} as Record<string, IDBWallet>,
+    );
     const { accounts: allAccounts } = await serviceAccount.getAllAccounts();
     defaultLogger.cloudBackup.getDataForBackupScene.getAllAccounts(
       allAccounts.length,
@@ -405,17 +408,20 @@ class ServiceCloudBackup extends ServiceBase {
     const metaData = await this.getMetaDataFromCloud();
 
     return Object.values(
-      metaData.reduce((backupDeviceList, item) => {
-        const deviceKey = `${item.deviceInfo.deviceName}_${item.deviceInfo.osName}`;
-        if (
-          !backupDeviceList[deviceKey] ||
-          backupDeviceList[deviceKey].backupTime < item.backupTime
-        ) {
-          backupDeviceList[deviceKey] = item;
-        }
-        return backupDeviceList;
-      }, {} as Record<string, IMetaDataObject>),
-    ).sort((a, b) => b.backupTime - a.backupTime);
+      metaData.reduce(
+        (backupDeviceList, item) => {
+          const deviceKey = `${item.deviceInfo.deviceName}_${item.deviceInfo.osName}`;
+          if (
+            !backupDeviceList[deviceKey] ||
+            backupDeviceList[deviceKey].backupTime < item.backupTime
+          ) {
+            backupDeviceList[deviceKey] = item;
+          }
+          return backupDeviceList;
+        },
+        {} as Record<string, IMetaDataObject>,
+      ),
+    ).toSorted((a, b) => b.backupTime - a.backupTime);
   }
 
   @backgroundMethod()
@@ -430,7 +436,7 @@ class ServiceCloudBackup extends ServiceBase {
           item.deviceInfo.deviceName === deviceInfo.deviceName &&
           item.deviceInfo.osName === deviceInfo.osName,
       )
-      .sort((a, b) => b.backupTime - a.backupTime);
+      .toSorted((a, b) => b.backupTime - a.backupTime);
   }
 
   // migrate the v4 data modal
@@ -556,9 +562,11 @@ class ServiceCloudBackup extends ServiceBase {
         }
       }
 
-      const allLocalHDAccountUUIDs = ([] as Array<string>).concat(
-        ...Object.values(localData.HDWallets).map(
-          ({ accountUUIDs }) => accountUUIDs,
+      const allLocalHDAccountUUIDs = new Set(
+        ([] as Array<string>).concat(
+          ...Object.values(localData.HDWallets).map(
+            ({ accountUUIDs }) => accountUUIDs,
+          ),
         ),
       );
       for (const [HDWalletId, HDWallet] of Object.entries(
@@ -566,7 +574,7 @@ class ServiceCloudBackup extends ServiceBase {
       )) {
         if (
           HDWallet.accountUUIDs.every((accountUUID) =>
-            allLocalHDAccountUUIDs.includes(accountUUID),
+            allLocalHDAccountUUIDs.has(accountUUID),
           )
         ) {
           alreadyOnDevice.HDWallets[HDWalletId] = HDWallet;
@@ -891,7 +899,7 @@ class ServiceCloudBackup extends ServiceBase {
           return this.metaDataCache;
         }
         return content;
-      } catch (e) {
+      } catch (_e) {
         if (
           filename === CLOUD_METADATA_FILE_NAME &&
           this.metaDataCache.length > 0

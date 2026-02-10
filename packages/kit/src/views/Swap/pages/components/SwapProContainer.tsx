@@ -2,12 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { RefreshControl, ScrollView } from 'react-native';
 
-import { IconButton, Skeleton, XStack, YStack } from '@onekeyhq/components';
+import {
+  IconButton,
+  Skeleton,
+  XStack,
+  YStack,
+  useScrollContentTabBarOffset,
+} from '@onekeyhq/components';
 import {
   useSwapFromTokenAmountAtom,
   useSwapProErrorAlertAtom,
   useSwapProInputAmountAtom,
-  useSwapProSelectTokenAtom,
   useSwapProSliderValueAtom,
   useSwapProTradeTypeAtom,
 } from '@onekeyhq/kit/src/states/jotai/contexts/swap';
@@ -81,11 +86,11 @@ const SwapProContainer = ({
   const [, setSwapProInputAmount] = useSwapProInputAmountAtom();
   const [, setFromInputAmount] = useSwapFromTokenAmountAtom();
   const [, setSwapProSliderValue] = useSwapProSliderValueAtom();
+  const tabBarHeight = useScrollContentTabBarOffset();
   const scrollViewRef = useRef<ScrollView>(null);
   const { fetchTokenMarketDetailInfo } = useSwapProTokenDetailInfo();
   const [swapProErrorAlert] = useSwapProErrorAlertAtom();
   const [swapProTradeType] = useSwapProTradeTypeAtom();
-  const [swapProSelectToken] = useSwapProSelectTokenAtom();
   const { syncInputTokenBalance, syncToTokenPrice, netAccountRes } =
     useSwapProTokenInfoSync();
   // Delay rendering heavy components to improve initial render performance
@@ -160,6 +165,7 @@ const SwapProContainer = ({
       contentContainerStyle={{
         flexGrow: 1,
         paddingHorizontal: 20,
+        paddingBottom: tabBarHeight,
       }}
       showsVerticalScrollIndicator={false}
       stickyHeaderIndices={[0]}
@@ -215,6 +221,8 @@ const SwapProContainer = ({
         <YStack flexBasis="60%" flexShrink={1} alignSelf="stretch">
           {shouldRenderHeavyComponents ? (
             <SwapProTradingPanel
+              supportSpeedSwap={!!supportSpeedSwap}
+              onlySupportCrossChain={onlySupportCrossChain}
               swapProConfig={speedConfig}
               configLoading={isLoading}
               balanceLoading={balanceLoading}
@@ -239,9 +247,6 @@ const SwapProContainer = ({
         </YStack>
       </XStack>
       <SwapProErrorAlert
-        supportSpeedSwap={supportSpeedSwap}
-        onlySupportCrossChain={onlySupportCrossChain}
-        actionToken={swapProSelectToken}
         title={swapProErrorAlert?.title}
         message={swapProErrorAlert?.message}
       />

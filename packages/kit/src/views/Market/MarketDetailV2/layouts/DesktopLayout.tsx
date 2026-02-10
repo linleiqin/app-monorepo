@@ -6,32 +6,40 @@ import {
   YStack,
 } from '@onekeyhq/components';
 import platformEnv from '@onekeyhq/shared/src/platformEnv';
+import networkUtils from '@onekeyhq/shared/src/utils/networkUtils';
 
 import {
   MarketTradingView,
+  PerpetualTradingBanner,
   SwapPanel,
   TokenActivityOverview,
   TokenDetailHeader,
   TokenSupplementaryInfo,
 } from '../components';
 import { usePortfolioData } from '../components/InformationTabs/components/Portfolio/hooks/usePortfolioData';
-import { useNetworkAccountAddress } from '../components/InformationTabs/hooks/useNetworkAccountAddress';
+import { useNetworkAccount } from '../components/InformationTabs/hooks/useNetworkAccount';
 import { DesktopInformationTabs } from '../components/InformationTabs/layout/DesktopInformationTabs';
 import { useTokenDetail } from '../hooks/useTokenDetail';
 
 export function DesktopLayout() {
   const { tokenAddress, networkId, tokenDetail, isNative, websocketConfig } =
     useTokenDetail();
-  const { accountAddress } = useNetworkAccountAddress(networkId);
+
+  const { accountAddress, xpub } = useNetworkAccount(networkId);
+
   const { portfolioData, isRefreshing } = usePortfolioData({
     tokenAddress,
     networkId,
     accountAddress,
+    xpub,
   });
+
+  const isBTCNetwork = networkUtils.isBTCNetwork(networkId);
+
   return (
     <XStack flex={1}>
       {/* Left column */}
-      <YStack flex={1}>
+      <YStack flex={1} borderRightWidth="$px" borderRightColor="$borderSubdued">
         {/* Header */}
         <TokenDetailHeader />
 
@@ -49,19 +57,23 @@ export function DesktopLayout() {
         </Stack>
 
         {/* Info tabs */}
-        <Stack h="30vh">
+        <Stack h="30vh" borderTopWidth="$px" borderTopColor="$borderSubdued">
           <DesktopInformationTabs
             portfolioData={portfolioData}
             isRefreshing={isRefreshing}
+            isBTCNetwork={isBTCNetwork}
           />
         </Stack>
       </YStack>
 
       {/* Right column */}
-      <Stack w={320}>
+      <Stack w={340}>
         <ScrollView>
-          <Stack w={320} pb={platformEnv.isWeb ? '$12' : undefined}>
-            <Stack px="$5" py="$4">
+          <Stack w={340} pb={platformEnv.isWeb ? '$12' : undefined}>
+            <Stack pl="$3" pr="$5">
+              <PerpetualTradingBanner />
+            </Stack>
+            <Stack pl="$3" pr="$5" pt="$4" pb="$3">
               <SwapPanel
                 swapToken={{
                   networkId,
@@ -74,11 +86,11 @@ export function DesktopLayout() {
               />
             </Stack>
 
-            <Divider mx="$5" my="$2" />
+            <Divider my="$1" />
 
             <TokenActivityOverview />
 
-            <Divider mx="$5" />
+            <Divider />
 
             <TokenSupplementaryInfo />
           </Stack>

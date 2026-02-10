@@ -1,4 +1,3 @@
-/* eslint-disable spellcheck/spell-checker */
 export interface IMarketTokenDetail {
   address: string;
   logoUrl: string;
@@ -182,6 +181,7 @@ export interface IMarketTokenListItem {
   liquidity?: string;
   chainId?: string;
   communityRecognized?: boolean;
+  isNative?: boolean;
 }
 
 export interface IMarketTokenListResponse {
@@ -354,9 +354,14 @@ export interface IMarketTokenDetailWebsocket {
   kline: boolean;
 }
 
+export interface IMarketPerpsInfo {
+  hlTicker: string;
+}
+
 export interface IMarketTokenDetailData {
   token: IMarketTokenDetail;
   websocket: IMarketTokenDetailWebsocket;
+  perpsInfo?: IMarketPerpsInfo;
 }
 
 export interface IMarketTokenDetailResponse {

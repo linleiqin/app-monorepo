@@ -231,7 +231,7 @@ function FeeEditor(props: IProps) {
       ).toFixed(),
       maxBaseFee: originalMaxBaseFee.isGreaterThan(0)
         ? originalMaxBaseFee.toFixed()
-        : customFee?.gasEIP1559?.baseFeePerGas ?? '0',
+        : (customFee?.gasEIP1559?.baseFeePerGas ?? '0'),
       // fee utxo
       feeRate: new BigNumber(customFee?.feeUTXO?.feeRate ?? '0').toFixed(),
       // fee sol
@@ -824,13 +824,10 @@ function FeeEditor(props: IProps) {
             ...item,
             label: (
               <YStack>
-                {/* <SizableText size="$bodyMdMedium" textAlign="center">
-                  {item.icon}
-                </SizableText> */}
                 <SizableText
                   color={
                     currentFeeIndex === index
-                      ? '$textInteractive'
+                      ? '$textInverse'
                       : '$textSubdued'
                   }
                   size="$bodyMdMedium"
@@ -838,18 +835,6 @@ function FeeEditor(props: IProps) {
                 >
                   {item.label}
                 </SizableText>
-                {/* <NumberSizeableText
-                  color={currentFeeIndex === index ? '$text' : '$textSubdued'}
-                  size="$bodySm"
-                  textAlign="center"
-                  formatter="value"
-                >
-                  {item.type === EFeeType.Custom
-                    ? intl.formatMessage({ id: ETranslations.content__custom })
-                    : getFeePriceNumber({
-                        feeInfo: item.feeInfo,
-                      })}
-                </NumberSizeableText> */}
               </YStack>
             ),
           }))}
@@ -863,6 +848,7 @@ function FeeEditor(props: IProps) {
     vaultSettings?.editFeeEnabled,
   ]);
 
+  type IWatchAllFieldsKeys = keyof typeof watchAllFields;
   const handleFormValueOnChange = useCallback(
     ({
       name,
@@ -873,7 +859,7 @@ function FeeEditor(props: IProps) {
       value: string | undefined;
       intRequired?: boolean;
     }) => {
-      const filedName = name as keyof typeof watchAllFields;
+      const filedName = name as IWatchAllFieldsKeys;
       const valueBN = new BigNumber(value ?? 0);
       if (valueBN.isNaN()) {
         const formattedValue = parseFloat(value ?? '');
@@ -1041,9 +1027,9 @@ function FeeEditor(props: IProps) {
 
             <YStack>
               <Form.Field
-                label={`${intl.formatMessage({
+                label={intl.formatMessage({
                   id: ETranslations.form__priority_fee,
-                })}`}
+                })}
                 name="priorityFee"
                 description={
                   replaceTxMode ? null : recommendPriorityFee.description

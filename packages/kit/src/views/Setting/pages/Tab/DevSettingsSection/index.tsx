@@ -3,7 +3,7 @@ import type { ComponentProps } from 'react';
 
 import { random } from 'lodash';
 import { useIntl } from 'react-intl';
-import { I18nManager } from 'react-native';
+import { Dimensions, I18nManager } from 'react-native';
 
 import {
   Accordion,
@@ -19,6 +19,7 @@ import {
   View,
   YStack,
   useClipboard,
+  useInPageDialog,
 } from '@onekeyhq/components';
 import type { IDialogButtonProps } from '@onekeyhq/components/src/composite/Dialog/type';
 import backgroundApiProxy from '@onekeyhq/kit/src/background/instance/backgroundApiProxy';
@@ -84,6 +85,7 @@ import { ImagePanel } from './ImagePanel';
 import { IpTableSelector } from './IpTableSelector';
 import { NetInfo } from './NetInfo';
 import { NotificationDevSettings } from './NotificationDevSettings';
+import { NotificationPayloadTest } from './NotificationPayloadTest';
 import { RegistrationID } from './RegistrationID';
 import { ResetInstanceId } from './ResetInstanceId';
 import { SectionFieldItem } from './SectionFieldItem';
@@ -278,6 +280,8 @@ const BaseDevSettingsSection = () => {
     navigationToMessageConfirmAsync,
   ]);
 
+  const inPageDialog = useInPageDialog();
+
   if (!devSettings.enabled) {
     return null;
   }
@@ -465,6 +469,10 @@ const BaseDevSettingsSection = () => {
                       react_native_dsn: platformEnv.isNative
                         ? process.env.SENTRY_DSN_REACT_NATIVE
                         : '',
+                      windowHeight: Dimensions.get('window').height,
+                      windowWidth: Dimensions.get('window').width,
+                      screenHeight: Dimensions.get('screen').height,
+                      screenWidth: Dimensions.get('screen').width,
                     },
                   });
                 }}
@@ -619,6 +627,17 @@ const BaseDevSettingsSection = () => {
                   Dialog.cancel({
                     title: 'NotificationDevSettings',
                     renderContent: <NotificationDevSettings />,
+                  });
+                }}
+              />
+              <SectionPressItem
+                icon="SendOutline"
+                title="Notification Payload Test"
+                subtitle="Test parseNotificationPayload navigation"
+                onPress={() => {
+                  inPageDialog.cancel({
+                    title: 'Notification Payload Test',
+                    renderContent: <NotificationPayloadTest />,
                   });
                 }}
               />
@@ -1170,6 +1189,15 @@ const BaseDevSettingsSection = () => {
                 onPress={() => {
                   navigation.push(
                     EModalSettingRoutes.SettingDevKeylessWalletGallery,
+                  );
+                }}
+              />
+              <SectionPressItem
+                icon="StorageOutline"
+                title="StorageGallery"
+                onPress={() => {
+                  navigation.push(
+                    EModalSettingRoutes.SettingDevStorageGalleryModal,
                   );
                 }}
               />

@@ -181,6 +181,50 @@ export interface IPerpsRecordsResponse {
   total: number;
 }
 
+export interface IPerpsInviteItem {
+  _id: string;
+  address: string;
+  invitationTime: string;
+  inviteCode: string;
+  inviteCodeRemark: string;
+  firstTradeTime: string;
+  volume: string;
+  volumeFiatValue: string;
+  fee: string;
+  feeFiatValue: string;
+  reward: string;
+  rewardFiatValue: string;
+  hasUndistributed: boolean;
+  token: IRewardToken;
+}
+
+export interface IPerpsInvitesResponse {
+  total: number;
+  cursor: string | null;
+  items: IPerpsInviteItem[];
+}
+
+export type IPerpsInvitesSortBy =
+  | 'volume'
+  | 'fee'
+  | 'reward'
+  | 'invitationTime'
+  | 'firstTradeTime';
+
+export type IPerpsInvitesSortOrder = 'asc' | 'desc';
+
+export interface IPerpsInvitesParams {
+  tab: 'undistributed' | 'total';
+  timeRange?: EExportTimeRange;
+  startTime?: number;
+  endTime?: number;
+  inviteCode?: string;
+  hideZeroVolume?: boolean;
+  sortBy?: IPerpsInvitesSortBy;
+  sortOrder?: IPerpsInvitesSortOrder;
+  cursor?: string;
+}
+
 export interface IEarnPositionItem {
   key: string;
   networkId: string;
@@ -264,6 +308,18 @@ export interface IInvitePostConfig {
     unit: string;
   };
   friendDiscount: {
+    amount: number;
+    unit: string;
+  };
+  inviteeDiscount: {
+    amount: number;
+    unit: string;
+  };
+  inviterRebate: {
+    amount: number;
+    unit: string;
+  };
+  theirDiscount: {
     amount: number;
     unit: string;
   };
@@ -407,6 +463,7 @@ export enum EExportTimeRange {
   OneMonth = '1month',
   ThreeMonths = '3months',
   SixMonths = '6months',
+  Custom = 'custom',
 }
 
 export enum EExportTab {
@@ -419,6 +476,8 @@ export interface IExportInviteDataParams {
   timeRange: EExportTimeRange;
   inviteCode?: string;
   tab?: EExportTab;
+  startTime?: number;
+  endTime?: number;
 }
 
 // API returns CSV string directly
@@ -512,4 +571,71 @@ export interface IHardwareRecordsResponse {
   total: number;
   items: IHardwareRecordItem[];
   cursor?: string;
+}
+
+// Perps cumulative rewards response
+export interface IPerpsCumulativeRewardsParams {
+  timeRange?: EExportTimeRange;
+  startTime?: number;
+  endTime?: number;
+  inviteCode?: string;
+}
+
+export interface IPerpsCumulativeRewardsResponse {
+  undistributedReward: string;
+  undistributedRewardFiatValue: string;
+  totalReward: string;
+  totalRewardFiatValue: string;
+  totalVolume: string;
+  totalVolumeFiatValue: string;
+  totalFee: string;
+  totalFeeFiatValue: string;
+  invitedAddresses: number;
+  walletCount: number;
+  token: IRewardToken;
+}
+
+// Redemption code types
+export interface IRedemptionCodeRedeemParams {
+  code: string;
+}
+
+export interface IRedemptionCodeRedeemError {
+  code: number;
+  message: string;
+  messageId?: string;
+}
+
+export interface IRedemptionCodeRedeemResponse {
+  success: boolean;
+  error?: IRedemptionCodeRedeemError;
+  upgradeInfo?: {
+    fromLevel?: number;
+    toLevel?: number;
+    fromLevelLabel?: string;
+    toLevelLabel?: string;
+    toLevelIcon?: string;
+  };
+}
+
+// Redemption center records types
+export interface IRedemptionRecordMetadata {
+  previousLevel?: number;
+  newLevel?: number;
+}
+
+export interface IRedemptionRecordItem {
+  _id: string;
+  type: string;
+  code: string;
+  metadata?: IRedemptionRecordMetadata;
+  redeemedAt: string;
+  title: string;
+  description: string;
+  status: 'success' | 'pending';
+}
+
+export interface IRedemptionRecordsResponse {
+  total: number;
+  items: IRedemptionRecordItem[];
 }

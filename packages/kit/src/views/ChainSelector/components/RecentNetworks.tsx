@@ -18,6 +18,7 @@ import {
   appEventBus,
 } from '@onekeyhq/shared/src/eventBus/appEventBus';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
+import networkUtils from '@onekeyhq/shared/src/utils/networkUtils';
 import type { IServerNetwork } from '@onekeyhq/shared/types';
 
 import { NetworkAvatar } from '../../../components/NetworkAvatar';
@@ -58,11 +59,13 @@ function RecentNetworks({
   setRecentNetworksHeight,
   availableNetworks,
   containerProps,
+  showAllNetwork = true,
 }: {
   onPressItem?: (network: IServerNetwork) => void;
   setRecentNetworksHeight?: (height: number) => void;
   availableNetworks?: IServerNetwork[];
   containerProps?: IStackProps;
+  showAllNetwork?: boolean;
 }) {
   const intl = useIntl();
 
@@ -78,13 +81,18 @@ function RecentNetworks({
             networkId,
           });
           networks.push(network);
-        } catch (error) {
+        } catch (_error) {
           // ignore
         }
       }
+      if (!showAllNetwork) {
+        return networks.filter(
+          (n) => !networkUtils.isAllNetwork({ networkId: n.id }),
+        );
+      }
       return networks;
     },
-    [availableNetworks],
+    [availableNetworks, showAllNetwork],
     {
       initResult: [],
     },

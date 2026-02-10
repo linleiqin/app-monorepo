@@ -1,3 +1,5 @@
+/* eslint-disable no-restricted-syntax */
+// oxlint-disable preserve-caught-error
 import axios from 'axios';
 import BigNumber from 'bignumber.js';
 import { EventSourcePolyfill } from 'event-source-polyfill';
@@ -362,7 +364,6 @@ export default class ServiceSwap extends ServiceBase {
       return data?.data ?? [];
     } catch (e) {
       if (axios.isCancel(e)) {
-        // eslint-disable-next-line no-restricted-syntax
         throw new Error('swap fetch token cancel', {
           cause: ESwapFetchCancelCause.SWAP_TOKENS_CANCEL,
         });
@@ -401,7 +402,7 @@ export default class ServiceSwap extends ServiceBase {
                 },
               )
             ).id
-          : otherWalletTypeAccountId ?? '';
+          : (otherWalletTypeAccountId ?? '');
         // const accountsInfo: IAllNetworkAccountInfo[] = [];
         const { accountsInfo } =
           await this.backgroundApi.serviceAllNetwork.getAllNetworkAccounts({
@@ -1327,14 +1328,22 @@ export default class ServiceSwap extends ServiceBase {
     void this.cleanApprovingInterval();
     const approvingTransaction = await this.getApprovingTransaction();
     if (approvingTransaction && approvingTransaction.txId) {
-      this.approvingInterval = setTimeout(() => {
-        if (approvingTransaction.txId) {
-          void this.approvingStateRunSync(
-            approvingTransaction.fromToken.networkId,
-            approvingTransaction.txId,
-          );
-        }
-      }, swapApprovingStateFetchInterval * (Math.floor(this.approvingIntervalCount / swapHistoryStateFetchRiceIntervalCount) + 1));
+      this.approvingInterval = setTimeout(
+        () => {
+          if (approvingTransaction.txId) {
+            void this.approvingStateRunSync(
+              approvingTransaction.fromToken.networkId,
+              approvingTransaction.txId,
+            );
+          }
+        },
+        swapApprovingStateFetchInterval *
+          (Math.floor(
+            this.approvingIntervalCount /
+              swapHistoryStateFetchRiceIntervalCount,
+          ) +
+            1),
+      );
     }
   }
 
@@ -1343,14 +1352,22 @@ export default class ServiceSwap extends ServiceBase {
     void this.cleanSpeedSwapApprovingInterval();
     const approvingTransaction = await this.getSpeedSwapApprovingTransaction();
     if (approvingTransaction && approvingTransaction.txId) {
-      this.speedSwapApprovingInterval = setTimeout(() => {
-        if (approvingTransaction.txId) {
-          void this.speedSwapApprovingStateRunSync(
-            approvingTransaction.fromToken.networkId,
-            approvingTransaction.txId,
-          );
-        }
-      }, swapSpeedSwapApprovingStateFetchInterval * (Math.floor(this.speedSwapApprovingIntervalCount / swapHistoryStateFetchRiceIntervalCount) + 1));
+      this.speedSwapApprovingInterval = setTimeout(
+        () => {
+          if (approvingTransaction.txId) {
+            void this.speedSwapApprovingStateRunSync(
+              approvingTransaction.fromToken.networkId,
+              approvingTransaction.txId,
+            );
+          }
+        },
+        swapSpeedSwapApprovingStateFetchInterval *
+          (Math.floor(
+            this.speedSwapApprovingIntervalCount /
+              swapHistoryStateFetchRiceIntervalCount,
+          ) +
+            1),
+      );
     }
   }
 
@@ -1359,7 +1376,7 @@ export default class ServiceSwap extends ServiceBase {
   async fetchSwapHistoryListFromSimple() {
     const histories =
       await this.backgroundApi.simpleDb.swapHistory.getSwapHistoryList();
-    return histories.sort((a, b) => b.date.created - a.date.created);
+    return histories.toSorted((a, b) => b.date.created - a.date.created);
   }
 
   @backgroundMethod()
@@ -1560,8 +1577,8 @@ export default class ServiceSwap extends ServiceBase {
   }) {
     await this.backgroundApi.simpleDb.swapHistory.deleteOneSwapHistory(txInfo);
     const deleteHistoryId = txInfo.useOrderId
-      ? txInfo.orderId ?? ''
-      : txInfo.txId ?? '';
+      ? (txInfo.orderId ?? '')
+      : (txInfo.txId ?? '');
     await inAppNotificationAtom.set((pre) => ({
       ...pre,
       swapHistoryPendingList: pre.swapHistoryPendingList.filter(
@@ -1673,8 +1690,8 @@ export default class ServiceSwap extends ServiceBase {
         if (txStatusRes?.state !== ESwapTxHistoryStatus.PENDING) {
           enableInterval = false;
           const deleteHistoryId = currentSwapTxHistory.txInfo.useOrderId
-            ? currentSwapTxHistory.txInfo.orderId ?? ''
-            : currentSwapTxHistory.txInfo.txId ?? '';
+            ? (currentSwapTxHistory.txInfo.orderId ?? '')
+            : (currentSwapTxHistory.txInfo.txId ?? '');
           await this.cleanHistoryStateIntervals(deleteHistoryId);
         }
       }
@@ -1683,17 +1700,25 @@ export default class ServiceSwap extends ServiceBase {
       console.error('Swap History Status Fetch Error', error?.message);
     } finally {
       const keyId = currentSwapTxHistory.txInfo.useOrderId
-        ? currentSwapTxHistory.txInfo.orderId ?? ''
-        : currentSwapTxHistory.txInfo.txId ?? '';
+        ? (currentSwapTxHistory.txInfo.orderId ?? '')
+        : (currentSwapTxHistory.txInfo.txId ?? '');
       if (
         enableInterval &&
         this.historyCurrentStateIntervalIds.includes(keyId)
       ) {
         this.historyStateIntervalCountMap[keyId] =
           (this.historyStateIntervalCountMap[keyId] ?? 0) + 1;
-        this.historyStateIntervals[keyId] = setTimeout(() => {
-          void this.swapHistoryStatusRunFetch(currentSwapTxHistory);
-        }, swapHistoryStateFetchInterval * (Math.floor((this.historyStateIntervalCountMap[keyId] ?? 0) / swapHistoryStateFetchRiceIntervalCount) + 1));
+        this.historyStateIntervals[keyId] = setTimeout(
+          () => {
+            void this.swapHistoryStatusRunFetch(currentSwapTxHistory);
+          },
+          swapHistoryStateFetchInterval *
+            (Math.floor(
+              (this.historyStateIntervalCountMap[keyId] ?? 0) /
+                swapHistoryStateFetchRiceIntervalCount,
+            ) +
+              1),
+        );
       }
     }
   }
@@ -1710,8 +1735,8 @@ export default class ServiceSwap extends ServiceBase {
       (item) =>
         !this.historyCurrentStateIntervalIds.includes(
           item.txInfo.useOrderId
-            ? item.txInfo.orderId ?? ''
-            : item.txInfo.txId ?? '',
+            ? (item.txInfo.orderId ?? '')
+            : (item.txInfo.txId ?? ''),
         ),
     );
     if (!newHistoryStatePendingList.length) return;
@@ -1720,8 +1745,8 @@ export default class ServiceSwap extends ServiceBase {
         this.historyCurrentStateIntervalIds = [
           ...this.historyCurrentStateIntervalIds,
           swapTxHistory.txInfo.useOrderId
-            ? swapTxHistory.txInfo.orderId ?? ''
-            : swapTxHistory.txInfo.txId ?? '',
+            ? (swapTxHistory.txInfo.orderId ?? '')
+            : (swapTxHistory.txInfo.txId ?? ''),
         ];
         await this.swapHistoryStatusRunFetch(swapTxHistory);
       }),
@@ -2104,7 +2129,7 @@ export default class ServiceSwap extends ServiceBase {
             }, ESwapLimitOrderUpdateInterval);
           }
         }
-      } catch (error) {
+      } catch (_error) {
         this.limitOrderStateInterval = setTimeout(() => {
           void this.swapLimitOrdersFetchLoop(
             indexedAccountId,
@@ -2600,7 +2625,7 @@ export default class ServiceSwap extends ServiceBase {
     if (filteredPerpDepositOrder.length > 0) {
       const receivingAddressInfo =
         await this.backgroundApi.serviceAccount.getNetworkAccount({
-          accountId: indexedAccountId ? undefined : accountId ?? '',
+          accountId: indexedAccountId ? undefined : (accountId ?? ''),
           indexedAccountId: indexedAccountId ?? '',
           networkId: PERPS_NETWORK_ID,
           deriveType: 'default',

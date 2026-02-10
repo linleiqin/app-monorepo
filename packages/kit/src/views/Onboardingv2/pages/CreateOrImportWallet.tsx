@@ -1,4 +1,3 @@
-/* eslint-disable spellcheck/spell-checker */
 import { useCallback, useState } from 'react';
 
 import { useRoute } from '@react-navigation/native';
@@ -198,6 +197,9 @@ function CreateOrImportWallet() {
   };
 
   const handleKeylessWalletClick = useCallback(async () => {
+    defaultLogger.account.wallet.onboard({
+      onboardMethod: 'createKeylessWallet',
+    });
     // await enableKeylessWallet({
     //   fromScene: EKeylessWalletEnableScene.Onboarding,
     // });
@@ -329,7 +331,7 @@ function CreateOrImportWallet() {
                   <YStack gap="$0.5" flex={1} alignItems="flex-start">
                     <Card.Title>
                       {intl.formatMessage({
-                        id: ETranslations.keyless_wallet,
+                        id: ETranslations.create_keyless_wallet,
                       })}
                     </Card.Title>
                     <Button
@@ -498,7 +500,7 @@ function CreateOrImportWallet() {
                   <Card.Title>
                     {isKeylessWalletEnabled
                       ? intl.formatMessage({
-                          id: ETranslations.seed_phrase_wallet,
+                          id: ETranslations.create_seed_phrase_wallet,
                         })
                       : intl.formatMessage({
                           id: ETranslations.onboarding_create_new_wallet,

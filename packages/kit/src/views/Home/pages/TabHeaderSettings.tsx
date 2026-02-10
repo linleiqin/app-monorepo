@@ -71,8 +71,9 @@ function TokenListSettings() {
 }
 const filterScamHistorySupportedNetworks =
   getNetworksSupportFilterScamHistory();
-const filterScamHistorySupportedNetworkIds =
-  filterScamHistorySupportedNetworks.map((n) => n.id);
+const filterScamHistorySupportedNetworkIds = new Set(
+  filterScamHistorySupportedNetworks.map((n) => n.id),
+);
 
 function TxHistorySettings() {
   const intl = useIntl();
@@ -107,7 +108,7 @@ function TxHistorySettings() {
   const filterScamHistorySupported = useMemo(
     () =>
       network?.isAllNetworks ||
-      filterScamHistorySupportedNetworkIds.includes(network?.id ?? ''),
+      filterScamHistorySupportedNetworkIds.has(network?.id ?? ''),
     [network],
   );
 
@@ -265,7 +266,7 @@ function BasicTabHeaderSettings({ focusedTab }: { focusedTab: string }) {
         return null;
     }
   }, [approvalName, portfolioName, focusedTab, historyName]);
-  return <XStack pr="$5">{content}</XStack>;
+  return <XStack pr="$pagePadding">{content}</XStack>;
 }
 
 export const TabHeaderSettings = memo(BasicTabHeaderSettings);

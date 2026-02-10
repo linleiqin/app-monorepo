@@ -131,21 +131,18 @@ export default class ServiceHyperliquidSubscription extends ServiceBase {
 
     const activeAccount = await perpsActiveAccountAtom.get();
     const activeAsset = await perpsActiveAssetAtom.get();
-    const activeOrderBookOptions = await perpsActiveOrderBookOptionsAtom.get();
+    let activeOrderBookOptions = await perpsActiveOrderBookOptionsAtom.get();
 
     if (
       activeOrderBookOptions?.coin &&
       activeOrderBookOptions?.coin !== activeAsset.coin
     ) {
-      console.warn(
-        'updateSubscriptionsDebounced ERROR: orderbook coin not matched',
-      );
-      void this.showToast({
-        method: 'error',
-        title: 'orderbook coin not matched',
-        message: 'Please change the asset',
-      });
-      return;
+      const syncedOptions = {
+        ...activeOrderBookOptions,
+        coin: activeAsset.coin,
+      };
+      await perpsActiveOrderBookOptionsAtom.set(syncedOptions);
+      activeOrderBookOptions = syncedOptions;
     }
 
     // TODO update isConnected by websocket connect/disconnect event
@@ -329,7 +326,17 @@ export default class ServiceHyperliquidSubscription extends ServiceBase {
   async resumeSubscriptions(): Promise<void> {
     await this.enableSubscriptionsHandler();
     console.log('updateSubscriptions__by__resumeSubscriptions');
+
+    // Reconnect if socket is CLOSED (iOS closes WebSocket when app is in background)
+    const client = await this.getWebSocketClient();
+    if (client?.transport?.socket?.readyState === WebSocket.CLOSED) {
+      console.log('resumeSubscriptions__reconnecting_closed_socket');
+      await this.disconnect();
+      await this.getWebSocketClient();
+    }
+
     await this.updateSubscriptions();
+
     const hookInfo = await perpsCandlesWebviewReloadHookAtom.get();
     if (hookInfo.reloadHook <= -1) {
       await perpsCandlesWebviewReloadHookAtom.set({
@@ -564,7 +571,7 @@ export default class ServiceHyperliquidSubscription extends ServiceBase {
         reconnect: {
           maxRetries: 999,
           connectionTimeout: 5000,
-          // eslint-disable-next-line spellcheck/spell-checker
+          // oxlint-disable-next-line @cspell/spellchecker
           reconnectionDelay: (
             attempt: number, // spell-checker:disable-line
           ) =>

@@ -12,6 +12,7 @@ import type {
   IEarnWalletHistory,
   IExportInviteDataParams,
   IHardwareCumulativeRewards,
+  IHardwareRecordItem,
   IHardwareRecordsResponse,
   IHardwareSalesRecord,
   IInviteCodeItem,
@@ -21,8 +22,15 @@ import type {
   IInvitePaidHistory,
   IInvitePostConfig,
   IInviteSummary,
+  IPerpsCumulativeRewardsParams,
+  IPerpsCumulativeRewardsResponse,
   IPerpsInviteeRewardsResponse,
+  IPerpsInvitesParams,
+  IPerpsInvitesResponse,
   IPerpsRecordsResponse,
+  IRedemptionCodeRedeemParams,
+  IRedemptionCodeRedeemResponse,
+  IRedemptionRecordsResponse,
   IUpdateInviteCodeNoteResponse,
 } from '@onekeyhq/shared/src/referralCode/type';
 import accountUtils from '@onekeyhq/shared/src/utils/accountUtils';
@@ -94,13 +102,21 @@ class ServiceReferralCode extends ServiceBase {
     const client = await this.getOneKeyIdClient(EServiceEndpointEnum.Rebate);
     const queryParams: {
       subject: string;
-      timeRange: string;
+      timeRange?: string;
       inviteCode?: string;
       tab?: string;
+      startTime?: number;
+      endTime?: number;
     } = {
       subject: params.subject,
-      timeRange: params.timeRange,
     };
+    // Only pass timeRange when not using custom date range
+    if (params.startTime && params.endTime) {
+      queryParams.startTime = params.startTime;
+      queryParams.endTime = params.endTime;
+    } else {
+      queryParams.timeRange = params.timeRange;
+    }
     if (params.inviteCode) {
       queryParams.inviteCode = params.inviteCode;
     }
@@ -266,6 +282,35 @@ class ServiceReferralCode extends ServiceBase {
   }
 
   @backgroundMethod()
+  async getPerpsCumulativeRewards(
+    params: IPerpsCumulativeRewardsParams,
+  ): Promise<IPerpsCumulativeRewardsResponse> {
+    const client = await this.getOneKeyIdClient(EServiceEndpointEnum.Rebate);
+    const queryParams: {
+      timeRange?: string;
+      startTime?: number;
+      endTime?: number;
+      inviteCode?: string;
+    } = {};
+    if (params.timeRange) {
+      queryParams.timeRange = params.timeRange;
+    }
+    if (params.startTime) {
+      queryParams.startTime = params.startTime;
+    }
+    if (params.endTime) {
+      queryParams.endTime = params.endTime;
+    }
+    if (params.inviteCode) {
+      queryParams.inviteCode = params.inviteCode;
+    }
+    const response = await client.get<{
+      data: IPerpsCumulativeRewardsResponse;
+    }>('/rebate/v1/invite/perps-cumulative-rewards', { params: queryParams });
+    return response.data.data;
+  }
+
+  @backgroundMethod()
   async getPositions(
     accounts: { networkId: string; accountAddress: string }[],
   ) {
@@ -344,6 +389,55 @@ class ServiceReferralCode extends ServiceBase {
     const response = await client.get<{ data: IPerpsInviteeRewardsResponse }>(
       '/rebate/v1/invite/perps-invitee-rewards',
       { params },
+    );
+    return response.data.data;
+  }
+
+  @backgroundMethod()
+  async getPerpsInvites(
+    params: IPerpsInvitesParams,
+  ): Promise<IPerpsInvitesResponse> {
+    const client = await this.getOneKeyIdClient(EServiceEndpointEnum.Rebate);
+    const queryParams: {
+      tab: string;
+      timeRange?: string;
+      startTime?: number;
+      endTime?: number;
+      inviteCode?: string;
+      hideZeroVolume?: boolean;
+      sortBy?: string;
+      sortOrder?: string;
+      cursor?: string;
+    } = {
+      tab: params.tab,
+    };
+    if (params.timeRange) {
+      queryParams.timeRange = params.timeRange;
+    }
+    if (params.startTime) {
+      queryParams.startTime = params.startTime;
+    }
+    if (params.endTime) {
+      queryParams.endTime = params.endTime;
+    }
+    if (params.inviteCode) {
+      queryParams.inviteCode = params.inviteCode;
+    }
+    if (params.hideZeroVolume !== undefined) {
+      queryParams.hideZeroVolume = params.hideZeroVolume;
+    }
+    if (params.sortBy) {
+      queryParams.sortBy = params.sortBy;
+    }
+    if (params.sortOrder) {
+      queryParams.sortOrder = params.sortOrder;
+    }
+    if (params.cursor) {
+      queryParams.cursor = params.cursor;
+    }
+    const response = await client.get<{ data: IPerpsInvitesResponse }>(
+      '/rebate/v1/invite/perps-invites',
+      { params: queryParams },
     );
     return response.data.data;
   }
@@ -525,6 +619,16 @@ class ServiceReferralCode extends ServiceBase {
   }
 
   @backgroundMethod()
+  async getCachedInviteCode() {
+    return this.backgroundApi.simpleDb.referralCode.getCachedInviteCode();
+  }
+
+  @backgroundMethod()
+  async setCachedInviteCode(code: string) {
+    return this.backgroundApi.simpleDb.referralCode.setCachedInviteCode(code);
+  }
+
+  @backgroundMethod()
   async autoSignBoundReferralCodeMessageByHDWallet({
     unsignedMessage,
     networkId,
@@ -582,6 +686,15 @@ class ServiceReferralCode extends ServiceBase {
   }
 
   @backgroundMethod()
+  async getHardwareRecordDetail(id: string): Promise<IHardwareRecordItem> {
+    const client = await this.getOneKeyIdClient(EServiceEndpointEnum.Rebate);
+    const response = await client.get<{
+      data: IHardwareRecordItem;
+    }>(`/rebate/v1/invite/hardware-records/${id}`);
+    return response.data.data;
+  }
+
+  @backgroundMethod()
   async bindPerpsWallet({
     action,
     nonce,
@@ -613,6 +726,81 @@ class ServiceReferralCode extends ServiceBase {
       signerAddress,
     });
     return response.data.data;
+  }
+
+  @backgroundMethod()
+  async getRedemptionRecords(): Promise<IRedemptionRecordsResponse> {
+    const client = await this.getOneKeyIdClient(EServiceEndpointEnum.Rebate);
+    const response = await client.get<{
+      data: IRedemptionRecordsResponse;
+    }>('/rebate/v1/redemption-center/records');
+    return response.data.data;
+  }
+
+  @backgroundMethod()
+  async redeemCode(
+    params: IRedemptionCodeRedeemParams,
+  ): Promise<IRedemptionCodeRedeemResponse> {
+    const client = await this.getOneKeyIdClient(EServiceEndpointEnum.Rebate);
+    try {
+      const response = await client.post<{
+        code: number;
+        message: string;
+        messageId?: string;
+        data?: {
+          metadata?: {
+            previousLevel?: number;
+            newLevel?: number;
+          };
+        };
+      }>('/rebate/v1/redemption-center/redemption-code/redeem', params, {
+        autoHandleError: false,
+      } as any);
+
+      // Check if API returned an error (non-zero code)
+      if (response.data.code !== 0) {
+        return {
+          success: false,
+          error: {
+            code: response.data.code,
+            message: response.data.message,
+            messageId: response.data.messageId,
+          },
+        };
+      }
+
+      const metadata = response.data.data?.metadata;
+      return {
+        success: true,
+        upgradeInfo:
+          metadata?.previousLevel !== undefined &&
+          metadata?.newLevel !== undefined
+            ? {
+                fromLevel: metadata.previousLevel,
+                toLevel: metadata.newLevel,
+              }
+            : undefined,
+      };
+    } catch (error) {
+      // Handle axios error response
+      const axiosError = error as { response?: { data?: unknown } };
+      if (axiosError?.response?.data) {
+        const errorData = axiosError.response.data as {
+          code: number;
+          message: string;
+          messageId?: string;
+        };
+        return {
+          success: false,
+          error: {
+            code: errorData.code,
+            message: errorData.message,
+            messageId: errorData.messageId,
+          },
+        };
+      }
+      throw error;
+    }
   }
 }
 

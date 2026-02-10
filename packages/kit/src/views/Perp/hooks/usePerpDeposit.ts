@@ -195,7 +195,7 @@ const usePerpDeposit = (
             indexedAccountId,
             networkId: token.networkId ?? '',
             deriveType: defaultDeriveType ?? 'default',
-            accountId: indexedAccountId ? undefined : selectedAccountId ?? '',
+            accountId: indexedAccountId ? undefined : (selectedAccountId ?? ''),
           });
         const perpAccountDefaultDeriveType =
           await backgroundApiProxy.serviceNetwork.getGlobalDeriveTypeOfNetwork({
@@ -203,7 +203,7 @@ const usePerpDeposit = (
           });
         const perpAccount =
           await backgroundApiProxy.serviceAccount.getNetworkAccount({
-            accountId: indexedAccountId ? undefined : selectedAccountId ?? '',
+            accountId: indexedAccountId ? undefined : (selectedAccountId ?? ''),
             indexedAccountId,
             deriveType: perpAccountDefaultDeriveType ?? 'default',
             networkId: PERPS_NETWORK_ID,
@@ -499,7 +499,7 @@ const usePerpDeposit = (
         buildUnsignedParamsCheckNonce.prevNonce =
           approveUnsignedTxArr[approveUnsignedTxArr.length - 1].nonce;
       }
-      let gasFeeInfos: { encodeTx: IEncodedTx; gasInfo: ISwapGasInfo }[] = [];
+      const gasFeeInfos: { encodeTx: IEncodedTx; gasInfo: ISwapGasInfo }[] = [];
       const unsignedTx =
         await backgroundApiProxy.serviceSend.prepareSendConfirmUnsignedTx({
           ...buildUnsignedParamsCheckNonce,
@@ -533,13 +533,10 @@ const usePerpDeposit = (
           const unsignedTxItem = unsignedTxArr[i];
           const gasRes = gasResArr.txFees[i];
           const gasInfo = buildGasInfo(gasRes, gasResArr.common);
-          gasFeeInfos = [
-            ...gasFeeInfos,
-            {
-              encodeTx: unsignedTxItem.encodedTx ?? {},
-              gasInfo,
-            },
-          ];
+          gasFeeInfos.push({
+            encodeTx: unsignedTxItem.encodedTx ?? {},
+            gasInfo,
+          });
         }
       } else if (
         approveUnsignedTxArr?.length &&
@@ -598,13 +595,10 @@ const usePerpDeposit = (
                   }
                 : undefined,
             };
-            gasFeeInfos = [
-              ...gasFeeInfos,
-              {
-                encodeTx: unsignedTxItem.encodedTx,
-                gasInfo: lastTxGasInfo,
-              },
-            ];
+            gasFeeInfos.push({
+              encodeTx: unsignedTxItem.encodedTx,
+              gasInfo: lastTxGasInfo,
+            });
           } else {
             const estimateFeeParams =
               await backgroundApiProxy.serviceGas.buildEstimateFeeParams({
@@ -626,13 +620,10 @@ const usePerpDeposit = (
               };
             }
             const gasParseInfo = buildGasInfo(gasRes, gasRes.common);
-            gasFeeInfos = [
-              ...gasFeeInfos,
-              {
-                encodeTx: unsignedTxItem.encodedTx,
-                gasInfo: gasParseInfo,
-              },
-            ];
+            gasFeeInfos.push({
+              encodeTx: unsignedTxItem.encodedTx,
+              gasInfo: gasParseInfo,
+            });
           }
         }
       } else {
@@ -649,13 +640,10 @@ const usePerpDeposit = (
           accountId,
         });
         const gasParseInfo = buildGasInfo(gasRes, gasRes.common);
-        gasFeeInfos = [
-          ...gasFeeInfos,
-          {
-            encodeTx: unsignedTx.encodedTx,
-            gasInfo: gasParseInfo,
-          },
-        ];
+        gasFeeInfos.push({
+          encodeTx: unsignedTx.encodedTx,
+          gasInfo: gasParseInfo,
+        });
       }
       return gasFeeInfos;
     },
@@ -750,7 +738,13 @@ const usePerpDeposit = (
         unsignedTxs: [updatedUnsignedTxItem],
         precheckTiming: ESendPreCheckTimingEnum.Confirm,
       });
-      const { totalNative } = calculateFeeForSend({
+      const {
+        totalNative,
+        total,
+        totalFiat,
+        totalFiatForDisplay,
+        totalNativeForDisplay,
+      } = calculateFeeForSend({
         feeInfo: gasInfo as IFeeInfoUnit,
         nativeTokenPrice: gasInfo.common?.nativeTokenPrice ?? 0,
       });
@@ -770,6 +764,30 @@ const usePerpDeposit = (
         accountId,
         unsignedTx: updatedUnsignedTxItem,
         signOnly: false,
+      });
+      const decodedTx = await backgroundApiProxy.serviceSend.buildDecodedTx({
+        networkId: token.networkId,
+        accountId,
+        unsignedTx: updatedUnsignedTxItem,
+        feeInfo: {
+          feeInfo: gasInfo as IFeeInfoUnit,
+          total,
+          totalNative,
+          totalFiat,
+          totalNativeForDisplay,
+          totalFiatForDisplay,
+        },
+        saveToLocalHistory: true,
+      });
+      await backgroundApiProxy.serviceHistory.saveSendConfirmHistoryTxs({
+        networkId: token.networkId,
+        accountId,
+        data: {
+          signedTx: res,
+          decodedTx,
+          approveInfo: updatedUnsignedTxItem.approveInfo,
+          feeInfo: gasInfo as IFeeInfoUnit,
+        },
       });
       return res;
     },
@@ -1036,9 +1054,8 @@ const usePerpDeposit = (
     if (!token?.networkId) {
       throw new OneKeyError('token.networkId is required');
     }
-    const { transferInfo, encodedTx, swapInfo } = await buildQuoteRes(
-      perpDepositQuote,
-    );
+    const { transferInfo, encodedTx, swapInfo } =
+      await buildQuoteRes(perpDepositQuote);
     const { unsignedTxArr } = await getApproveUnSignedTxArr(
       perpDepositQuote?.result,
     );

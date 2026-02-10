@@ -49,7 +49,7 @@ export function AvailableAssetsTabViewList() {
         type: EAvailableAssetsTypeEnum.All,
       },
       {
-        // eslint-disable-next-line spellcheck/spell-checker
+        // oxlint-disable-next-line @cspell/spellchecker
         title: intl.formatMessage({ id: ETranslations.earn_stablecoins }),
         type: EAvailableAssetsTypeEnum.StableCoins,
       },
@@ -288,7 +288,7 @@ export function AvailableAssetsTabViewList() {
 
   return (
     <YStack gap="$3">
-      <SizableText px="$5" size="$headingLg">
+      <SizableText px="$pagePadding" size="$headingLg">
         {intl.formatMessage({ id: ETranslations.earn_available_assets })}
       </SizableText>
       <Tabs.TabBar

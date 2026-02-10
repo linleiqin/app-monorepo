@@ -12,6 +12,7 @@ __generated__
 .claude/settings.local.json
 .clauderc
 .tmp/
+.cursor/plans/
 *.private_ai_docs.md
 .cursor/plans/
 dist
@@ -98,3 +99,14 @@ apps/mobile/android/build-logic/privacy-security-plugins/bin/main/onekey/privacy
 /apps/mobile/ios/tmp-oc-test
 
 debug.log
+
+# Perf monitor local sessions
+/development/output/perf-sessions/
+/development/output/*.md
+
+# Detox / perf-ci artifacts
+/apps/mobile/e2e/artifacts/
+/development/perf-ci/output/
+
+# Local perf-ci secrets/config (do not commit)
+/development/perf-ci/config.local.json

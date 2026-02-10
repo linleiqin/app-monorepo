@@ -10,7 +10,7 @@ import { AmountField } from './AmountField';
 import { AssetField } from './AssetField';
 import { AssetWithAmountField } from './AssetWithAmountField';
 import { BorrowAPYField } from './BorrowAPYField';
-import { BorrowListSkeleton } from './BorrowListSkeleton';
+import { BorrowListSkeleton, EmptyStateSkeleton } from './BorrowListSkeleton';
 import { FieldWrapper } from './FieldWrapper';
 
 import type { ISwapConfig } from './ActionField';
@@ -23,6 +23,9 @@ type IBorrowTableListProps<T> = {
   listProps?: Omit<ITableListProps<T>, 'columns' | 'data'>;
   emptyContent: string;
   onPressRow?: (item: T, index: number) => void;
+  defaultSortKey?: string;
+  defaultSortDirection?: 'asc' | 'desc';
+  skeletonCount?: number;
 };
 
 const BorrowTableList = <T,>({
@@ -32,23 +35,20 @@ const BorrowTableList = <T,>({
   listProps = {},
   emptyContent,
   onPressRow,
+  defaultSortKey,
+  defaultSortDirection,
+  skeletonCount,
 }: IBorrowTableListProps<T>) => {
   const hasData = data && data.length > 0;
 
   if (!hasData) {
     if (isLoading) {
+      // Use EmptyStateSkeleton to match empty state height and prevent layout jump
       return (
-        <TableList
+        <EmptyStateSkeleton
           columns={columns}
-          data={[]}
-          isLoading
-          tableLayout
-          withHeader
-          onPressRow={onPressRow}
-          SkeletonComponent={
-            <BorrowListSkeleton columns={columns} rowGap={listProps.rowGap} />
-          }
-          {...listProps}
+          rowGap={listProps.rowGap}
+          emptyContent={emptyContent}
         />
       );
     }
@@ -63,8 +63,14 @@ const BorrowTableList = <T,>({
       tableLayout
       withHeader
       onPressRow={onPressRow}
+      defaultSortKey={defaultSortKey}
+      defaultSortDirection={defaultSortDirection}
       SkeletonComponent={
-        <BorrowListSkeleton columns={columns} rowGap={listProps.rowGap} />
+        <BorrowListSkeleton
+          columns={columns}
+          rowGap={listProps.rowGap}
+          itemCount={skeletonCount}
+        />
       }
       {...listProps}
     />

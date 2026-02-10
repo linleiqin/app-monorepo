@@ -9,8 +9,8 @@ import { ETranslations } from '@onekeyhq/shared/src/locale';
 import type { IBorrowReserveItem } from '@onekeyhq/shared/types/staking';
 
 import { EarnText } from '../../Staking/components/ProtocolDetails/EarnText';
-import { useEarnAccount } from '../../Staking/hooks/useEarnAccount';
 import { EManagePositionType } from '../../Staking/pages/ManagePosition/hooks/useManagePage';
+import { EBorrowDataStatus } from '../borrowDataStatus';
 import { useBorrowContext } from '../BorrowProvider';
 import { BorrowNavigation } from '../borrowUtils';
 
@@ -27,15 +27,15 @@ import { Card } from './Card';
 type ISupplyAsset = IBorrowReserveItem['supply']['assets'][number];
 
 export const SupplyCard = () => {
-  const { reserves, market, reservesLoading } = useBorrowContext();
+  const { reserves, market, borrowDataStatus, earnAccount } =
+    useBorrowContext();
   const intl = useIntl();
   const navigation = useAppNavigation();
-  const { earnAccount } = useEarnAccount({ networkId: market?.networkId });
   const { gtMd, gtLg } = useMedia();
   const [showZeroBalance, setShowZeroBalance] = useState(true);
-  const accountId = earnAccount?.account?.id || '';
-  const walletId = earnAccount?.walletId || '';
-  const indexedAccountId = earnAccount?.account?.indexedAccountId;
+  const accountId = earnAccount.data?.account?.id || '';
+  const walletId = earnAccount.data?.walletId || '';
+  const indexedAccountId = earnAccount.data?.account?.indexedAccountId;
 
   const handleManageSupply = useCallback(
     (item: ISupplyAsset) => {
@@ -51,10 +51,10 @@ export const SupplyCard = () => {
         providerLogoURI: market.logoURI,
         logoURI: item.token.logoURI,
         type: EManagePositionType.Supply,
-        borrowReserves: reserves ?? undefined,
+        borrowReserves: reserves.data ?? undefined,
       });
     },
-    [navigation, market, accountId, reserves],
+    [navigation, market, accountId, reserves.data],
   );
 
   const handlePressRow = useCallback(
@@ -80,20 +80,23 @@ export const SupplyCard = () => {
     [navigation, market, gtMd, handleManageSupply, accountId, indexedAccountId],
   );
 
-  const showLoading = !reserves && reservesLoading;
+  const showLoading =
+    borrowDataStatus === EBorrowDataStatus.LoadingMarkets ||
+    borrowDataStatus === EBorrowDataStatus.WaitingForAccount ||
+    borrowDataStatus === EBorrowDataStatus.LoadingReserves;
 
   // Filter data based on showZeroBalance (mobile always shows all assets)
   const filteredAssets = useMemo(() => {
-    if (!reserves?.supply?.assets) return [];
+    if (!reserves.data?.supply?.assets) return [];
     // Mobile: always show all assets
-    if (!gtMd) return reserves.supply.assets;
+    if (!gtMd) return reserves.data.supply.assets;
     // Desktop: filter based on showZeroBalance toggle
-    if (showZeroBalance) return reserves.supply.assets;
-    return reserves.supply.assets.filter((asset) => {
+    if (showZeroBalance) return reserves.data.supply.assets;
+    return reserves.data.supply.assets.filter((asset) => {
       const balance = new BigNumber(asset?.walletBalance?.title?.text || '0');
       return balance.gt(0);
     });
-  }, [reserves?.supply?.assets, showZeroBalance, gtMd]);
+  }, [reserves.data?.supply?.assets, showZeroBalance, gtMd]);
 
   const labels = useMemo(
     () => ({
@@ -101,7 +104,7 @@ export const SupplyCard = () => {
       balance: intl.formatMessage({ id: ETranslations.global_balance }),
       supply: intl.formatMessage({ id: ETranslations.defi_supply }),
       assetCanBeCollateral: intl.formatMessage({
-        id: ETranslations.defi_asset_can_be_collateral,
+        id: ETranslations.global_asset,
       }),
       assetsToSupply: intl.formatMessage({
         id: ETranslations.defi_assets_to_supply,
@@ -141,7 +144,7 @@ export const SupplyCard = () => {
         render: (item: ISupplyAsset) => (
           <AssetWithAmountField
             token={item.token}
-            canBeCollateral={item.canBeCollateral}
+            canBeCollateral={false}
             amount={item.walletBalance.title}
             amountDescription={item.walletBalance.description}
             showWalletIcon
@@ -179,6 +182,12 @@ export const SupplyCard = () => {
         label: labels.balance,
         align: 'flex-end' as const,
         key: 'balance',
+        sortable: true,
+        comparator: (a: ISupplyAsset, b: ISupplyAsset) => {
+          const aFiatValue = new BigNumber(a.walletBalance?.fiatValue || '0');
+          const bFiatValue = new BigNumber(b.walletBalance?.fiatValue || '0');
+          return aFiatValue.comparedTo(bFiatValue);
+        },
         render: (item: ISupplyAsset) => (
           <AmountField
             title={item.walletBalance.title}
@@ -224,6 +233,8 @@ export const SupplyCard = () => {
         columns={gtMd ? desktopColumns : mobileColumns}
         onPressRow={handlePressRow}
         emptyContent={labels.noAssetsToSupply}
+        defaultSortKey="balance"
+        defaultSortDirection="desc"
       />
     </Card>
   );

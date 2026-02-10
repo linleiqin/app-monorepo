@@ -103,9 +103,8 @@ const baseResolve = ({
     ),
   },
   fallback: {
-    crypto: require.resolve(
-      '@onekeyhq/shared/src/modules3rdParty/cross-crypto/index.js',
-    ),
+    crypto:
+      require.resolve('@onekeyhq/shared/src/modules3rdParty/cross-crypto/index.js'),
     stream: require.resolve('stream-browserify'),
     path: false,
     https: false,
@@ -134,6 +133,12 @@ const buildBasePlugins: (
     'process.env.ONEKEY_PLATFORM': JSON.stringify(platform),
     'process.env.NODE_ENV': JSON.stringify(nodeEnv),
     'process.env.TAMAGUI_TARGET': JSON.stringify('web'),
+    'process.env.PERF_MONITOR_ENABLED': JSON.stringify(
+      process.env.PERF_MONITOR_ENABLED || '',
+    ),
+    'process.env.VERSION': JSON.stringify(process.env.VERSION),
+    'process.env.BUNDLE_VERSION': JSON.stringify(process.env.BUNDLE_VERSION),
+    'process.env.BUILD_NUMBER': JSON.stringify(process.env.BUILD_NUMBER),
   }),
   new rspack.ProvidePlugin({
     Buffer: ['buffer', 'Buffer'],
@@ -204,10 +209,10 @@ export function createBaseConfig({
         ? 'static/media/[name].[ext]'
         : 'static/media/[name].[hash][ext]',
       uniqueName: 'web',
-      filename: isDev ? '[name].bundle.js' : '[name].[chunkhash:10].bundle.js',
+      filename: isDev ? '[name].bundle.js' : '[name].[contenthash:10].bundle.js',
       chunkFilename: isDev
         ? 'static/js/[name].chunk.js'
-        : 'static/js/[name].[chunkhash:10].chunk.js',
+        : 'static/js/[name].[contenthash:10].chunk.js',
     },
     plugins: [
       new HtmlWebpackPlugin({

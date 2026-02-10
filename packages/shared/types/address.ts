@@ -12,6 +12,7 @@ export enum EInputAddressChangeType {
   Manual = 'manual',
   Paste = 'paste',
   Scan = 'scan',
+  Upload = 'upload',
   AddressBook = 'AddressBook',
   AccountSelector = 'AccountSelector',
 }
@@ -168,6 +169,7 @@ export type IQueryCheckAddressArgs = {
     accountId: string;
   };
   ignoreSimilarAddressInAddressBook?: boolean;
+  enableCheckSimilarAddressInAddressBook?: boolean;
 };
 
 export type IFetchServerAccountDetailsParams = IFetchAccountDetailsParams & {

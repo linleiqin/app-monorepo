@@ -70,8 +70,8 @@ export function useSwapTokenList(
           indexedAccountId: swapAddressInfo?.accountInfo?.indexedAccount?.id,
           otherWalletTypeAccountId: !swapAddressInfo?.accountInfo
             ?.indexedAccount?.id
-            ? swapAddressInfo?.accountInfo?.account?.id ??
-              swapAddressInfo?.accountInfo?.dbAccount?.id
+            ? (swapAddressInfo?.accountInfo?.account?.id ??
+              swapAddressInfo?.accountInfo?.dbAccount?.id)
             : undefined,
           swapSupportNetworks: swapNetworks,
         });
@@ -139,7 +139,7 @@ export function useSwapTokenList(
         const priceBN = new BigNumber(token.price ?? '0');
         return !priceBN.isNaN() && !priceBN.isZero();
       })
-      ?.sort((a, b) => {
+      ?.toSorted((a, b) => {
         const aBalanceBN = new BigNumber(a.fiatValue ?? '0');
         const bBalanceBN = new BigNumber(b.fiatValue ?? '0');
         return bBalanceBN.comparedTo(aBalanceBN);
@@ -149,7 +149,7 @@ export function useSwapTokenList(
         const priceBN = new BigNumber(token.price ?? '0');
         return priceBN.isNaN() || priceBN.isZero();
       })
-      ?.sort((a, b) => {
+      ?.toSorted((a, b) => {
         const aBalanceBN = new BigNumber(a.fiatValue ?? '0');
         const bBalanceBN = new BigNumber(b.fiatValue ?? '0');
         return bBalanceBN.comparedTo(aBalanceBN);
@@ -283,8 +283,8 @@ export function useSwapTokenList(
       void swapLoadAllNetworkTokenList(
         swapAddressInfo?.accountInfo?.indexedAccount?.id,
         !swapAddressInfo?.accountInfo?.indexedAccount?.id
-          ? swapAddressInfo?.accountInfo?.account?.id ??
-              swapAddressInfo?.accountInfo?.dbAccount?.id
+          ? (swapAddressInfo?.accountInfo?.account?.id ??
+              swapAddressInfo?.accountInfo?.dbAccount?.id)
           : undefined,
       );
     }
@@ -339,7 +339,7 @@ export function useSwapTokenList(
         networkId,
         networkName: currentSelectNetwork?.isAllNetworks
           ? 'All Networks'
-          : currentSelectNetwork?.name ?? '',
+          : (currentSelectNetwork?.name ?? ''),
         direction: selectTokenModalType,
         from,
       });

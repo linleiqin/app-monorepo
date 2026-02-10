@@ -177,11 +177,15 @@ export function AccountSelectorWalletListSideBar({
       const hwWalletCount = wallets.filter(
         (wallet) => wallet.type === 'hw',
       ).length;
+      const keylessWalletCount = wallets.filter(
+        (wallet) => wallet.isKeyless,
+      ).length;
       const appWalletCount = walletCount - hwWalletCount;
       analytics.updateUserProfile({
         walletCount,
         hwWalletCount,
         appWalletCount,
+        keylessWalletCount,
       });
     }
   }, [wallets]);
@@ -192,13 +196,16 @@ export function AccountSelectorWalletListSideBar({
       hideNonBackedUpWallet &&
       !focusWalletChanged.current
     ) {
-      const backedUpWalletsMap = walletsResult.wallets.reduce((acc, wallet) => {
-        acc[wallet.id] = wallet;
-        wallet.hiddenWallets?.forEach((hiddenWallet) => {
-          acc[hiddenWallet.id] = hiddenWallet;
-        });
-        return acc;
-      }, {} as Record<string, IDBWallet>);
+      const backedUpWalletsMap = walletsResult.wallets.reduce(
+        (acc, wallet) => {
+          acc[wallet.id] = wallet;
+          wallet.hiddenWallets?.forEach((hiddenWallet) => {
+            acc[hiddenWallet.id] = hiddenWallet;
+          });
+          return acc;
+        },
+        {} as Record<string, IDBWallet>,
+      );
 
       if (
         !backedUpWalletsMap[selectedAccount.focusedWallet ?? ''] &&
@@ -331,6 +338,17 @@ export function AccountSelectorWalletListSideBar({
   const walletConnectionMap = useMemo(() => {
     const map = new Map<string, boolean>();
     wallets.forEach((wallet) => {
+      // Deprecated wallets should not show connection status
+      if (wallet.deprecated) {
+        map.set(wallet.id, false);
+        return;
+      }
+      // Hidden wallets (passphrase wallets) should never show connection status
+      if (accountUtils.isHwHiddenWallet({ wallet })) {
+        map.set(wallet.id, false);
+        return;
+      }
+
       const isHwWallet = accountUtils.isHwWallet({ walletId: wallet.id });
       const deviceId = wallet.associatedDeviceInfo?.deviceId;
       const isConnected =
@@ -389,7 +407,7 @@ export function AccountSelectorWalletListSideBar({
             borderCurve="continuous"
           />
         )}
-        keyExtractor={(item) => `${item.id}`}
+        keyExtractor={(item) => item.id}
         data={wallets as IAccountSelectorWalletInfo[]}
         onDragEnd={async (result) => {
           if (!walletsResult) {

@@ -54,6 +54,7 @@ import type { IHyperLiquidSignatureRSV } from '@onekeyhq/shared/types/hyperliqui
 
 import localDb from '../../dbs/local/localDb';
 import {
+  perpTokenSelectorTabsAtom,
   perpsAccountLoadingInfoAtom,
   perpsActiveAccountAtom,
   perpsActiveAccountStatusAtom,
@@ -160,7 +161,7 @@ export default class ServiceHyperliquid extends ServiceBase {
       return;
     }
     const networks = depositConfig.map((item) => item.network);
-    const tokens = depositConfig.map((item) => item.tokens).flat();
+    const tokens = depositConfig.flatMap((item) => item.tokens);
     await perpsDepositNetworksAtom.set((prev): IPerpsDepositNetworksAtom => {
       return {
         ...prev,
@@ -192,13 +193,15 @@ export default class ServiceHyperliquid extends ServiceBase {
     bannerConfig,
     depositTokenConfig,
     hyperLiquidErrorLocales,
+    tokenSearchAliases,
+    tokenSelectorTabs,
   }: IPerpServerConfigResponse) {
     let shouldNotifyToDapp = false;
 
     // Check configVersion change before updating
     const prevConfig = await this.backgroundApi.simpleDb.perp.getPerpData();
     const prevConfigVersion = prevConfig.configVersion;
-    const newConfigVersion = referrerConfig.configVersion;
+    const newConfigVersion = referrerConfig?.configVersion;
     const isConfigVersionChanged =
       !isNil(newConfigVersion) && prevConfigVersion !== newConfigVersion;
 
@@ -262,6 +265,8 @@ export default class ServiceHyperliquid extends ServiceBase {
             customLocalStorageV2 || prev?.hyperliquidCustomLocalStorageV2,
           hyperliquidErrorLocales:
             hyperLiquidErrorLocales || prev?.hyperliquidErrorLocales,
+          tokenSearchAliases: tokenSearchAliases || prev?.tokenSearchAliases,
+          tokenSelectorTabs: tokenSelectorTabs ?? prev?.tokenSelectorTabs,
         };
         if (isEqual(newConfig, prev)) {
           return (
@@ -275,6 +280,11 @@ export default class ServiceHyperliquid extends ServiceBase {
 
     // Update the error resolver locale data.
     hyperLiquidErrorResolver.updateLocales(hyperLiquidErrorLocales);
+
+    // Update token selector tabs atom
+    // Always set to transition from null (not loaded) to a valid state,
+    // even when server doesn't return tokenSelectorTabs (undefined → [])
+    await perpTokenSelectorTabsAtom.set(tokenSelectorTabs ?? []);
 
     if (shouldNotifyToDapp) {
       const config = await this.backgroundApi.simpleDb.perp.getPerpData();
@@ -329,6 +339,8 @@ export default class ServiceHyperliquid extends ServiceBase {
       bannerConfig: resData?.data?.bannerConfig,
       depositTokenConfig: resData?.data?.depositTokenConfig,
       hyperLiquidErrorLocales: resData?.data?.hyperLiquidErrorLocales,
+      tokenSearchAliases: resData?.data?.tokenSearchAliases,
+      tokenSelectorTabs: resData?.data?.tokenSelectorTabs,
     });
     return resData;
   }
@@ -349,6 +361,14 @@ export default class ServiceHyperliquid extends ServiceBase {
       promise: true,
     },
   );
+
+  @backgroundMethod()
+  async getTokenSearchAliases() {
+    // Ensure config is loaded (uses memoizee cache)
+    void this.updatePerpsConfigByServerWithCache();
+    const config = await this.backgroundApi.simpleDb.perp.getPerpData();
+    return config.tokenSearchAliases;
+  }
 
   private _filterFills(fills: IFill[]) {
     return fills.filter(
@@ -414,7 +434,7 @@ export default class ServiceHyperliquid extends ServiceBase {
       aggregateByTime: true,
     });
 
-    const sorted = [...fills].sort((a, b) => b.time - a.time);
+    const sorted = [...fills].toSorted((a, b) => b.time - a.time);
 
     await perpsTradesHistoryDataAtom.set({
       fills: sorted,
@@ -446,7 +466,7 @@ export default class ServiceHyperliquid extends ServiceBase {
 
     const filtered = this._filterFills(newFills)
       .filter((f) => f.time > current.latestTime)
-      .sort((a, b) => b.time - a.time);
+      .toSorted((a, b) => b.time - a.time);
 
     if (filtered.length === 0) {
       return;
@@ -479,7 +499,7 @@ export default class ServiceHyperliquid extends ServiceBase {
   @backgroundMethod()
   async refreshTradingMeta() {
     const { infoClient } = hyperLiquidApiClients;
-    // eslint-disable-next-line spellcheck/spell-checker
+    // oxlint-disable-next-line @cspell/spellchecker
     let perpMetaMultiDexList = await infoClient.allPerpMetas();
     if (perpMetaMultiDexList?.length) {
       if (perpMetaMultiDexList.length >= 2) {
@@ -661,32 +681,77 @@ export default class ServiceHyperliquid extends ServiceBase {
       return;
     }
 
-    const statePair = data.clearinghouseStates?.[0];
-    const clearinghouseState = statePair?.[1];
-    if (!clearinghouseState) {
+    const clearinghouseStates = data.clearinghouseStates || [];
+    if (clearinghouseStates.length === 0) {
       return;
     }
 
-    const positions = (clearinghouseState?.assetPositions ||
-      []) as IPerpsAssetPosition[];
-    const totalUnrealizedPnlBN = positions.reduce(
-      (sum: BigNumber, position: IPerpsAssetPosition) => {
-        const pnl = position.position?.unrealizedPnl;
-        return pnl ? sum.plus(pnl) : sum;
+    // Aggregate all DEXs (HL perps + xyz) using BigNumber
+    const aggregated = clearinghouseStates.reduce(
+      (acc, [, state]) => {
+        if (!state) return acc;
+
+        const { marginSummary, crossMarginSummary, assetPositions } = state;
+
+        // Aggregate margin summary values
+        acc.accountValue = acc.accountValue.plus(
+          marginSummary?.accountValue || '0',
+        );
+        acc.totalMarginUsed = acc.totalMarginUsed.plus(
+          marginSummary?.totalMarginUsed || '0',
+        );
+        acc.totalNtlPos = acc.totalNtlPos.plus(
+          marginSummary?.totalNtlPos || '0',
+        );
+        acc.totalRawUsd = acc.totalRawUsd.plus(
+          marginSummary?.totalRawUsd || '0',
+        );
+
+        // Aggregate cross margin values
+        acc.crossAccountValue = acc.crossAccountValue.plus(
+          crossMarginSummary?.accountValue || '0',
+        );
+        acc.crossMaintenanceMarginUsed = acc.crossMaintenanceMarginUsed.plus(
+          state.crossMaintenanceMarginUsed || '0',
+        );
+
+        // Aggregate withdrawable
+        acc.withdrawable = acc.withdrawable.plus(state.withdrawable || '0');
+
+        // Aggregate unrealized PnL from all positions
+        const positions = (assetPositions || []) as IPerpsAssetPosition[];
+        positions.forEach((position) => {
+          const pnl = position.position?.unrealizedPnl;
+          if (pnl) {
+            acc.totalUnrealizedPnl = acc.totalUnrealizedPnl.plus(pnl);
+          }
+        });
+
+        return acc;
       },
-      new BigNumber(0),
+      {
+        accountValue: new BigNumber(0),
+        totalMarginUsed: new BigNumber(0),
+        crossAccountValue: new BigNumber(0),
+        crossMaintenanceMarginUsed: new BigNumber(0),
+        totalNtlPos: new BigNumber(0),
+        totalRawUsd: new BigNumber(0),
+        withdrawable: new BigNumber(0),
+        totalUnrealizedPnl: new BigNumber(0),
+      },
     );
 
     await perpsActiveAccountSummaryAtom.set({
       accountAddress: activeAddress as IHex,
-      accountValue: clearinghouseState.marginSummary?.accountValue,
-      totalMarginUsed: clearinghouseState.marginSummary?.totalMarginUsed,
-      crossAccountValue: clearinghouseState.crossMarginSummary?.accountValue,
-      crossMaintenanceMarginUsed: clearinghouseState.crossMaintenanceMarginUsed,
-      totalNtlPos: clearinghouseState.marginSummary?.totalNtlPos,
-      totalRawUsd: clearinghouseState.marginSummary?.totalRawUsd,
-      withdrawable: clearinghouseState.withdrawable,
-      totalUnrealizedPnl: totalUnrealizedPnlBN.toFixed(),
+      accountValue: aggregated.accountValue.toFixed(),
+      totalMarginUsed: aggregated.totalMarginUsed.toFixed(),
+      crossAccountValue: aggregated.crossAccountValue.toFixed(),
+      crossMaintenanceMarginUsed:
+        aggregated.crossMaintenanceMarginUsed.toFixed(),
+      totalNtlPos: aggregated.totalNtlPos.toFixed(),
+      totalRawUsd: aggregated.totalRawUsd.toFixed(),
+      withdrawable: aggregated.withdrawable.toFixed(),
+      totalUnrealizedPnl: aggregated.totalUnrealizedPnl.toFixed(),
     });
   }
 
@@ -734,7 +799,7 @@ export default class ServiceHyperliquid extends ServiceBase {
           const ethNetworkId = PERPS_NETWORK_ID;
           const getNetworkAccountParams = {
             indexedAccountId: indexedAccountId ?? undefined,
-            accountId: indexedAccountId ? undefined : accountId ?? undefined,
+            accountId: indexedAccountId ? undefined : (accountId ?? undefined),
             networkId: ethNetworkId,
             deriveType: deriveType || 'default',
           };
@@ -1072,7 +1137,7 @@ export default class ServiceHyperliquid extends ServiceBase {
         )
       )
         .filter(Boolean)
-        .sort((a, b) => b.validUntil - a.validUntil);
+        .toSorted((a, b) => b.validUntil - a.validUntil);
       agentCredential = validAgents?.[0];
     }
     if (!agentCredential && isEnableTradingTrigger) {
@@ -1094,7 +1159,7 @@ export default class ServiceHyperliquid extends ServiceBase {
         );
         const agentToRemove = (
           nonOneKeyAgents.length ? nonOneKeyAgents : extraAgents
-        ).sort((a, b) => a.validUntil - b.validUntil)?.[0];
+        ).toSorted((a, b) => a.validUntil - b.validUntil)?.[0];
         const agentNameToRemove = agentToRemove?.name as
           | EHyperLiquidAgentName
           | undefined;

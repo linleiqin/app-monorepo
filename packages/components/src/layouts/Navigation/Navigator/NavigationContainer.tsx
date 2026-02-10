@@ -17,7 +17,7 @@ import { useMMKVDevTools } from '@rozenite/mmkv-plugin';
 import { useNetworkActivityDevTools } from '@rozenite/network-activity-plugin';
 import { useReactNavigationDevTools } from '@rozenite/react-navigation-plugin';
 
-import { useIsTabletMainView } from '@onekeyhq/components/src/hooks/useTabletMode';
+import { useSplitMainView } from '@onekeyhq/components/src/hooks/useSplitView';
 import { useTheme } from '@onekeyhq/components/src/shared/tamagui';
 import type { GetProps } from '@onekeyhq/components/src/shared/tamagui';
 import appGlobals from '@onekeyhq/shared/src/appGlobals';
@@ -30,6 +30,7 @@ import type {
 } from '@onekeyhq/shared/src/routes';
 import { ERootRoutes } from '@onekeyhq/shared/src/routes';
 import mmkvStorageInstance from '@onekeyhq/shared/src/storage/instance/mmkvStorageInstance';
+import timerUtils from '@onekeyhq/shared/src/utils/timerUtils';
 
 import { useSettingConfig } from '../../../hocs/Provider/hooks/useProviderValue';
 
@@ -91,7 +92,7 @@ const useNativeDevTools =
     : () => {};
 
 export function NavigationContainer(props: IBasicNavigationContainerProps) {
-  const isTabletMainView = useIsTabletMainView();
+  const isTabletMainView = useSplitMainView();
   const handleReady = useCallback(() => {
     navigationIntegration.registerNavigationContainer(
       isTabletMainView ? tabletMainViewNavigationRef : rootNavigationRef,
@@ -132,7 +133,6 @@ export function NavigationContainer(props: IBasicNavigationContainerProps) {
 export const switchTab = <T extends ETabRoutes>(
   route: T,
   params?: {
-    screen: keyof ITabStackParamList[T];
     params?: ITabStackParamList[T][keyof ITabStackParamList[T]];
   },
 ) => {
@@ -158,4 +158,34 @@ export const switchTab = <T extends ETabRoutes>(
       pop: true,
     },
   );
+};
+
+export const popToMainRoute = async (maxRetryTimes = 99) => {
+  if (maxRetryTimes <= 0) {
+    return;
+  }
+  const rootState = rootNavigationRef.current?.getRootState();
+  if (rootState?.routes?.[rootState.index]?.name === ERootRoutes.Main) {
+    return;
+  }
+  if (rootNavigationRef.current?.canGoBack()) {
+    rootNavigationRef.current?.goBack?.();
+  }
+  await timerUtils.wait(150);
+  await popToMainRoute(maxRetryTimes - 1);
+};
+
+export const popToTabRootScreen = async () => {
+  const rootState = rootNavigationRef.current?.getRootState();
+  const tabRoute = rootState?.routes?.[rootState.index];
+  if (!tabRoute?.state) {
+    return;
+  }
+  if ((tabRoute?.state?.index || 0) > 0) {
+    if (rootNavigationRef.current?.canGoBack()) {
+      rootNavigationRef.current?.goBack();
+      await timerUtils.wait(150);
+      await popToTabRootScreen();
+    }
+  }
 };

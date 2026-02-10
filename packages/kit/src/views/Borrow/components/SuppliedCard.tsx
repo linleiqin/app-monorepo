@@ -9,8 +9,8 @@ import type { IBorrowReserveItem } from '@onekeyhq/shared/types/staking';
 
 import { EarnText } from '../../Staking/components/ProtocolDetails/EarnText';
 import { EarnTooltip } from '../../Staking/components/ProtocolDetails/EarnTooltip';
-import { useEarnAccount } from '../../Staking/hooks/useEarnAccount';
 import { EManagePositionType } from '../../Staking/pages/ManagePosition/hooks/useManagePage';
+import { EBorrowDataStatus } from '../borrowDataStatus';
 import { useBorrowContext } from '../BorrowProvider';
 import { BorrowNavigation } from '../borrowUtils';
 
@@ -30,13 +30,15 @@ const SuppliedHeader = ({
   data,
   suppliedBalanceLabel,
   apyLabel,
+  isDesktop,
 }: {
   data?: IBorrowReserveItem['supplied'];
   suppliedBalanceLabel: string;
   apyLabel: string;
+  isDesktop?: boolean;
 }) => {
   return (
-    <XStack mt="$3" mb="$5" px="$5" gap="$5">
+    <XStack mt="$3" mb={isDesktop ? '$3' : '$2'} px="$5" gap="$5">
       {data?.suppliedBalance?.title ? (
         <XStack gap="$1" ai="center">
           <EarnText
@@ -46,7 +48,7 @@ const SuppliedHeader = ({
               color: '$textSubdued',
             }}
           />
-          <EarnText text={data?.suppliedBalance?.title} />
+          <EarnText text={data?.suppliedBalance?.title} size="$bodyMdMedium" />
         </XStack>
       ) : null}
       {data?.suppliedApy?.title ? (
@@ -58,7 +60,7 @@ const SuppliedHeader = ({
               color: '$textSubdued',
             }}
           />
-          <EarnText text={data?.suppliedApy?.title} />
+          <EarnText text={data?.suppliedApy?.title} size="$bodyMdMedium" />
           <EarnTooltip tooltip={data?.suppliedApy?.tooltip} />
         </XStack>
       ) : null}
@@ -67,14 +69,14 @@ const SuppliedHeader = ({
 };
 
 export const SuppliedCard = () => {
-  const { reserves, market, reservesLoading } = useBorrowContext();
+  const { reserves, market, borrowDataStatus, earnAccount } =
+    useBorrowContext();
   const intl = useIntl();
   const navigation = useAppNavigation();
-  const { earnAccount } = useEarnAccount({ networkId: market?.networkId });
   const { gtMd } = useMedia();
-  const accountId = earnAccount?.account?.id || '';
-  const walletId = earnAccount?.walletId || '';
-  const indexedAccountId = earnAccount?.account?.indexedAccountId;
+  const accountId = earnAccount.data?.account?.id || '';
+  const walletId = earnAccount.data?.walletId || '';
+  const indexedAccountId = earnAccount.data?.account?.indexedAccountId;
 
   const handleManageWithdraw = useCallback(
     (item: ISuppliedAsset) => {
@@ -90,10 +92,10 @@ export const SuppliedCard = () => {
         providerLogoURI: market.logoURI,
         logoURI: item.token.logoURI,
         type: EManagePositionType.Withdraw,
-        borrowReserves: reserves ?? undefined,
+        borrowReserves: reserves.data ?? undefined,
       });
     },
-    [navigation, market, accountId, reserves],
+    [navigation, market, accountId, reserves.data],
   );
 
   const handlePressRow = useCallback(
@@ -126,7 +128,10 @@ export const SuppliedCard = () => {
     ],
   );
 
-  const showLoading = !reserves && reservesLoading;
+  const showLoading =
+    borrowDataStatus === EBorrowDataStatus.LoadingMarkets ||
+    borrowDataStatus === EBorrowDataStatus.WaitingForAccount ||
+    borrowDataStatus === EBorrowDataStatus.LoadingReserves;
 
   const labels = useMemo(() => {
     const asset = intl.formatMessage({ id: ETranslations.global_asset });
@@ -230,8 +235,8 @@ export const SuppliedCard = () => {
   );
 
   const hasData = useMemo(
-    () => (reserves?.supplied?.assets || []).length > 0,
-    [reserves?.supplied?.assets],
+    () => (reserves.data?.supplied?.assets || []).length > 0,
+    [reserves.data?.supplied?.assets],
   );
 
   return (
@@ -240,15 +245,16 @@ export const SuppliedCard = () => {
       renderHeader={
         !showLoading && hasData ? (
           <SuppliedHeader
-            data={reserves?.supplied}
+            data={reserves.data?.supplied}
             suppliedBalanceLabel={labels.suppliedBalance}
             apyLabel={labels.apy}
+            isDesktop={gtMd}
           />
         ) : null
       }
     >
       <BorrowTableList<ISuppliedAsset>
-        data={reserves?.supplied?.assets || []}
+        data={reserves.data?.supplied?.assets || []}
         isLoading={showLoading}
         columns={gtMd ? desktopColumns : mobileColumns}
         onPressRow={handlePressRow}

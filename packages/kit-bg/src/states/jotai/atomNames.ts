@@ -15,6 +15,7 @@ export enum EAtomNames {
   passwordAtom = 'passwordAtom',
   passwordPromptPromiseTriggerAtom = 'passwordPromptPromiseTriggerAtom',
   passwordPersistAtom = 'passwordPersistAtom',
+  passwordPersistManualLockStateAtom = 'passwordPersistManualLockStateAtom',
   jotaiContextStoreMapAtom = 'jotaiContextStoreMapAtom',
   addressBookPersistAtom = 'addressBookPersistAtom',
   hardwareUiStateAtom = 'hardwareUiStateAtom',
@@ -42,7 +43,7 @@ export enum EAtomNames {
   activeAccountValueAtom = 'activeAccountValueAtom',
   settingsValuePersistAtom = 'settingsValuePersistAtom',
   settingsTronRentalPersistAtom = 'settingsTronRentalPersistAtom',
-  appSideBarStatusAtom = 'appSideBarStatusAtom',
+
   // notificationsAtom, notificationsPersistAtom is reserved for notificationsPersistAtom
   notificationsAtom = 'notificationsAtom', // persist
   notificationsReadedAtom = 'notificationsReadedAtom',
@@ -57,6 +58,7 @@ export enum EAtomNames {
   primeTransferAtom = 'primeTransferAtom',
   keylessDialogAtom = 'keylessDialogAtom',
   keylessPinConfirmStatusAtom = 'keylessPinConfirmStatusAtom',
+  keylessLastCancelVerifyPinTimeAtom = 'keylessLastCancelVerifyPinTimeAtom',
   accountSelectorAccountsListIsLoadingAtom = 'accountSelectorAccountsListIsLoadingAtom',
   accountSelectorStatusAtom = 'accountSelectorStatusAtom',
   allNetworksPersistAtom = 'allNetworksPersistAtom',
@@ -86,6 +88,7 @@ export enum EAtomNames {
   perpsCandlesWebviewMountedAtom = 'perpsCandlesWebviewMountedAtom',
   perpsWebSocketDataUpdateTimesAtom = 'perpsWebSocketDataUpdateTimesAtom',
   perpTokenSelectorConfigPersistAtom = 'perpTokenSelectorConfigPersistAtom',
+  perpTokenSelectorTabsAtom = 'perpTokenSelectorTabsAtom',
   perpTokenFavoritesPersistAtom = 'perpTokenFavoritesPersistAtom',
   perpsDepositOrderAtom = 'perpsDepositOrderAtom',
   perpsLastUsedLeverageAtom = 'perpsLastUsedLeverageAtom',

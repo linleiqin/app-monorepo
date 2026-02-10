@@ -117,6 +117,7 @@ export interface ISwapInitParams {
   importToToken?: ISwapToken;
   importNetworkId?: string;
   swapTabSwitchType?: ESwapTabSwitchType;
+  fromAmount?: string;
 }
 
 // token & network
@@ -151,6 +152,17 @@ export interface ISwapTokenBase {
   speedSwapDefaultAmount?: number[];
 }
 
+export interface IFreeFeeTokenItem {
+  networkId: string;
+  contractAddress: string;
+  symbol: string;
+}
+
+export interface IFreeFeeObject {
+  tokenList: IFreeFeeTokenItem[];
+  tag: string;
+}
+
 export interface ISwapToken extends ISwapTokenBase {
   balanceParsed?: string;
   price?: string;
@@ -164,6 +176,8 @@ export interface ISwapToken extends ISwapTokenBase {
 
   isPopular?: boolean;
   isWrapped?: boolean;
+
+  freeFeeObject?: IFreeFeeObject;
 }
 
 export interface ISwapTokenCatch {
@@ -624,6 +638,7 @@ export interface IFetchQuoteFee {
   estimatedFeeFiatValue?: number;
   otherFeeInfos?: IQuoteResultFeeOtherFeeInfo[];
   isFreeNetworkFee?: boolean;
+  costSavings?: string;
 }
 
 export enum ESwapApproveAllowanceType {

@@ -2,6 +2,7 @@ import type { IKeylessWalletDetailsInfo } from '@onekeyhq/kit-bg/src/dbs/local/t
 
 import type { EConnectDeviceChannel } from '../../types/connectDevice';
 import type { IConnectYourDeviceItem } from '../../types/device';
+import type { EOAuthSocialLoginProvider } from '../consts/authConsts';
 import type { EKeylessFinalizeAction } from '../keylessWallet/keylessWalletConsts';
 import type { IDetectedNetworkGroupItem } from '../utils/networkDetectUtils';
 import type { EMnemonicType } from '../utils/secret';
@@ -54,7 +55,7 @@ export enum EOnboardingPagesV2 {
   CreatePin = 'CreatePin',
   ConfirmPin = 'ConfirmPin',
   VerifyPin = 'VerifyPin',
-  ResetPin = 'ResetPin',
+  ResetPinGuide = 'ResetPinGuide',
   NewPinCreated = 'NewPinCreated',
   CreatePasscode = 'CreatePasscode',
   MoreAction = 'MoreAction',
@@ -133,6 +134,7 @@ export type IOnboardingParamListV2 = {
   };
   [EOnboardingPagesV2.OneKeyIDLogin]: {
     mode: EOnboardingV2OneKeyIDLoginMode;
+    provider?: EOAuthSocialLoginProvider;
   };
   [EOnboardingPagesV2.CreatePin]: {
     action?: EKeylessFinalizeAction;
@@ -146,7 +148,7 @@ export type IOnboardingParamListV2 = {
   [EOnboardingPagesV2.VerifyPin]: {
     mode?: EOnboardingV2OneKeyIDLoginMode;
   };
-  [EOnboardingPagesV2.ResetPin]: undefined;
+  [EOnboardingPagesV2.ResetPinGuide]: undefined;
   [EOnboardingPagesV2.NewPinCreated]: undefined;
   [EOnboardingPagesV2.MoreAction]: undefined;
 };

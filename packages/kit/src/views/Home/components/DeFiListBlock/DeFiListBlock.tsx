@@ -44,6 +44,7 @@ import {
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import defiUtils from '@onekeyhq/shared/src/utils/defiUtils';
 import networkUtils from '@onekeyhq/shared/src/utils/networkUtils';
+import { EHomeTab } from '@onekeyhq/shared/types';
 import type {
   IDeFiProtocol,
   IProtocolSummary,
@@ -98,6 +99,8 @@ function DeFiListBlock({ tableLayout }: { tableLayout?: boolean }) {
   const {
     activeAccount: { account, network, wallet },
   } = useActiveAccount({ num: 0 });
+
+  const isForceRefreshRef = useRef(false);
 
   const [isDeFiEnabled, setIsDeFiEnabled] = useState(false);
   const [isAllNetRequestsEnabled, setIsAllNetRequestsEnabled] =
@@ -191,6 +194,13 @@ function DeFiListBlock({ tableLayout }: { tableLayout?: boolean }) {
 
       await backgroundApiProxy.serviceDeFi.abortFetchAccountDeFiPositions();
 
+      appEventBus.emit(EAppEventBusNames.TabListStateUpdate, {
+        isRefreshing: true,
+        type: EHomeTab.DEFI,
+        accountId: account.id,
+        networkId: network.id,
+      });
+
       try {
         const resp =
           await backgroundApiProxy.serviceDeFi.fetchAccountDeFiPositions({
@@ -201,6 +211,7 @@ function DeFiListBlock({ tableLayout }: { tableLayout?: boolean }) {
             sourceCurrencyInfo,
             targetCurrencyInfo,
             saveToLocal: true,
+            isForceRefresh: isForceRefreshRef.current,
           });
         updateAccountDeFiOverview({
           currency: settings.currencyInfo.id,
@@ -220,9 +231,16 @@ function DeFiListBlock({ tableLayout }: { tableLayout?: boolean }) {
       } catch (e) {
         console.error(e);
       } finally {
+        isForceRefreshRef.current = false;
         updateDeFiListState({
           isRefreshing: false,
           initialized: true,
+        });
+        appEventBus.emit(EAppEventBusNames.TabListStateUpdate, {
+          isRefreshing: false,
+          type: EHomeTab.DEFI,
+          accountId: account.id,
+          networkId: network.id,
         });
       }
     },
@@ -290,6 +308,7 @@ function DeFiListBlock({ tableLayout }: { tableLayout?: boolean }) {
         excludeLowValueProtocols: true,
         sourceCurrencyInfo,
         targetCurrencyInfo,
+        isForceRefresh: isForceRefreshRef.current,
       });
 
       if (!allNetworkDataInit && r.isSameAllNetworksAccountData) {
@@ -372,10 +391,26 @@ function DeFiListBlock({ tableLayout }: { tableLayout?: boolean }) {
     updateDeFiListProtocolMap,
   ]);
 
-  const handleAllNetworkRequestsStarted = useCallback(async () => {
-    deFiRawDataRef.current =
-      (await backgroundApiProxy.simpleDb.deFi.getRawData()) ?? undefined;
-  }, []);
+  const handleAllNetworkRequestsStarted = useCallback(
+    async ({
+      accountId,
+      networkId,
+    }: {
+      accountId?: string;
+      networkId?: string;
+    }) => {
+      deFiRawDataRef.current =
+        (await backgroundApiProxy.simpleDb.deFi.getRawData()) ?? undefined;
+
+      appEventBus.emit(EAppEventBusNames.TabListStateUpdate, {
+        isRefreshing: true,
+        type: EHomeTab.DEFI,
+        accountId: accountId ?? '',
+        networkId: networkId ?? '',
+      });
+    },
+    [],
+  );
 
   const handleAllNetworkCacheRequests = useCallback(
     async ({
@@ -483,6 +518,26 @@ function DeFiListBlock({ tableLayout }: { tableLayout?: boolean }) {
     [settings.currencyInfo.id, updateAccountDeFiOverview],
   );
 
+  const handleAllNetworkRequestsFinished = useCallback(
+    async ({
+      accountId,
+      networkId,
+    }: {
+      accountId?: string;
+      networkId?: string;
+    }) => {
+      isForceRefreshRef.current = false;
+
+      appEventBus.emit(EAppEventBusNames.TabListStateUpdate, {
+        isRefreshing: false,
+        type: EHomeTab.DEFI,
+        accountId: accountId ?? '',
+        networkId: networkId ?? '',
+      });
+    },
+    [],
+  );
+
   const {
     run: runAllNetworkRequests,
     result: allNetworksResult,
@@ -499,6 +554,7 @@ function DeFiListBlock({ tableLayout }: { tableLayout?: boolean }) {
     walletId: wallet?.id,
     isAllNetworks: network?.isAllNetworks,
     onStarted: handleAllNetworkRequestsStarted,
+    onFinished: handleAllNetworkRequestsFinished,
     allNetworkCacheRequests: handleAllNetworkCacheRequests,
     allNetworkCacheData: handleAllNetworkCacheData,
     allNetworkRequests: handleAllNetworkRequests,
@@ -653,6 +709,7 @@ function DeFiListBlock({ tableLayout }: { tableLayout?: boolean }) {
     const onRefresh = () => {
       if (isFocused) {
         pendingRefreshRef.current = false;
+        isForceRefreshRef.current = true;
         refresh();
       } else {
         pendingRefreshRef.current = true;
@@ -683,8 +740,8 @@ function DeFiListBlock({ tableLayout }: { tableLayout?: boolean }) {
         protocolCount: 0,
         positionCount: 0,
       };
-      let tempProtocols: IDeFiProtocol[] = [];
-      let tempProtocolMap: Record<string, IProtocolSummary> = {};
+      const tempProtocols: IDeFiProtocol[] = [];
+      const tempProtocolMap: Record<string, IProtocolSummary> = {};
       // merge all networks result
       for (const r of allNetworksResult) {
         tempOverview.totalValue = new BigNumber(tempOverview.totalValue)
@@ -704,11 +761,8 @@ function DeFiListBlock({ tableLayout }: { tableLayout?: boolean }) {
         );
         tempOverview.protocolCount += r.overview.protocolCount;
         tempOverview.positionCount += r.overview.positionCount;
-        tempProtocols = [...tempProtocols, ...r.protocols];
-        tempProtocolMap = {
-          ...tempProtocolMap,
-          ...r.protocolMap,
-        };
+        tempProtocols.push(...r.protocols);
+        Object.assign(tempProtocolMap, r.protocolMap);
       }
       updateAccountDeFiOverview({
         currency: settings.currencyInfo.id,
@@ -788,7 +842,7 @@ function DeFiListBlock({ tableLayout }: { tableLayout?: boolean }) {
   const renderContent = useCallback(() => {
     return (
       <>
-        <YStack gap={tableLayout ? '$5' : '$0'} flex={1}>
+        <YStack gap={tableLayout ? '$8' : '$0'} flex={1}>
           {filteredProtocols.map((protocol) => (
             <Protocol
               key={`${protocol.networkId}-${protocol.protocol}`}
@@ -799,7 +853,12 @@ function DeFiListBlock({ tableLayout }: { tableLayout?: boolean }) {
           ))}
         </YStack>
         {overflowState.isOverflow ? (
-          <XStack alignItems="center" justifyContent="center" pt="$4">
+          <XStack
+            alignItems="center"
+            justifyContent="center"
+            pt="$4"
+            px="$pagePadding"
+          >
             <Button
               size="small"
               variant="secondary"
@@ -845,20 +904,12 @@ function DeFiListBlock({ tableLayout }: { tableLayout?: boolean }) {
         withTitleSeparator
         title={intl.formatMessage({ id: ETranslations.global_earn })}
         subTitle={renderSubTitle()}
-        plainContentContainer={!tableLayout}
+        headerContainerProps={{ px: '$pagePadding' }}
+        contentContainerProps={{ mx: '$5' }}
+        plainContentContainer={!initialized && isRefreshing}
         content={
           !initialized && isRefreshing ? (
-            <ListLoading
-              itemProps={
-                tableLayout
-                  ? undefined
-                  : {
-                      mx: '$0',
-                      px: '$0',
-                    }
-              }
-              isTokenSelectorView={false}
-            />
+            <ListLoading isTokenSelectorView={false} />
           ) : (
             <EmptyDeFi tableLayout={tableLayout} />
           )
@@ -872,6 +923,7 @@ function DeFiListBlock({ tableLayout }: { tableLayout?: boolean }) {
       withTitleSeparator
       title={intl.formatMessage({ id: ETranslations.global_earn })}
       subTitle={renderSubTitle()}
+      headerContainerProps={{ px: '$pagePadding' }}
       content={renderContent()}
       plainContentContainer
     />

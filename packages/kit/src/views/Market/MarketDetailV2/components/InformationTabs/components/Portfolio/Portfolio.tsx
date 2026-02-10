@@ -45,13 +45,13 @@ function PortfolioBase({
       [gtLg],
     );
 
-  // If no account address, show a message
+  // If no account address, show no data message
   if (!accountAddress) {
     return (
       <Stack flex={1} alignItems="center" justifyContent="center" p="$8">
         <SizableText size="$bodyLg" color="$textSubdued">
           {intl.formatMessage({
-            id: ETranslations.no_account,
+            id: ETranslations.dexmarket_details_nodata,
           })}
         </SizableText>
       </Stack>
@@ -60,7 +60,9 @@ function PortfolioBase({
 
   return (
     <Tabs.FlatList<IMarketAccountPortfolioItem>
+      showsVerticalScrollIndicator={false}
       data={portfolioData}
+      windowSize={platformEnv.isNativeAndroid ? 3 : undefined}
       contentContainerStyle={{
         paddingBottom: platformEnv.isNativeAndroid ? 84 : 16,
       }}
@@ -68,7 +70,6 @@ function PortfolioBase({
       keyExtractor={(item: IMarketAccountPortfolioItem) =>
         `${item.accountAddress}-${item.tokenAddress}`
       }
-      showsVerticalScrollIndicator
       ListEmptyComponent={
         isRefreshing ? (
           <PortfolioSkeleton />

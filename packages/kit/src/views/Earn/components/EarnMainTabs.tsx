@@ -1,7 +1,8 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { useIsFocused } from '@react-navigation/core';
 import { useIntl } from 'react-intl';
+import { StyleSheet } from 'react-native';
 
 import type { ITabContainerRef } from '@onekeyhq/components';
 import {
@@ -13,7 +14,9 @@ import {
   XStack,
   YStack,
   rootNavigationRef,
+  useScrollContentTabBarOffset,
   useTabContainerWidth,
+  useTheme,
 } from '@onekeyhq/components';
 import {
   EAppEventBusNames,
@@ -25,6 +28,7 @@ import platformEnv from '@onekeyhq/shared/src/platformEnv';
 import { ListItem } from '../../../components/ListItem';
 import { useIsFirstFocused } from '../../../hooks/useIsFirstFocused';
 import { useRouteIsFocused } from '../../../hooks/useRouteIsFocused';
+import { useEarnHideSmallAssets } from '../hooks/useEarnHideSmallAssets';
 
 import { FAQContent } from './FAQContent';
 import { PortfolioTabContent } from './PortfolioTabContent';
@@ -43,6 +47,7 @@ interface IEarnMainTabsProps {
   defaultTab?: 'assets' | 'portfolio' | 'faqs';
   portfolioData: IUseEarnPortfolioReturn;
   header?: React.ReactNode;
+  tabsRef?: React.RefObject<ITabContainerRef | null>;
 }
 
 const TabContentContainer = ({
@@ -54,14 +59,16 @@ const TabContentContainer = ({
   withHorizontalPadding?: boolean;
   maxWidth?: number;
 }) => {
+  const tabBarHeight = useScrollContentTabBarOffset();
   return (
-    <Tabs.ScrollView>
+    <Tabs.ScrollView showsVerticalScrollIndicator={false}>
       <YStack
         pt="$6"
         pb="$6"
         gap="$8"
         {...(withHorizontalPadding ? { px: '$5' } : {})}
         {...(maxWidth ? { maxWidth } : {})}
+        style={tabBarHeight ? { paddingBottom: tabBarHeight } : undefined}
       >
         {children}
       </YStack>
@@ -76,10 +83,13 @@ const EarnMainTabsComponent = ({
   defaultTab,
   portfolioData,
   header,
+  tabsRef: externalTabsRef,
 }: IEarnMainTabsProps) => {
   const intl = useIntl();
-  const tabsRef = useRef<ITabContainerRef>(null);
-  const [hideSmallAssets, setHideSmallAssets] = useState(false);
+  const theme = useTheme();
+  const internalTabsRef = useRef<ITabContainerRef>(null);
+  const tabsRef = externalTabsRef || internalTabsRef;
+  const { hideSmallAssets, setHideSmallAssets } = useEarnHideSmallAssets();
 
   const tabNames = useMemo(
     () => ({
@@ -144,6 +154,7 @@ const EarnMainTabsComponent = ({
         tabsRef.current.jumpToTab(targetTabName);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultTab, initialTabName, isFocused]);
 
   useEffect(() => {
@@ -156,12 +167,14 @@ const EarnMainTabsComponent = ({
     return () => {
       appEventBus.off(EAppEventBusNames.SwitchEarnTab, callback);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getTabName]);
 
   useEffect(
     () => () => {
       tabsRef.current = null;
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
@@ -218,16 +231,29 @@ const EarnMainTabsComponent = ({
         />
       );
     },
-    [hideSmallAssets, intl, tabNames.portfolio],
+    [hideSmallAssets, intl, setHideSmallAssets, tabNames.portfolio],
   );
 
   const mergedContainerProps = useMemo<
     Partial<CollapsibleProps> | undefined
   >(() => {
-    if (!header) return containerProps;
+    const mergedHeaderContainerStyle = StyleSheet.flatten(
+      containerProps?.headerContainerStyle,
+    );
+    const headerContainerStyle = {
+      backgroundColor: theme.bgApp.val,
+      ...mergedHeaderContainerStyle,
+    };
+    if (!header) {
+      return {
+        ...containerProps,
+        headerContainerStyle,
+      };
+    }
     const renderHeader = containerProps?.renderHeader;
     return {
-      ...(containerProps ?? {}),
+      ...containerProps,
+      headerContainerStyle,
       renderHeader: (props: TabBarProps<string>) => (
         <YStack>
           {header}
@@ -235,7 +261,7 @@ const EarnMainTabsComponent = ({
         </YStack>
       ),
     };
-  }, [containerProps, header]);
+  }, [containerProps, header, theme.bgApp.val]);
 
   return (
     <Tabs.Container

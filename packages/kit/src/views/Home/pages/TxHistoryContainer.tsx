@@ -2,7 +2,11 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { isEmpty, uniqBy } from 'lodash';
 
-import { useMedia, useTabIsRefreshingFocused } from '@onekeyhq/components';
+import {
+  useMedia,
+  useScrollContentTabBarOffset,
+  useTabIsRefreshingFocused,
+} from '@onekeyhq/components';
 import backgroundApiProxy from '@onekeyhq/kit/src/background/instance/backgroundApiProxy';
 import type { IAllNetworkAccountInfo } from '@onekeyhq/kit-bg/src/services/ServiceAllNetwork/ServiceAllNetwork';
 import {
@@ -236,7 +240,7 @@ function TxHistoryListContainer(
         });
 
         r.txs = r.txs
-          .sort(
+          .toSorted(
             (b, a) =>
               (a.decodedTx.updatedAt ?? a.decodedTx.createdAt ?? 0) -
               (b.decodedTx.updatedAt ?? b.decodedTx.createdAt ?? 0),
@@ -343,7 +347,7 @@ function TxHistoryListContainer(
         );
         accountHistoryTxs = resp
           .flat()
-          .sort(
+          .toSorted(
             (b, a) =>
               (a.decodedTx.updatedAt ?? a.decodedTx.createdAt ?? 0) -
               (b.decodedTx.updatedAt ?? b.decodedTx.createdAt ?? 0),
@@ -473,6 +477,8 @@ function TxHistoryListContainer(
     recomputeLayout,
   ]);
 
+  const tabBarHeight = useScrollContentTabBarOffset();
+
   return (
     <TxHistoryListView
       ref={ListComponentRef}
@@ -497,6 +503,7 @@ function TxHistoryListContainer(
       listViewStyleProps={{
         contentContainerStyle: {
           mt: '$3',
+          pb: tabBarHeight,
         },
       }}
       tokenMap={allTokenListMap}

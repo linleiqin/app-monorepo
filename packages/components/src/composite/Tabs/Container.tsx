@@ -12,6 +12,7 @@ import {
 import type { PropsWithChildren, RefObject } from 'react';
 
 import { debounce } from 'lodash';
+import type { SharedValue } from 'react-native-reanimated';
 import { useAnimatedReaction, useSharedValue } from 'react-native-reanimated';
 import { WindowScroller } from 'react-virtualized';
 
@@ -32,11 +33,32 @@ export function ContainerChild({
   children,
   listContainerRef,
   containerWidth,
+  focusedTab,
+  tabNames,
   ...props
 }: PropsWithChildren<WindowScrollerChildProps> & {
   listContainerRef: RefObject<Element>;
   containerWidth: number | string | undefined;
+  focusedTab: SharedValue<string>;
+  tabNames: (string | null)[];
 }) {
+  useAnimatedReaction(
+    () => focusedTab.value,
+    (tabName) => {
+      const focusedIndex = tabNames.findIndex((name) => name === tabName);
+      if (focusedIndex > -1 && listContainerRef.current) {
+        listContainerRef.current.childNodes.forEach((element, index) => {
+          if (element) {
+            (
+              (element as HTMLDivElement).style as unknown as {
+                contentVisibility: 'hidden' | 'visible';
+              }
+            ).contentVisibility = focusedIndex === index ? 'visible' : 'hidden';
+          }
+        });
+      }
+    },
+  );
   return (
     <TabsScrollContext.Provider value={props}>
       <XStack
@@ -122,13 +144,16 @@ export function Container({
     initialTabName || tabNames[0] || '',
   );
   const scrollTabElementDict = useMemo(() => {
-    return tabNames.reduce((acc, name) => {
-      acc[name] = {
-        element: null,
-        height: 0,
-      };
-      return acc;
-    }, {} as { [key: string]: { element: HTMLElement | null; height: number } });
+    return tabNames.reduce(
+      (acc, name) => {
+        acc[name] = {
+          element: null,
+          height: 0,
+        };
+        return acc;
+      },
+      {} as { [key: string]: { element: HTMLElement | null; height: number } },
+    );
   }, [tabNames]);
   const scrollTabElementsRef = useRef<{
     [key: string]: {
@@ -177,16 +202,14 @@ export function Container({
             ?.clientHeight;
 
         if (height) {
-          (
-            listContainerRef.current as HTMLElement
-          ).style.maxHeight = `${height}px`;
+          (listContainerRef.current as HTMLElement).style.maxHeight =
+            `${height}px`;
           setTimeout(() => {
             resizeObserverRef.current = new ResizeObserver((entries) => {
               const entry = entries[0];
               if (entry && entry.contentRect.height) {
-                (
-                  listContainerRef.current as HTMLElement
-                ).style.maxHeight = `${entry.contentRect.height}px`;
+                (listContainerRef.current as HTMLElement).style.maxHeight =
+                  `${entry.contentRect.height}px`;
               } else {
                 // When quickly removing and adding observer nodes, ResizeObserver API has a delay
                 // and there's a chance it won't get the current node height, so we need delayed retries
@@ -398,6 +421,8 @@ export function Container({
                     onChildScroll={onChildScroll}
                     registerChild={registerChild}
                     listContainerRef={listContainerRef as any}
+                    focusedTab={focusedTab}
+                    tabNames={tabNames}
                   >
                     {children}
                   </ContainerChild>

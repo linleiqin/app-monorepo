@@ -1,4 +1,3 @@
-/* eslint-disable spellcheck/spell-checker */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
   CMT_PROGRAM,
@@ -482,7 +481,7 @@ export default class Vault extends VaultBase {
       return {
         isProgrammableNFT: false,
       };
-    } catch (error) {
+    } catch (_error) {
       return {
         isProgrammableNFT: false,
       };
@@ -882,9 +881,8 @@ export default class Vault extends VaultBase {
           if (destinationAta && !createdAta[destinationAta]) {
             try {
               // Get the ATA account info to find the owner and mint
-              const ataAccountInfo = await this._getAssociatedAccountInfo(
-                destinationAta,
-              );
+              const ataAccountInfo =
+                await this._getAssociatedAccountInfo(destinationAta);
               const { mint, owner } = ataAccountInfo;
 
               ataDetails.push({
@@ -1255,7 +1253,7 @@ export default class Vault extends VaultBase {
           }
         }
       }
-    } catch (e) {
+    } catch (_e) {
       return Promise.resolve(encodedTx);
     }
 

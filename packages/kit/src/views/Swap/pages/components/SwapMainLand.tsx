@@ -11,10 +11,12 @@ import type {
 import {
   Dialog,
   EPageType,
+  Page,
   Toast,
   YStack,
   useInModalDialog,
   useInTabDialog,
+  useMedia,
 } from '@onekeyhq/components';
 import backgroundApiProxy from '@onekeyhq/kit/src/background/instance/backgroundApiProxy';
 import { AccountSelectorProviderMirror } from '@onekeyhq/kit/src/components/AccountSelector';
@@ -135,6 +137,7 @@ interface ISwapMainLoadProps {
 const SwapMainLoad = ({ swapInitParams, pageType }: ISwapMainLoadProps) => {
   const { preSwapStepsStart, preSwapBeforeStepActions } = useSwapBuildTx();
   const intl = useIntl();
+  const { gtLg } = useMedia();
   const { fetchLoading } = useSwapInit(swapInitParams);
   const navigation =
     useAppNavigation<IPageNavigationProp<IModalSwapParamList>>();
@@ -409,7 +412,10 @@ const SwapMainLoad = ({ swapInitParams, pageType }: ISwapMainLoadProps) => {
         maxAmount = BigNumber.max(
           0,
           maxAmount.minus(new BigNumber(reserveGas)),
-        ).decimalPlaces(fromSelectToken?.decimals ?? 6, BigNumber.ROUND_DOWN);
+        ).decimalPlaces(
+          Number(fromSelectToken?.decimals ?? 6),
+          BigNumber.ROUND_DOWN,
+        );
       }
       let reserveGasFormatted: string | undefined | number = reserveGas;
       if (reserveGas) {
@@ -466,7 +472,7 @@ const SwapMainLoad = ({ swapInitParams, pageType }: ISwapMainLoadProps) => {
       const fromTokenBalanceBN = new BigNumber(fromTokenBalance ?? 0);
       const amountBN = fromTokenBalanceBN.multipliedBy(stage / 100);
       const amountAfterDecimal = amountBN.decimalPlaces(
-        fromSelectToken?.decimals ?? 6,
+        Number(fromSelectToken?.decimals ?? 6),
         BigNumber.ROUND_DOWN,
       );
       if (
@@ -840,7 +846,7 @@ const SwapMainLoad = ({ swapInitParams, pageType }: ISwapMainLoadProps) => {
             new BigNumber(swapLimitUseRate.rate),
           );
           toRealAmount = cToAmountBN.decimalPlaces(
-            toToken?.decimals ?? LIMIT_PRICE_DEFAULT_DECIMALS,
+            Number(toToken?.decimals ?? LIMIT_PRICE_DEFAULT_DECIMALS),
             BigNumber.ROUND_HALF_UP,
           );
         }
@@ -1098,7 +1104,7 @@ const SwapMainLoad = ({ swapInitParams, pageType }: ISwapMainLoadProps) => {
     }
 
     // Sort by networkId to ensure consistent order
-    const sortedNetworks = [...filteredNetworks].sort((a, b) =>
+    const sortedNetworks = filteredNetworks.toSorted((a, b) =>
       a.networkId.localeCompare(b.networkId),
     );
 
@@ -1126,14 +1132,14 @@ const SwapMainLoad = ({ swapInitParams, pageType }: ISwapMainLoadProps) => {
     onlySupportCrossChain,
   } = useSwapProTokenInit();
 
-  useSwapProErrorAlert(!supportSpeedSwap);
+  useSwapProErrorAlert();
   useSwapQuote();
 
   const renderSwapSwapBridgeContainer = useCallback(() => {
     if (!platformEnv.isNative) {
       return (
         <SwapOldSwapBridgeLimitContainer
-          pageType={pageType ?? EPageType.modal}
+          pageType={pageType}
           storeName={storeName}
           onSelectToken={onSelectToken}
           fetchLoading={fetchLoading}
@@ -1228,50 +1234,71 @@ const SwapMainLoad = ({ swapInitParams, pageType }: ISwapMainLoadProps) => {
     isWrapped,
   ]);
 
+  // Desktop: show provider panel on the right side, need wider layout
+  // Show when: on large desktop (gtLg), not in modal, and not on native platform
+  const showDesktopProviderPanel =
+    gtLg && pageType !== EPageType.modal && !platformEnv.isNative;
+
+  const containerLayout = useMemo(() => {
+    if (pageType === EPageType.modal) {
+      return 'full' as const;
+    }
+    if (swapTypeSwitch === ESwapTabSwitchType.LIMIT) {
+      return 'compact' as const;
+    }
+    // Use full layout when showing desktop provider panel to allow scrolling on the entire viewport
+    if (showDesktopProviderPanel) {
+      return 'full' as const;
+    }
+    return 'regular' as const;
+  }, [pageType, swapTypeSwitch, showDesktopProviderPanel]);
+
   return (
-    <YStack
-      testID="swap-content-container"
-      flex={1}
-      marginHorizontal="auto"
-      width="100%"
-      maxWidth={pageType === EPageType.modal ? '100%' : 500}
-      pt="$2.5"
-      $gtMd={{
-        flex: 'unset',
-        pt: pageType === EPageType.modal ? '$2.5' : '$5',
-      }}
-    >
-      <SwapTipsContainer />
-      <SwapHeaderContainer
-        pageType={pageType}
-        defaultSwapType={swapInitParams?.swapTabSwitchType}
-        showSwapPro={platformEnv.isNative}
-      />
-      {focusSwapPro ? (
-        <SwapProContainer
-          onProSelectToken={onProSelectToken}
-          onOpenOrdersClick={onOpenOrdersClick}
-          onSwapProActionClick={onPreSwap}
-          onSelectPercentageStage={onSelectPercentageStage}
-          onBalanceMaxPress={onBalanceMaxPress}
-          handleSelectAccountClick={handleSelectAccountClick}
-          onProMarketDetail={onProMarketDetail}
-          onTokenPress={onTokenPress}
-          supportNetworksList={SwapProSupportNetworksList}
-          config={{
-            isLoading,
-            speedConfig,
-            balanceLoading,
-            isMEV,
-            hasEnoughBalance,
-            supportSpeedSwap,
-            onlySupportCrossChain,
-          }}
+    <Page.Container flex={1} layout={containerLayout} padded={false}>
+      <YStack
+        testID="swap-content-container"
+        flex={1}
+        width="100%"
+        pt="$2.5"
+        gap="$2"
+        $gtMd={{
+          flex: 'unset',
+          pt: pageType === EPageType.modal ? '$2.5' : '$16',
+        }}
+      >
+        <SwapTipsContainer />
+        <SwapHeaderContainer
+          pageType={pageType}
+          defaultSwapType={swapInitParams?.swapTabSwitchType}
+          showSwapPro={platformEnv.isNative}
+          hideRightActions={showDesktopProviderPanel}
         />
-      ) : (
-        renderSwapSwapBridgeContainer()
-      )}
-    </YStack>
+        {focusSwapPro ? (
+          <SwapProContainer
+            onProSelectToken={onProSelectToken}
+            onOpenOrdersClick={onOpenOrdersClick}
+            onSwapProActionClick={onPreSwap}
+            onSelectPercentageStage={onSelectPercentageStage}
+            onBalanceMaxPress={onBalanceMaxPress}
+            handleSelectAccountClick={handleSelectAccountClick}
+            onProMarketDetail={onProMarketDetail}
+            onTokenPress={onTokenPress}
+            supportNetworksList={SwapProSupportNetworksList}
+            config={{
+              isLoading,
+              speedConfig,
+              balanceLoading,
+              isMEV,
+              hasEnoughBalance,
+              supportSpeedSwap,
+              onlySupportCrossChain,
+            }}
+          />
+        ) : (
+          renderSwapSwapBridgeContainer()
+        )}
+      </YStack>
+    </Page.Container>
   );
 };
 

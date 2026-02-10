@@ -5,11 +5,11 @@ on:
 
 jobs:
   daily-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # needs: get-commit-id
     strategy:
       matrix:
-        node-version: [20.x]
+        node-version: [24.x]
 
     steps:
       - name: 'Setup ENV'

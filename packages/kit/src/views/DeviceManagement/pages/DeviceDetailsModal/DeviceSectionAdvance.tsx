@@ -31,10 +31,10 @@ function DeviceSectionAdvancePassphrase() {
           onConfirmOpenPassphrase: async () => {
             try {
               await actions.updatePassphraseEnabled(value);
+              resolve();
             } catch (e) {
-              // skip
+              reject(e);
             }
-            resolve();
           },
           onCancelOpenPassphrase: async () => {
             reject(new Error('User canceled'));
@@ -112,6 +112,10 @@ function DeviceSectionAdvanceInputPinOnSoftware() {
 
 function DeviceSectionAdvance() {
   const intl = useIntl();
+  const [deviceType] = useDeviceTypeAtom();
+  const inputPinOnSoftwareSupport =
+    deviceType && deviceUtils.checkInputPinOnSoftwareSupport(deviceType);
+
   return (
     <ListItemGroup
       withSeparator
@@ -121,7 +125,9 @@ function DeviceSectionAdvance() {
       })}
     >
       <DeviceSectionAdvancePassphrase />
-      <DeviceSectionAdvanceInputPinOnSoftware />
+      {inputPinOnSoftwareSupport ? (
+        <DeviceSectionAdvanceInputPinOnSoftware />
+      ) : null}
     </ListItemGroup>
   );
 }

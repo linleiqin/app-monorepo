@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { type ReactNode, useCallback, useMemo } from 'react';
 
 import { useIntl } from 'react-intl';
 
@@ -14,13 +14,22 @@ import {
   SizableText,
   XStack,
   YStack,
+  useMedia,
+  usePopoverContext,
 } from '@onekeyhq/components';
 import { useCurrencySections } from '@onekeyhq/kit/src/hooks/useCurrencySections';
 import { useSettingsPersistAtom } from '@onekeyhq/kit-bg/src/states/jotai/atoms';
-import { DOWNLOAD_URL } from '@onekeyhq/shared/src/config/appConfig';
+import {
+  DOWNLOAD_MOBILE_APP_URL,
+  DOWNLOAD_URL,
+} from '@onekeyhq/shared/src/config/appConfig';
 import { ETranslations } from '@onekeyhq/shared/src/locale';
-import { EModalReceiveRoutes, EModalRoutes } from '@onekeyhq/shared/src/routes';
-import type { ETabRoutes } from '@onekeyhq/shared/src/routes';
+import {
+  EModalReceiveRoutes,
+  EModalRoutes,
+  EModalSettingRoutes,
+  ETabRoutes,
+} from '@onekeyhq/shared/src/routes';
 import { openUrlExternal } from '@onekeyhq/shared/src/utils/openUrlUtils';
 
 import backgroundApiProxy from '../../background/instance/backgroundApiProxy';
@@ -35,11 +44,11 @@ import { AccountSelectorProviderMirror } from '../AccountSelector';
 import { ListItem } from '../ListItem';
 
 import {
-  DownloadButton,
   HeaderNotificationIconButton,
   LanguageButton,
   ThemeButton,
   WalletConnectionForWeb,
+  WalletConnectionGroup,
   WebHeaderNavigation,
 } from './components';
 import { HeaderTitle } from './HeaderTitle';
@@ -63,6 +72,11 @@ function LanguageListItem() {
       value={value}
       onChange={onChange}
       floatingPanelProps={{ maxHeight: 280 }}
+      sheetProps={{
+        disableDrag: true,
+        snapPoints: [80],
+        snapPointsMode: 'percent',
+      }}
       placement="bottom-end"
       renderTrigger={() => (
         <ListItem
@@ -128,6 +142,11 @@ function CurrencyListItem() {
       value={settings.currencyInfo.id}
       onChange={handleChange}
       floatingPanelProps={{ maxHeight: 280 }}
+      sheetProps={{
+        disableDrag: true,
+        snapPoints: [80],
+        snapPointsMode: 'percent',
+      }}
       placement="bottom-end"
       renderTrigger={() => (
         <ListItem
@@ -152,19 +171,40 @@ function ThemeListItem() {
   const tabOptions = useMemo(
     () => [
       {
-        label: <Icon name="LaptopOutline" size="$4" />,
+        label: (
+          <Icon
+            my="$0.5"
+            name="LaptopOutline"
+            size="$4"
+            color={theme === 'system' ? '$iconInverse' : '$icon'}
+          />
+        ),
         value: 'system' as const,
       },
       {
-        label: <Icon name="SunOutline" size="$4" />,
+        label: (
+          <Icon
+            my="$0.5"
+            name="SunOutline"
+            size="$4"
+            color={theme === 'light' ? '$iconInverse' : '$icon'}
+          />
+        ),
         value: 'light' as const,
       },
       {
-        label: <Icon name="MoonOutline" size="$4" />,
+        label: (
+          <Icon
+            my="$0.5"
+            name="MoonOutline"
+            size="$4"
+            color={theme === 'dark' ? '$iconInverse' : '$icon'}
+          />
+        ),
         value: 'dark' as const,
       },
     ],
-    [],
+    [theme],
   );
   const handleChange = useCallback(async (value: unknown) => {
     await backgroundApiProxy.serviceSetting.setTheme(
@@ -206,22 +246,44 @@ function DownloadOneKeyWalletListItem() {
   );
 }
 
-function _Web3GuideListItem() {
-  const intl = useIntl();
+function DownloadAppButton() {
   const handlePress = useCallback(() => {
-    // TODO: implement Web3 guide link
+    openUrlExternal(DOWNLOAD_MOBILE_APP_URL);
   }, []);
+
   return (
-    <ListItem
-      title={intl.formatMessage({ id: ETranslations.global_web3_guide })}
-      titleProps={{
-        size: '$bodyMdMedium',
-      }}
-      drillIn
+    <Button
+      size="small"
+      h="$8"
+      icon="DownloadOutline"
+      bg="#49DF58"
+      color="#000000"
+      iconColor="#000000"
+      hoverStyle={{ bg: '#3ECC4D' }}
+      pressStyle={{ bg: '#35B844' }}
       onPress={handlePress}
-    />
+    >
+      APP
+    </Button>
   );
 }
+
+// function Web3GuideListItem() {
+//   const intl = useIntl();
+//   const handlePress = useCallback(() => {
+//     // TODO: implement Web3 guide link
+//   }, []);
+//   return (
+//     <ListItem
+//       title={intl.formatMessage({ id: ETranslations.global_web3_guide })}
+//       titleProps={{
+//         size: '$bodyMdMedium',
+//       }}
+//       drillIn
+//       onPress={handlePress}
+//     />
+//   );
+// }
 
 function AnnouncementListItem() {
   const intl = useIntl();
@@ -231,6 +293,28 @@ function AnnouncementListItem() {
   return (
     <ListItem
       title={intl.formatMessage({ id: ETranslations.global_announcement })}
+      drillIn
+      titleProps={{
+        size: '$bodyMdMedium',
+      }}
+      onPress={handlePress}
+    />
+  );
+}
+
+function SettingListItem() {
+  const intl = useIntl();
+  const navigation = useAppNavigation();
+  const { closePopover } = usePopoverContext();
+  const handlePress = useCallback(async () => {
+    await closePopover?.();
+    navigation.pushModal(EModalRoutes.SettingModal, {
+      screen: EModalSettingRoutes.SettingListModal,
+    });
+  }, [closePopover, navigation]);
+  return (
+    <ListItem
+      title={intl.formatMessage({ id: ETranslations.settings_settings })}
       drillIn
       titleProps={{
         size: '$bodyMdMedium',
@@ -277,6 +361,7 @@ function MoreDappAction({ size }: { size?: 'small' | 'medium' }) {
             <Divider />
           </YStack>
           <AnnouncementListItem />
+          <SettingListItem />
         </YStack>
       }
     />
@@ -319,7 +404,14 @@ function DepositButton() {
   );
 }
 
-function RightActions({ tabRoute }: { tabRoute: ETabRoutes }) {
+function RightActions({
+  tabRoute,
+  customHeaderRightItems,
+}: {
+  tabRoute: ETabRoutes;
+  customHeaderRightItems?: ReactNode;
+}) {
+  const { gtLg } = useMedia();
   const {
     activeAccount: { wallet, account },
   } = useActiveAccount({
@@ -327,18 +419,26 @@ function RightActions({ tabRoute }: { tabRoute: ETabRoutes }) {
   });
 
   const isWalletConnected = !!wallet && !!account;
+  const isPerpsTab = tabRoute === ETabRoutes.Perp;
 
   return (
     <XStack ai="center" gap="$2">
-      <XStack
-        ai="center"
-        px={isWalletConnected ? '$1.5' : undefined}
-        borderRadius="$2"
-        bg={isWalletConnected ? '$bgStrong' : undefined}
-      >
-        <WalletConnectionForWeb tabRoute={tabRoute} />
-      </XStack>
-      <DepositButton />
+      {gtLg ? <DownloadAppButton /> : null}
+      {isPerpsTab && customHeaderRightItems ? (
+        customHeaderRightItems
+      ) : (
+        <>
+          <XStack
+            ai="center"
+            px={isWalletConnected ? '$1.5' : undefined}
+            borderRadius="$2"
+            bg={isWalletConnected ? '$bgStrong' : undefined}
+          >
+            <WalletConnectionForWeb tabRoute={tabRoute} />
+          </XStack>
+          <DepositButton />
+        </>
+      )}
       <XStack
         ai="center"
         gap="$2.5"
@@ -347,12 +447,12 @@ function RightActions({ tabRoute }: { tabRoute: ETabRoutes }) {
         borderRadius="$2"
         bg="$bgStrong"
       >
+        <UniversalSearchInput size="small" />
         <HeaderNotificationIconButton
           testID="header-right-notification"
           size="small"
         />
         <MoreDappAction size="small" />
-        <DownloadButton size="small" />
         <LanguageButton size="small" />
         <ThemeButton size="small" />
       </XStack>
@@ -360,42 +460,118 @@ function RightActions({ tabRoute }: { tabRoute: ETabRoutes }) {
   );
 }
 
-export function DappHeader({ sceneName, tabRoute }: ITabPageHeaderProp) {
-  const renderHeaderLeft = useCallback(() => <WebHeaderNavigation />, []);
+function MobileRightActions() {
+  return (
+    <XStack
+      ai="center"
+      gap="$2.5"
+      px="$1.5"
+      py="$1.5"
+      borderRadius="$2"
+      bg="$bgStrong"
+    >
+      <HeaderNotificationIconButton
+        testID="header-right-notification"
+        size="medium"
+      />
+      <MoreDappAction size="medium" />
+    </XStack>
+  );
+}
+
+function MobileLeftActions({ tabRoute }: { tabRoute: ETabRoutes }) {
+  return (
+    <XStack ai="center">
+      <WalletConnectionGroup
+        tabRoute={tabRoute}
+        showNetworkSelector={false}
+        showAccountInfo={false}
+      />
+    </XStack>
+  );
+}
+
+export function DappHeader({
+  sceneName,
+  tabRoute,
+  hideSearch,
+  customHeaderRightItems,
+}: ITabPageHeaderProp) {
+  const { gtMd } = useMedia();
   const { config } = useAccountSelectorContextData();
 
-  const renderHeaderRight = useCallback(
+  // Desktop layout
+  const renderDesktopHeaderLeft = useCallback(
+    () => <WebHeaderNavigation />,
+    [],
+  );
+
+  const renderDesktopHeaderRight = useCallback(
     () =>
       config ? (
         <HomeTokenListProviderMirror>
           <AccountSelectorProviderMirror enabledNum={[0]} config={config}>
-            <RightActions tabRoute={tabRoute} />
+            <RightActions
+              tabRoute={tabRoute}
+              customHeaderRightItems={customHeaderRightItems}
+            />
+          </AccountSelectorProviderMirror>
+        </HomeTokenListProviderMirror>
+      ) : null,
+    [config, customHeaderRightItems, tabRoute],
+  );
+
+  const renderDesktopHeaderTitle = useCallback(
+    () => <HeaderTitle sceneName={sceneName} />,
+    [sceneName],
+  );
+
+  // Mobile layout
+  const renderMobileHeaderLeft = useCallback(
+    () =>
+      config ? (
+        <HomeTokenListProviderMirror>
+          <AccountSelectorProviderMirror enabledNum={[0]} config={config}>
+            <MobileLeftActions tabRoute={tabRoute} />
           </AccountSelectorProviderMirror>
         </HomeTokenListProviderMirror>
       ) : null,
     [config, tabRoute],
   );
 
-  const renderHeaderTitle = useCallback(
-    () => (
-      <HeaderTitle sceneName={sceneName}>
-        <XStack maxWidth={288} width="100%">
+  const renderMobileHeaderRight = useCallback(() => <MobileRightActions />, []);
+
+  if (gtMd) {
+    return (
+      <Page.Header
+        headerTitleAlign="center"
+        headerShadowVisible={false}
+        headerStyle={{
+          backgroundColor: 'transparent',
+        }}
+        headerTitle={renderDesktopHeaderTitle}
+        headerRight={renderDesktopHeaderRight}
+        headerLeft={renderDesktopHeaderLeft}
+      />
+    );
+  }
+
+  // Mobile layout
+  return (
+    <>
+      <Page.Header
+        headerShadowVisible={false}
+        headerStyle={{
+          backgroundColor: 'transparent',
+        }}
+        headerLeft={renderMobileHeaderLeft}
+        headerRight={renderMobileHeaderRight}
+      />
+      {!hideSearch ? (
+        <XStack px="$pagePadding" pt="$2" pb="$2">
           <UniversalSearchInput />
         </XStack>
-      </HeaderTitle>
-    ),
-    [sceneName],
-  );
-  return (
-    <Page.Header
-      headerTitleAlign="center"
-      headerShadowVisible={false}
-      headerStyle={{
-        backgroundColor: 'transparent',
-      }}
-      headerTitle={renderHeaderTitle}
-      headerRight={renderHeaderRight}
-      headerLeft={renderHeaderLeft}
-    />
+      ) : null}
+    </>
   );
 }

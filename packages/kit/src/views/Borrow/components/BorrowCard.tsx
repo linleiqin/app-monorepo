@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react';
 
+import BigNumber from 'bignumber.js';
 import { useIntl } from 'react-intl';
 
 import { useMedia } from '@onekeyhq/components';
@@ -8,8 +9,8 @@ import { ETranslations } from '@onekeyhq/shared/src/locale';
 import type { IBorrowReserveItem } from '@onekeyhq/shared/types/staking';
 
 import { EarnText } from '../../Staking/components/ProtocolDetails/EarnText';
-import { useEarnAccount } from '../../Staking/hooks/useEarnAccount';
 import { EManagePositionType } from '../../Staking/pages/ManagePosition/hooks/useManagePage';
+import { EBorrowDataStatus } from '../borrowDataStatus';
 import { useBorrowContext } from '../BorrowProvider';
 import { BorrowNavigation } from '../borrowUtils';
 
@@ -26,14 +27,14 @@ import { Card } from './Card';
 type IBorrowAsset = IBorrowReserveItem['borrow']['assets'][number];
 
 export const BorrowCard = () => {
-  const { reserves, market, reservesLoading } = useBorrowContext();
+  const { reserves, market, borrowDataStatus, earnAccount } =
+    useBorrowContext();
   const intl = useIntl();
   const navigation = useAppNavigation();
-  const { earnAccount } = useEarnAccount({ networkId: market?.networkId });
   const { gtMd } = useMedia();
-  const accountId = earnAccount?.account?.id || '';
-  const walletId = earnAccount?.walletId || '';
-  const indexedAccountId = earnAccount?.account?.indexedAccountId;
+  const accountId = earnAccount.data?.account?.id || '';
+  const walletId = earnAccount.data?.walletId || '';
+  const indexedAccountId = earnAccount.data?.account?.indexedAccountId;
 
   const handleManageBorrow = useCallback(
     (item: IBorrowAsset) => {
@@ -49,10 +50,10 @@ export const BorrowCard = () => {
         providerLogoURI: market.logoURI,
         logoURI: item.token.logoURI,
         type: EManagePositionType.Borrow,
-        borrowReserves: reserves ?? undefined,
+        borrowReserves: reserves.data ?? undefined,
       });
     },
-    [navigation, market, accountId, reserves],
+    [navigation, market, accountId, reserves.data],
   );
 
   const handlePressRow = useCallback(
@@ -78,7 +79,10 @@ export const BorrowCard = () => {
     [navigation, market, gtMd, handleManageBorrow, accountId, indexedAccountId],
   );
 
-  const showLoading = !reserves && reservesLoading;
+  const showLoading =
+    borrowDataStatus === EBorrowDataStatus.LoadingMarkets ||
+    borrowDataStatus === EBorrowDataStatus.WaitingForAccount ||
+    borrowDataStatus === EBorrowDataStatus.LoadingReserves;
 
   const labels = useMemo(() => {
     const asset = intl.formatMessage({ id: ETranslations.global_asset });
@@ -147,6 +151,12 @@ export const BorrowCard = () => {
         label: labels.available,
         align: 'flex-end' as const,
         key: 'available',
+        sortable: true,
+        comparator: (a: IBorrowAsset, b: IBorrowAsset) => {
+          const aFiatValue = new BigNumber(a.available?.fiatValue || '0');
+          const bFiatValue = new BigNumber(b.available?.fiatValue || '0');
+          return aFiatValue.comparedTo(bFiatValue);
+        },
         render: (item: IBorrowAsset) => (
           <AmountField
             title={item.available.title}
@@ -186,11 +196,13 @@ export const BorrowCard = () => {
   return (
     <Card title={labels.assetsToBorrow}>
       <BorrowTableList<IBorrowAsset>
-        data={reserves?.borrow.assets || []}
+        data={reserves.data?.borrow?.assets || []}
         isLoading={showLoading}
         columns={gtMd ? desktopColumns : mobileColumns}
         onPressRow={handlePressRow}
         emptyContent={labels.noAssetsToBorrow}
+        defaultSortKey="available"
+        defaultSortDirection="desc"
       />
     </Card>
   );

@@ -12,12 +12,11 @@ import {
 } from '@onekeyhq/components';
 import { TabPageHeader } from '@onekeyhq/kit/src/components/TabPageHeader';
 import useAppNavigation from '@onekeyhq/kit/src/hooks/useAppNavigation';
+import platformEnv from '@onekeyhq/shared/src/platformEnv';
 import type { ETabRoutes } from '@onekeyhq/shared/src/routes';
 import type { EAccountSelectorSceneName } from '@onekeyhq/shared/types';
 
 import { LegacyUniversalSearchInput } from '../../../components/TabPageHeader/LegacyUniversalSearchInput';
-import { EARN_PAGE_MAX_WIDTH } from '../EarnConfig';
-
 import type { RefreshControlProps } from 'react-native';
 
 interface IEarnPageContainerProps {
@@ -32,7 +31,6 @@ interface IEarnPageContainerProps {
   footer?: React.ReactNode;
   customHeaderRightItems?: React.ReactNode;
   contentContainerStyle?: IScrollViewProps['contentContainerStyle'];
-  maxWidth?: number | string;
   disableMaxWidth?: boolean;
   showTabPageHeader?: boolean;
 }
@@ -49,7 +47,6 @@ export function EarnPageContainer({
   header,
   customHeaderRightItems,
   contentContainerStyle,
-  maxWidth,
   disableMaxWidth,
   showTabPageHeader = true,
 }: IEarnPageContainerProps) {
@@ -82,15 +79,13 @@ export function EarnPageContainer({
   );
   const showHeader = useMemo(() => header, [header]);
 
-  const containerMaxWidth = useMemo(() => {
-    if (disableMaxWidth) return undefined;
-    if (maxWidth !== undefined) return maxWidth;
-    return EARN_PAGE_MAX_WIDTH;
-  }, [disableMaxWidth, maxWidth]);
+  // In WebDapp mode, always use TabPageHeader for consistent mobile layout
+  const shouldShowTabPageHeader =
+    platformEnv.isWebDappMode || showTabPageHeader;
 
   return (
     <Page>
-      {showTabPageHeader ? (
+      {shouldShowTabPageHeader ? (
         <TabPageHeader
           sceneName={sceneName}
           tabRoute={tabRoute}
@@ -98,7 +93,7 @@ export function EarnPageContainer({
           customHeaderRightItems={customHeaderRightItems}
         />
       ) : (
-        <YStack mx="$5" mt="$2" mb="$1">
+        <YStack mx="$pagePadding" mt="$2" mb="$1">
           <Page.Header headerShown={false} />
           <LegacyUniversalSearchInput size="medium" initialTab="dapp" />
         </YStack>
@@ -111,7 +106,10 @@ export function EarnPageContainer({
           }}
           refreshControl={refreshControl}
         >
-          <YStack w="100%" mx="auto" maxWidth={containerMaxWidth}>
+          <Page.Container
+            padded={false}
+            layout={disableMaxWidth ? 'full' : 'regular'}
+          >
             {showBreadcrumb || showHeader ? (
               <XStack px="$3" pb="$5" gap="$5" ai="center">
                 {showBreadcrumb ? <Breadcrumb {...breadcrumbProps} /> : null}
@@ -119,7 +117,7 @@ export function EarnPageContainer({
               </XStack>
             ) : null}
             {children}
-          </YStack>
+          </Page.Container>
         </ScrollView>
       </Page.Body>
       {footer}

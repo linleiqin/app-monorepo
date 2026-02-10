@@ -45,7 +45,6 @@ import {
 } from '@onekeyhq/kit/src/states/jotai/contexts/tokenList';
 import { HomeTokenListProviderMirror } from '@onekeyhq/kit/src/views/Home/components/HomeTokenListProvider/HomeTokenListProviderMirror';
 import {
-  useAppSideBarStatusAtom,
   useFirmwareUpdatesDetectStatusPersistAtom,
   useHardwareWalletXfpStatusAtom,
   useNotificationsAtom,
@@ -53,6 +52,7 @@ import {
 import { ETranslations } from '@onekeyhq/shared/src/locale';
 import { defaultLogger } from '@onekeyhq/shared/src/logger/logger';
 import { showIntercom } from '@onekeyhq/shared/src/modules3rdParty/intercom';
+import accountUtils from '@onekeyhq/shared/src/utils/accountUtils';
 import platformEnv from '@onekeyhq/shared/src/platformEnv';
 import {
   EModalRoutes,
@@ -74,11 +74,13 @@ import { useOnLock } from '../../hooks/useOnLock';
 import { usePromiseResult } from '../../hooks/usePromiseResult';
 import { useReferFriends } from '../../hooks/useReferFriends';
 import { useThemeVariant } from '../../hooks/useThemeVariant';
+import { useNavigateToBulkSend } from '../../views/BulkSend/hooks/useNavigateToBulkSend';
 import { useDeviceManagerNavigation } from '../../views/DeviceManagement/hooks/useDeviceManagerNavigation';
 import { HomeFirmwareUpdateReminder } from '../../views/FirmwareUpdate/components/HomeFirmwareUpdateReminder';
 import { WalletXfpStatusReminder } from '../../views/Home/components/WalletXfpStatusReminder/WalletXfpStatusReminder';
 import { useOnPrimeButtonPressed } from '../../views/Prime/components/PrimeHeaderIconButton/PrimeHeaderIconButton';
 import { usePrimeAvailable } from '../../views/Prime/hooks/usePrimeAvailable';
+import { showRedemptionCenterDialog } from '../../views/Redemption/components/RedemptionCenterDialog';
 import useScanQrCode from '../../views/ScanQrCode/hooks/useScanQrCode';
 import { OneKeyIdAvatar } from '../../views/Setting/pages/OneKeyId';
 import { ESettingsTabNames } from '../../views/Setting/pages/Tab/config';
@@ -133,13 +135,7 @@ function MoreActionContentHeader({
   showBackButton?: boolean;
 }) {
   const intl = useIntl();
-  const media = useMedia();
-  const onLock = useOnLock();
   const isDesktopMode = useIsDesktopModeUIInTabPages();
-
-  const handleLock = useCallback(async () => {
-    await onLock();
-  }, [onLock]);
 
   const handleCustomerSupport = useCallback(() => {
     void showIntercom();
@@ -225,23 +221,15 @@ function MoreActionContentHeader({
     return [];
   }, [intl]);
 
-  // Desktop (>= gtMd): show lock; Mobile (< gtMd): show scan
-  const firstActionItem = useMemo(() => {
-    if (media.gtMd) {
-      return {
-        title: intl.formatMessage({ id: ETranslations.settings_lock_now }),
-        icon: 'LockOutline' as const,
-        onPress: handleLock,
-        trackID: 'wallet-lock-now',
-      };
-    }
-    return {
+  const firstActionItem = useMemo(
+    () => ({
       title: intl.formatMessage({ id: ETranslations.scan_scan_qr_code }),
       icon: 'ScanOutline' as const,
       onPress: handleScan,
       trackID: 'wallet-scan',
-    };
-  }, [media.gtMd, intl, handleLock, handleScan]);
+    }),
+    [intl, handleScan],
+  );
 
   const items = useMemo(() => {
     return [
@@ -291,6 +279,7 @@ function MoreActionContentHeader({
         {items.map((item) => (
           <MoreActionContentHeaderItem
             key={item.title}
+            title={item.title}
             icon={item.icon as IKeyOfIcons}
             onPress={item.onPress}
             trackID={item.trackID}
@@ -903,11 +892,18 @@ function BaseMoreActionGrid({
 function MoreActionGeneralGrid() {
   const intl = useIntl();
   const navigation = useAppNavigation();
+  const onLock = useOnLock();
+
   const handleSettings = useCallback(() => {
     navigation.pushModal(EModalRoutes.SettingModal, {
       screen: EModalSettingRoutes.SettingListModal,
     });
   }, [navigation]);
+
+  const handleLock = useCallback(async () => {
+    await onLock();
+  }, [onLock]);
+
   const {
     activeAccount: { account, network },
   } = useActiveAccount({ num: 0 });
@@ -938,6 +934,7 @@ function MoreActionGeneralGrid() {
       },
     });
   }, [navigation, network?.id]);
+
   const items = useMemo(() => {
     return [
       {
@@ -960,8 +957,16 @@ function MoreActionGeneralGrid() {
             trackID: 'wallet-prime',
           }
         : undefined,
+      !platformEnv.isWebDappMode
+        ? {
+            title: intl.formatMessage({ id: ETranslations.settings_lock_now }),
+            icon: 'LockOutline' as const,
+            onPress: handleLock,
+            trackID: 'wallet-lock-now',
+          }
+        : undefined,
     ].filter(Boolean);
-  }, [handlePrime, handleScan, handleSettings, intl]);
+  }, [handleLock, handlePrime, handleScan, handleSettings, intl]);
   return (
     <BaseMoreActionGrid
       title={intl.formatMessage({ id: ETranslations.global_general })}
@@ -973,6 +978,7 @@ function MoreActionGeneralGrid() {
 const MoreActionWalletGrid = () => {
   const intl = useIntl();
   const navigation = useAppNavigation();
+  const navigateToBulkSend = useNavigateToBulkSend();
   const handleBackup = useCallback(() => {
     navigation.pushModal(EModalRoutes.SettingModal, {
       screen: EModalSettingRoutes.SettingListSubModal,
@@ -1018,7 +1024,7 @@ const MoreActionWalletGrid = () => {
   const { user } = useOneKeyAuth();
   const isPrimeUser = user?.primeSubscription?.isActive && user?.onekeyUserId;
   const {
-    activeAccount: { wallet, network },
+    activeAccount: { account, network, wallet, indexedAccount },
   } = useActiveAccount({ num: 0 });
   const checkIsPrimeUser = useCallback(
     (showFeature: EPrimeFeatures) => {
@@ -1038,7 +1044,7 @@ const MoreActionWalletGrid = () => {
     },
     [navigation, user, network?.id],
   );
-  const openBulkCopyAddressesModal = useCallback(async () => {
+  const openBulkCopyAddressesModule = useCallback(async () => {
     const networkId = networkUtils.toNetworkIdFallback({
       networkId: network?.id,
       allNetworkFallbackToBtc: true,
@@ -1056,6 +1062,24 @@ const MoreActionWalletGrid = () => {
       },
     });
   }, [network?.id, checkIsPrimeUser, navigation, wallet?.id]);
+
+  const openBulkSendModule = useCallback(async () => {
+    if (!checkIsPrimeUser(EPrimeFeatures.BulkSend)) {
+      return;
+    }
+
+    void navigateToBulkSend({
+      networkId: network?.id,
+      accountId: account?.id,
+      indexedAccountId: indexedAccount?.id,
+    });
+  }, [
+    network?.id,
+    account?.id,
+    indexedAccount?.id,
+    navigateToBulkSend,
+    checkIsPrimeUser,
+  ]);
 
   const items = useMemo(() => {
     return [
@@ -1108,9 +1132,28 @@ const MoreActionWalletGrid = () => {
                   entryPoint: 'moreActions',
                 });
               }
-              void openBulkCopyAddressesModal();
+              void openBulkCopyAddressesModule();
             },
             trackID: 'bulk-copy-addresses-in-more-action',
+            isPrimeFeature: true,
+          },
+      platformEnv.isWebDappMode
+        ? undefined
+        : {
+            title: intl.formatMessage({
+              id: ETranslations.wallet_bulk_send_title,
+            }),
+            icon: 'ChevronDoubleUpOutline' as const,
+            onPress: () => {
+              if (!isPrimeUser) {
+                defaultLogger.prime.subscription.primeEntryClick({
+                  featureName: EPrimeFeatures.BulkSend,
+                  entryPoint: 'moreActions',
+                });
+              }
+              void openBulkSendModule();
+            },
+            trackID: 'bulk-send-in-more-action',
             isPrimeFeature: true,
           },
     ].filter(Boolean);
@@ -1122,7 +1165,8 @@ const MoreActionWalletGrid = () => {
     handleSecurity,
     intl,
     isPrimeUser,
-    openBulkCopyAddressesModal,
+    openBulkCopyAddressesModule,
+    openBulkSendModule,
   ]);
   return (
     <BaseMoreActionGrid
@@ -1134,6 +1178,8 @@ const MoreActionWalletGrid = () => {
 
 const MoreActionMoreGrid = () => {
   const intl = useIntl();
+  const { closePopover } = usePopoverContext();
+  const { loginOneKeyId } = useOneKeyAuth();
   const handleHelpAndSupport = useCallback(() => {
     void showIntercom();
   }, []);
@@ -1142,6 +1188,17 @@ const MoreActionMoreGrid = () => {
   const handleReferFriends = useCallback(() => {
     void toReferFriendsPage();
   }, [toReferFriendsPage]);
+
+  const handleRedeem = useCallback(async () => {
+    await closePopover?.();
+    try {
+      await loginOneKeyId();
+      showRedemptionCenterDialog();
+    } catch {
+      // User cancelled login, do nothing
+    }
+  }, [closePopover, loginOneKeyId]);
+
   const items = useMemo(() => {
     return [
       {
@@ -1158,8 +1215,20 @@ const MoreActionMoreGrid = () => {
         testID: 'referral' as const,
         onPress: handleReferFriends,
       },
+      {
+        title: intl.formatMessage({ id: ETranslations.global_redeem }),
+        icon: 'TicketOutline' as const,
+        onPress: handleRedeem,
+        trackID: 'wallet-redeem',
+      },
     ];
-  }, [handleHelpAndSupport, intl, themeVariant, handleReferFriends]);
+  }, [
+    handleHelpAndSupport,
+    handleRedeem,
+    intl,
+    themeVariant,
+    handleReferFriends,
+  ]);
   return (
     <BaseMoreActionGrid
       title={intl.formatMessage({ id: ETranslations.global_more })}
@@ -1178,14 +1247,14 @@ function MoreActionDevice() {
       const r =
         await backgroundApiProxy.serviceAccount.getAllHwQrWalletWithDevice({
           filterHiddenWallet: true,
-          skipDuplicateDevice: true,
+          skipDuplicateDeviceSameType: true,
         });
       const devices: Array<IDeviceManagementListItem> = Object.values(r)
         .filter(
           (item): item is IHwQrWalletWithDevice =>
             Boolean(item.device) && !item.wallet.deprecated,
         )
-        .sort((a, b) => {
+        .toSorted((a, b) => {
           // Sort by walletOrder or fallback to walletNo
           const orderA = a.wallet.walletOrder || a.wallet.walletNo;
           const orderB = b.wallet.walletOrder || b.wallet.walletNo;
@@ -1197,6 +1266,9 @@ function MoreActionDevice() {
           features: item.device?.featuresInfo,
         });
         item.firmwareTypeBadge = firmwareTypeBadge;
+        item.isQrWallet = accountUtils.isQrWallet({
+          walletId: item.wallet.id,
+        });
       }
       return devices;
     },
@@ -1245,6 +1317,7 @@ function MoreActionDevice() {
                 size={44}
                 key={item.wallet.id}
                 wallet={item.wallet}
+                badge={item.isQrWallet ? 'QR' : undefined}
               />
             ))}
             {hwQrWalletList.length > 5 ? (
@@ -1323,15 +1396,36 @@ export function MoreActionContentPage() {
   );
 }
 
+const NAVIGATION_ACTION_TYPES = new Set([
+  'GO_BACK',
+  'PUSH',
+  'NAVIGATE',
+  'POP_TO_TOP',
+  'POP_TO',
+  'POP',
+  'NAVIGATE_DEPRECATED',
+  'RESET',
+  'REPLACE',
+  'JUMP_TO',
+]);
 function MoreActionContent({
   containerStyle,
 }: {
   containerStyle?: IYStackProps;
 }) {
   const isDesktopMode = useIsDesktopModeUIInTabPages();
+  const { closePopover } = usePopoverContext();
+
+  useEffect(() => {
+    rootNavigationRef.current?.addListener('__unsafe_action__', ({ data }) => {
+      if (NAVIGATION_ACTION_TYPES.has(data.action.type)) {
+        void closePopover?.();
+      }
+    });
+  }, [closePopover]);
   return (
     <MoreActionProvider>
-      <YStack minHeight={560} {...containerStyle}>
+      <YStack minHeight={600} {...containerStyle}>
         <MoreActionContentHeader />
         {platformEnv.isWebDappMode ? null : <UpdateReminders />}
         {platformEnv.isWebDappMode ? null : <MoreActionOneKeyId />}
@@ -1396,7 +1490,6 @@ function MoreButtonWithDot({
   onPress?: IButtonProps['onPress'];
 }) {
   const intl = useIntl();
-  const [{ isCollapsed }] = useAppSideBarStatusAtom();
   const isDesktopMode = useIsDesktopModeUIInTabPages();
   const isShowUpgradeDot = useIsShowAppUpdateDot();
   const isShowRedDot = useIsShowRedDot();
@@ -1408,12 +1501,12 @@ function MoreButtonWithDot({
         <Dot
           color="$blue8"
           top={isDesktopMode ? 0 : '$-2'}
-          right={isDesktopMode && isCollapsed ? undefined : '$-2.5'}
+          right={isDesktopMode ? undefined : '$-2.5'}
         />
       );
     }
     return null;
-  }, [isCollapsed, isDesktopMode, isShowUpgradeDot]);
+  }, [isDesktopMode, isShowUpgradeDot]);
 
   // Small dot for desktop (similar to DesktopTabItem)
   const desktopDot = useMemo(() => {
@@ -1443,43 +1536,12 @@ function MoreButtonWithDot({
   }, []);
 
   if (isDesktopMode) {
-    // Collapsed: icon only (no text below)
-    if (isCollapsed) {
-      return (
-        <YStack p="$2" borderRadius="$2" hoverStyle={{ bg: '$bgHover' }}>
-          <Stack position="relative">
-            <Icon name="DotGridOutline" size="$5" />
-            {desktopDot}
-          </Stack>
-        </YStack>
-      );
-    }
-
-    // Expanded: horizontal layout (icon + text)
     return (
-      <YStack
-        userSelect="none"
-        flexDirection="row"
-        alignItems="center"
-        px="$2"
-        py="$2"
-        borderRadius="$2"
-        hoverStyle={{ bg: '$bgHover' }}
-      >
+      <YStack p="$2" borderRadius="$2" hoverStyle={{ bg: '$bgHover' }}>
         <Stack position="relative">
           <Icon name="DotGridOutline" size="$5" />
           {desktopDot}
         </Stack>
-        <SizableText
-          flex={1}
-          numberOfLines={1}
-          mx="$2"
-          cursor="default"
-          color="$text"
-          size="$bodyMd"
-        >
-          {intl.formatMessage({ id: ETranslations.address_book_menu_title })}
-        </SizableText>
       </YStack>
     );
   }
@@ -1500,14 +1562,12 @@ function MoreButtonWithDot({
 function MoreActionButtonCmp() {
   const intl = useIntl();
   const isDesktopMode = useIsDesktopModeUIInTabPages();
-  const [{ isCollapsed }] = useAppSideBarStatusAtom();
   const media = useMedia();
   if (!isDesktopMode) {
     return <MoreButtonWithDot />;
   }
 
-  // Collapsed: show tooltip; Expanded: no tooltip (text is visible)
-  const trigger = isCollapsed ? (
+  const trigger = (
     <Tooltip
       placement={platformEnv.isWebDappMode || media.md ? 'bottom' : 'right'}
       renderTrigger={<MoreButtonWithDot />}
@@ -1515,8 +1575,6 @@ function MoreActionButtonCmp() {
         id: ETranslations.address_book_menu_title,
       })}
     />
-  ) : (
-    <MoreButtonWithDot />
   );
 
   return (
@@ -1527,7 +1585,7 @@ function MoreActionButtonCmp() {
       floatingPanelProps={{
         maxWidth: 384,
         width: 384,
-        height: 560,
+        height: 600,
         p: 0,
         overflow: 'hidden',
         style: { transformOrigin: 'bottom left' },

@@ -1,18 +1,19 @@
 import { memo, useCallback, useMemo } from 'react';
 
 import { Tabs, YStack, useTabContainerWidth } from '@onekeyhq/components';
+import type { ITabContainerRef } from '@onekeyhq/components';
 import { useTabBarHeight } from '@onekeyhq/components/src/layouts/Page/hooks';
 import platformEnv from '@onekeyhq/shared/src/platformEnv';
 
 import { MarketBannerList } from '../components/MarketBanner';
-import { MarketFilterBarSmall } from '../components/MarketFilterBarSmall';
-import { MarketNormalTokenList } from '../components/MarketTokenList/MarketNormalTokenList';
+import { MobileMarketTokenFlatList } from '../components/MarketTokenList/MobileMarketTokenFlatList';
 import { MarketWatchlistTokenList } from '../components/MarketTokenList/MarketWatchlistTokenList';
 
 import { useMarketTabsLogic } from './hooks';
 
 import type { ITimeRangeSelectorValue } from '../components/TimeRangeSelector';
 import type { IMarketHomeTabValue } from '../types';
+import type { RefObject } from 'react';
 import type { TabBarProps } from 'react-native-collapsible-tab-view';
 
 interface IMobileLayoutProps {
@@ -24,12 +25,14 @@ interface IMobileLayoutProps {
   };
   selectedNetworkId: string;
   onTabChange: (tabId: IMarketHomeTabValue) => void;
+  tabsRef?: RefObject<ITabContainerRef | null>;
 }
 
 function MobileLayoutComponent({
   filterBarProps,
   selectedNetworkId,
   onTabChange,
+  tabsRef,
 }: IMobileLayoutProps) {
   const { watchlistTabName, trendingTabName, handleTabChange, selectedTab } =
     useMarketTabsLogic(onTabChange);
@@ -86,6 +89,8 @@ function MobileLayoutComponent({
 
   return (
     <Tabs.Container
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ref={tabsRef as any}
       width={platformEnv.isNative ? tabContainerWidth : undefined}
       renderTabBar={renderTabBar}
       initialTabName={initialTabName}
@@ -93,19 +98,18 @@ function MobileLayoutComponent({
       {...containerProps}
     >
       <Tabs.Tab name={watchlistTabName}>
-        <Tabs.ScrollView>
+        <Tabs.ScrollView showsVerticalScrollIndicator={false}>
           <YStack pt="$2" {...listContainerProps}>
             <MarketWatchlistTokenList />
           </YStack>
         </Tabs.ScrollView>
       </Tabs.Tab>
       <Tabs.Tab name={trendingTabName}>
-        <Tabs.ScrollView>
-          <YStack pt="$2" {...listContainerProps}>
-            <MarketFilterBarSmall {...filterBarProps} />
-            <MarketNormalTokenList networkId={selectedNetworkId} />
-          </YStack>
-        </Tabs.ScrollView>
+        <MobileMarketTokenFlatList
+          networkId={selectedNetworkId}
+          filterBarProps={filterBarProps}
+          listContainerProps={listContainerProps}
+        />
       </Tabs.Tab>
     </Tabs.Container>
   );

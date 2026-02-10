@@ -13,11 +13,11 @@ __metadata:
   linkType: hard
 
 "@isaacs/brace-expansion@npm:^5.0.0":
-  version: 5.0.0
-  resolution: "@isaacs/brace-expansion@npm:5.0.0"
+  version: 5.0.1
+  resolution: "@isaacs/brace-expansion@npm:5.0.1"
   dependencies:
     "@isaacs/balanced-match": "npm:^4.0.1"
-  checksum: 10/cf3b7f206aff12128214a1df764ac8cdbc517c110db85249b945282407e3dfc5c6e66286383a7c9391a059fc8e6e6a8ca82262fc9d2590bd615376141fbebd2d
+  checksum: 10/aec226065bc4285436a27379e08cc35bf94ef59f5098ac1c026495c9ba4ab33d851964082d3648d56d63eb90f2642867bd15a3e1b810b98beb1a8c14efce6a94
   languageName: node
   linkType: hard
 
@@ -52,14 +52,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@onekeyfe/electron-mac-icloud@npm:1.2.4":
-  version: 1.2.4
-  resolution: "@onekeyfe/electron-mac-icloud@npm:1.2.4"
+"@onekeyfe/electron-mac-icloud@npm:1.2.6":
+  version: 1.2.6
+  resolution: "@onekeyfe/electron-mac-icloud@npm:1.2.6"
   dependencies:
     bindings: "npm:1.5.0"
     node-addon-api: "npm:5.0.0"
     node-gyp: "npm:latest"
-  checksum: 10/1687e0bc1e7bdbd3f9d1b06a96c0283b1cd632372e0a4b17bb2a79726fca61309850a9e3ac37eb3c2075d84c0a5e4712a0651acc81f4303d1c64f606834a15a7
+  checksum: 10/e136cddc0aac866ae3edca87e84e5c4b48ccbb776d1da60fb66286297a25303521a1c8fcfce548b783b2d4cf82de428b2c69cc7d850e7926417824af8b0cf370
   languageName: node
   linkType: hard
 
@@ -67,9 +67,9 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@onekeyhq/desktop@workspace:."
   dependencies:
-    "@onekeyfe/electron-mac-icloud": "npm:1.2.4"
+    "@onekeyfe/electron-mac-icloud": "npm:1.2.6"
     "@stoprocent/noble": "npm:2.3.4"
-    electron-check-biometric-auth-changed: "npm:0.0.6"
+    electron-check-biometric-auth-changed: "npm:1.0.0"
     passport-desktop: "npm:0.1.2"
     passport-desktop-win32-x64-msvc: "npm:0.1.2"
   languageName: unknown
@@ -463,14 +463,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"electron-check-biometric-auth-changed@npm:0.0.6":
-  version: 0.0.6
-  resolution: "electron-check-biometric-auth-changed@npm:0.0.6"
+"electron-check-biometric-auth-changed@npm:1.0.0":
+  version: 1.0.0
+  resolution: "electron-check-biometric-auth-changed@npm:1.0.0"
   dependencies:
     bindings: "npm:^1.5.0"
     node-addon-api: "npm:^7.1.0"
     node-gyp: "npm:latest"
-  checksum: 10/daf0bc6d4cddf7c411d4c315910854c974fbc62c9ea7a12bf23bc368c452f0e0bcff5f4b127de9f4145b62c020e2a02d592b781de730926355ef9e1138af6142
+  checksum: 10/f354e80c6b996c152d61484ef9e9be23ecb2fa23cd1f69dd2d1da745c8647efaf733262004af03d7345981848752a3620ddc94a7a69a4254c7098f22e43bde90
   languageName: node
   linkType: hard
 
@@ -1324,15 +1324,15 @@ __metadata:
   linkType: hard
 
 "tar@npm:^7.5.2":
-  version: 7.5.2
-  resolution: "tar@npm:7.5.2"
+  version: 7.5.7
+  resolution: "tar@npm:7.5.7"
   dependencies:
     "@isaacs/fs-minipass": "npm:^4.0.0"
     chownr: "npm:^3.0.0"
     minipass: "npm:^7.1.2"
     minizlib: "npm:^3.1.0"
     yallist: "npm:^5.0.0"
-  checksum: 10/dbad9c9a07863cd1bdf8801d563b3280aa7dd0f4a6cead779ff7516d148dc80b4c04639ba732d47f91f04002f57e8c3c6573a717d649daecaac74ce71daa7ad3
+  checksum: 10/0d6938dd32fe5c0f17c8098d92bd9889ee0ed9d11f12381b8146b6e8c87bb5aa49feec7abc42463f0597503d8e89e4c4c0b42bff1a5a38444e918b4878b7fd21
   languageName: node
   linkType: hard
 

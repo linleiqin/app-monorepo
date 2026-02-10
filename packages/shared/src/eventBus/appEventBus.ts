@@ -396,6 +396,14 @@ export interface IAppEventBusPayload {
       screen: string;
       params: Record<string, any>;
     };
+    extras?: {
+      params?: {
+        coin?: string;
+        type?: string;
+        [key: string]: any;
+      };
+      [key: string]: any;
+    };
   };
   [EAppEventBusNames.ShowNotificationInDappPage]: string;
   [EAppEventBusNames.UpdateNotificationBadge]: undefined;
@@ -413,6 +421,9 @@ export interface IAppEventBusPayload {
       | ETranslations.global_browser
       | ETranslations.global_earn;
     openUrl?: boolean;
+  };
+  [EAppEventBusNames.SwitchEarnMode]: {
+    mode: 'earn' | 'borrow';
   };
   [EAppEventBusNames.SwitchEarnTab]: {
     tab: 'assets' | 'portfolio' | 'faqs';
@@ -439,6 +450,11 @@ export interface IAppEventBusPayload {
     icon: string | undefined;
     remotePushMessageInfo: INotificationPushMessageInfo;
   };
+  [EAppEventBusNames.ExecuteNotificationCommand]: {
+    action: string;
+    data?: Record<string, unknown>;
+  };
+  [EAppEventBusNames.CreateNewBrowserTab]: undefined;
 }
 
 export enum EEventBusBroadcastMethodNames {
@@ -560,7 +576,7 @@ class AppEventBusClass extends CrossEventEmitter {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         payloadCloned.$$isRemoteEvent = undefined;
       }
-    } catch (e) {
+    } catch (_e) {
       // ignore
     }
     super.emit(type, payloadCloned);
@@ -579,7 +595,7 @@ class AppEventBusClass extends CrossEventEmitter {
           // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
           payloadCloned.$$isRemoteEvent = true;
         }
-      } catch (e) {
+      } catch (_e) {
         // ignore
       }
       // eslint-disable-next-line @typescript-eslint/no-unsafe-return

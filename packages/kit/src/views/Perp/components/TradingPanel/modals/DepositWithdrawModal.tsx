@@ -292,7 +292,7 @@ function SelectTokenPopoverContent({
         borderTopWidth={1}
         borderTopColor="$borderSubdued"
         p="$2"
-        cursor="pointer"
+        cursor="default"
         onPress={() => {
           void closePopover?.();
           if (platformEnv.isNativeIOS) {
@@ -472,7 +472,7 @@ function DepositWithdrawContent({
                   deriveType: defaultDeriveType ?? 'default',
                   accountId: selectedAccount.indexedAccountId
                     ? undefined
-                    : selectedAccount.accountId ?? '',
+                    : (selectedAccount.accountId ?? ''),
                 });
               const [tokenDetailsRes, nativeTokenConfigRes] = await Promise.all(
                 [
@@ -506,13 +506,11 @@ function DepositWithdrawContent({
         );
         const tokenDetails =
           tokenDetailsAndNativeTokenConfigs
-            ?.map((t) => t.tokenDetails)
-            .flat()
+            ?.flatMap((t) => t.tokenDetails)
             .filter(Boolean) ?? [];
         const nativeTokenConfigsRes =
           tokenDetailsAndNativeTokenConfigs
-            ?.map((t) => t.nativeTokenConfig)
-            .flat()
+            ?.flatMap((t) => t.nativeTokenConfig)
             .filter(Boolean) ?? [];
         setNativeTokenConfigs(nativeTokenConfigsRes);
         if (tokenDetails) {
@@ -534,7 +532,7 @@ function DepositWithdrawContent({
                 equalTokenNoCaseSensitive({ token1: t, token2: token }),
               )?.fiatValue,
             }))
-            .sort((a, b) =>
+            .toSorted((a, b) =>
               new BigNumber(b.fiatValue ?? 0).comparedTo(
                 new BigNumber(a.fiatValue ?? 0),
               ),
@@ -609,7 +607,7 @@ function DepositWithdrawContent({
     const rawBalance =
       selectedAction === 'withdraw'
         ? withdrawable || '0'
-        : currentPerpsDepositSelectedToken?.balanceParsed ?? '0';
+        : (currentPerpsDepositSelectedToken?.balanceParsed ?? '0');
     const balanceFormatted = numberFormat(rawBalance, { formatter: 'balance' });
     const displayBalance =
       selectedAction === 'withdraw'
@@ -669,7 +667,7 @@ function DepositWithdrawContent({
     }
     const minFromTokenAmountFormatted = minFromTokenAmount
       .decimalPlaces(
-        currentPerpsDepositSelectedToken?.decimals ?? 0,
+        Number(currentPerpsDepositSelectedToken?.decimals ?? 0),
         BigNumber.ROUND_UP,
       )
       .toFixed();
@@ -1189,7 +1187,7 @@ function DepositWithdrawContent({
         placement="bottom-end"
         offset={{ mainAxis: 10, crossAxis: 12 }}
         renderTrigger={
-          <XStack alignItems="center" gap="$1" cursor="pointer">
+          <XStack alignItems="center" gap="$1" cursor="default">
             <SizableText size="$bodyMd" color="$textSubdued">
               {currentPerpsDepositSelectedToken?.symbol ?? '-'}
             </SizableText>
@@ -1411,7 +1409,6 @@ function DepositWithdrawContent({
               onPress={handleBuyPress}
               color="$textSuccess"
               size="$bodySmMedium"
-              cursor="pointer"
               dashColor="$textSuccess"
             >
               {intl.formatMessage({ id: ETranslations.global_top_up })}
@@ -1442,7 +1439,6 @@ function DepositWithdrawContent({
                 <SizableText
                   size="$bodyMd"
                   color="$textSuccess"
-                  cursor="pointer"
                   onPress={() => {
                     handleMaxPress({
                       networkId:
